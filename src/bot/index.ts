@@ -8,7 +8,7 @@ import { walletCommand } from "./commands/wallet";
 import { priceCommand } from "./commands/price";
 import { referralCommand } from "./commands/referral";
 import { historyCommand } from "./commands/history";
-import { swapCommand, handleSwapConfirm, handleSwapCancel } from "./commands/swap";
+import { swapCommand, handleSwapConfirm, handleSwapCancel, statusCommand } from "./commands/swap";
 
 /** Creates and configures the Grammy bot instance */
 export function createBot(): Bot {
@@ -26,6 +26,7 @@ export function createBot(): Bot {
   bot.command("referral", referralCommand);
   bot.command("history", historyCommand);
   bot.command("swap", swapCommand);
+  bot.command("status", statusCommand);
 
   // Inline keyboard callback handlers for swap confirmation
   bot.callbackQuery("swap_confirm", handleSwapConfirm);
@@ -38,6 +39,7 @@ export function createBot(): Bot {
         "/connect <ADDRESS> — Connect your Phantom wallet\n" +
         "/wallet — View connected wallet & balance\n" +
         "/swap <AMOUNT> <FROM> <TO> — Swap tokens\n" +
+        "/status <TX> — Track transaction after signing\n" +
         "/price <TOKEN> — Get token price\n" +
         "/referral — Your referral link & earnings\n" +
         "/history — Last 10 swaps\n" +

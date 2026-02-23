@@ -51,8 +51,10 @@ solana-swap-bot/
 ├── ARCHITECTURE.md              ← System design and data flows
 ├── SECURITY.md                  ← Threat model and security rules
 ├── API.md                       ← Jupiter API reference and integration notes
+├── TESTING.md                   ← Testing guide (devnet, mainnet, checklist)
 ├── .env                         ← Local secrets (NEVER commit)
 ├── .env.example                 ← Template with all required vars (commit this)
+├── .env.devnet                  ← Devnet testing env template
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
@@ -65,24 +67,23 @@ solana-swap-bot/
 │   │   ├── index.ts             ← Grammy bot instance creation
 │   │   ├── commands/
 │   │   │   ├── start.ts         ← /start — onboarding, wallet connect prompt
-│   │   │   ├── swap.ts          ← /swap — main swap flow
+│   │   │   ├── connect.ts       ← /connect — wallet address validation + save
+│   │   │   ├── swap.ts          ← /swap + /status — main swap flow + tx tracking
 │   │   │   ├── price.ts         ← /price <TOKEN> — token price lookup
 │   │   │   ├── wallet.ts        ← /wallet — show connected wallet, balance
-│   │   │   └── referral.ts      ← /referral — show referral link + earnings
-│   │   ├── conversations/
-│   │   │   └── swapFlow.ts      ← Multi-step swap conversation handler
+│   │   │   ├── referral.ts      ← /referral — show referral link + earnings
+│   │   │   └── history.ts       ← /history — last 10 swaps
 │   │   └── middleware/
 │   │       ├── rateLimit.ts     ← Per-user rate limiting
 │   │       └── logger.ts        ← Request logging
 │   ├── jupiter/
-│   │   ├── client.ts            ← Jupiter API client initialization
-│   │   ├── quote.ts             ← Get swap quotes with our fee parameter
-│   │   ├── swap.ts              ← Build swap transaction
-│   │   └── price.ts             ← Token price fetching
+│   │   ├── quote.ts             ← Get swap quotes with platformFeeBps baked in
+│   │   ├── swap.ts              ← Build swap transaction with feeAccount
+│   │   └── price.ts             ← Token price fetching + fee USD estimation
 │   ├── solana/
-│   │   ├── connection.ts        ← Solana RPC connection
+│   │   ├── connection.ts        ← Solana RPC connection singleton
 │   │   ├── phantom.ts           ← Phantom deeplink URL generation
-│   │   └── transaction.ts       ← Transaction serialization helpers
+│   │   └── transaction.ts       ← Transaction confirmation polling
 │   ├── db/
 │   │   ├── client.ts            ← Prisma client singleton
 │   │   └── queries/
@@ -201,6 +202,7 @@ https://phantom.app/ul/v1/signAndSendTransaction?
 | `/wallet` | Show connected wallet address + SOL balance | Read User |
 | `/connect <ADDRESS>` | Connect a Phantom wallet address | Update User.walletAddress |
 | `/swap <AMOUNT> <FROM> <TO>` | Start swap flow | Create Swap record |
+| `/status <TX_SIGNATURE>` | Track transaction confirmation after signing | Update Swap status + fee |
 | `/price <TOKEN>` | Get token price in USD/SOL | No DB |
 | `/referral` | Show referral link + lifetime earnings | Read User + Swaps |
 | `/history` | Last 10 swaps | Read Swaps |
@@ -278,10 +280,14 @@ Track what's done vs pending here — update this section as you build:
 - [x] Phantom deeplink generation (src/solana/phantom.ts — signAndSendTransaction URL)
 - [x] /swap command (full flow: parse → quote → inline confirm/cancel → build tx → Phantom deeplink)
 - [x] Swap callback handlers (swap_confirm + swap_cancel inline keyboard callbacks)
+- [x] Transaction confirmation polling (src/solana/transaction.ts — polls getSignatureStatus)
+- [x] Fee tracking in DB (Jupiter price API → estimates fee USD on confirmed swaps)
+- [x] /status command (submit tx signature → background poll → notify on confirm/fail)
+- [x] Token price service (src/jupiter/price.ts — getTokenPriceUsd + estimateFeeUsd)
+- [x] Testing guide (TESTING.md — devnet setup, mainnet testing, full checklist)
 
 ### 📋 Backlog
-- [ ] Fee tracking in DB (record fee USD amounts on confirmed swaps)
-- [ ] Transaction confirmation polling (watch for on-chain confirmation after signing)
+- [ ] Deploy to VPS with PM2 (final Phase 1 step)
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)

@@ -5,6 +5,8 @@ import { prisma } from "../../db/client";
 import { getQuote, QuoteResponse } from "../../jupiter/quote";
 import { buildSwapTransaction } from "../../jupiter/swap";
 import { buildPhantomDeeplink } from "../../solana/phantom";
+import { pollTransactionInBackground } from "../../solana/transaction";
+import { estimateFeeUsd } from "../../jupiter/price";
 import { sanitizeInput, isValidSwapAmount } from "../../utils/validation";
 import { TOKENS, TOKEN_DECIMALS, MINT_TO_SYMBOL } from "../../utils/constants";
 import { formatTokenAmount, formatUsd } from "../../utils/formatting";
@@ -15,6 +17,9 @@ const pendingQuotes = new Map<
   string,
   { quote: QuoteResponse; inputSymbol: string; outputSymbol: string; expiresAt: number }
 >();
+
+/** Stores the last swap ID per user so /status can find it */
+const lastSwapId = new Map<string, { swapId: string; outputMint: string; feeAmount: string }>();
 
 /**
  * /swap <AMOUNT> <FROM> <TO> — Full swap flow.
@@ -206,11 +211,20 @@ export async function handleSwapConfirm(ctx: Context): Promise<void> {
 
   const keyboard = new InlineKeyboard().url("Sign in Phantom", deeplink);
 
+  // Store swap ID so /status can start polling
+  const feeAmount = pending.quote.platformFee?.amount ?? "0";
+  lastSwapId.set(telegramId, {
+    swapId: swap.id,
+    outputMint: pending.quote.outputMint,
+    feeAmount,
+  });
+
   await ctx.reply(
     `*Ready to sign!*\n\n` +
       `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
       `Tap the button below to open Phantom and sign the transaction.\n` +
-      `The transaction will expire in ~60 seconds.`,
+      `After signing, send the transaction signature:\n` +
+      `\`/status <TX_SIGNATURE>\``,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 
@@ -227,4 +241,89 @@ export async function handleSwapCancel(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery();
   pendingQuotes.delete(telegramId);
   await ctx.reply("Swap cancelled.");
+}
+
+/**
+ * /status <TX_SIGNATURE> — Submit a transaction signature to track confirmation.
+ * Starts background polling and records fee USD when confirmed.
+ */
+export async function statusCommand(ctx: CommandContext<Context>): Promise<void> {
+  if (!ctx.from) return;
+  const telegramId = ctx.from.id.toString();
+
+  const txSignature = sanitizeInput(ctx.match?.toString() ?? "");
+
+  if (!txSignature || txSignature.length < 64) {
+    await ctx.reply(
+      "Usage: `/status <TX_SIGNATURE>`\n\nPaste the transaction signature from Phantom after signing.",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  // Find the swap to track — either from the last swap or by looking up pending swaps
+  const lastSwap = lastSwapId.get(telegramId);
+
+  if (!lastSwap) {
+    // Try to find the most recent PENDING swap for this user
+    const user = await findUserByTelegramId(telegramId);
+    if (!user) {
+      await ctx.reply("You haven't started yet. Use /start first.");
+      return;
+    }
+
+    const pendingSwap = await prisma.swap.findFirst({
+      where: { userId: user.id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!pendingSwap) {
+      await ctx.reply("No pending swap found. Run /swap to start a new trade.");
+      return;
+    }
+
+    await ctx.reply("Tracking transaction... I'll notify you when it confirms.");
+
+    pollTransactionInBackground(pendingSwap.id, txSignature, async (result) => {
+      if (result === "CONFIRMED") {
+        await ctx.reply(`Transaction confirmed! Your swap completed successfully.\n\nTx: \`${txSignature}\``, {
+          parse_mode: "Markdown",
+        });
+      } else {
+        await ctx.reply(`Transaction failed or expired.\n\nTx: \`${txSignature}\``, {
+          parse_mode: "Markdown",
+        });
+      }
+    });
+    return;
+  }
+
+  await ctx.reply("Tracking transaction... I'll notify you when it confirms.");
+
+  const { swapId, outputMint, feeAmount } = lastSwap;
+  lastSwapId.delete(telegramId);
+
+  pollTransactionInBackground(swapId, txSignature, async (result) => {
+    if (result === "CONFIRMED") {
+      // Record fee USD amount
+      const feeUsd = await estimateFeeUsd({ outputMint, feeAmount });
+      if (feeUsd !== null) {
+        await prisma.swap.update({
+          where: { id: swapId },
+          data: { feeAmountUsd: feeUsd },
+        });
+      }
+
+      const feeStr = feeUsd !== null ? `\nFee earned: ${formatUsd(feeUsd)}` : "";
+      await ctx.reply(
+        `Transaction confirmed! Your swap completed successfully.${feeStr}\n\nTx: \`${txSignature}\``,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      await ctx.reply(
+        `Transaction failed or expired.\n\nTx: \`${txSignature}\``,
+        { parse_mode: "Markdown" }
+      );
+    }
+  });
 }
