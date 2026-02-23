@@ -155,6 +155,7 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
   const estimatedFeeUsd = await estimateFeeUsd({ outputMint, feeAmount });
 
   // Balance check — soft warning only, don't block the swap
+  const EST_GAS_SOL = 0.005; // ~0.005 SOL estimated gas for a swap tx
   let balanceWarning = "";
   try {
     const { connection } = await import("../../solana/connection");
@@ -164,25 +165,50 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
     if (inputSymbol === "SOL") {
       const balanceLamports = await connection.getBalance(pubkey);
       const balanceSol = balanceLamports / 1e9;
-      if (balanceSol < amount + 0.01) { // +0.01 for gas
-        balanceWarning = `\n\n⚠️ *Low balance:* You have ${balanceSol.toFixed(4)} SOL (need ${amount} + gas)`;
+      const totalNeeded = amount + EST_GAS_SOL;
+      if (balanceSol < totalNeeded) {
+        const shortfall = totalNeeded - balanceSol;
+        balanceWarning =
+          `\n\n⚠️ *Insufficient SOL balance*\n` +
+          `   Your balance: ${balanceSol.toFixed(4)} SOL\n` +
+          `   Swap amount: ${amount} SOL\n` +
+          `   Est. gas fee: ~${EST_GAS_SOL} SOL\n` +
+          `   *Total needed: ${totalNeeded.toFixed(4)} SOL*\n` +
+          `   Add at least ${shortfall.toFixed(4)} SOL to proceed`;
       }
     } else {
       // SPL token balance check via RPC
       const mintPubkey = new PublicKey(inputMint);
+      // Also check SOL for gas
+      const solBalanceLamports = await connection.getBalance(pubkey);
+      const solBalance = solBalanceLamports / 1e9;
+      const lowGas = solBalance < EST_GAS_SOL;
+
       try {
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, { mint: mintPubkey });
         const accountInfo = tokenAccounts.value[0];
         if (!accountInfo) {
-          balanceWarning = `\n\n⚠️ *No ${inputSymbol} found* in your wallet`;
+          balanceWarning =
+            `\n\n⚠️ *No ${inputSymbol} found* in your wallet\n` +
+            `   You need: ${amount} ${inputSymbol} + ~${EST_GAS_SOL} SOL for gas`;
         } else {
           const balance = accountInfo.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
           if (balance < amount) {
-            balanceWarning = `\n\n⚠️ *Low balance:* You have ${balance} ${inputSymbol} (need ${amount})`;
+            const shortfall = amount - balance;
+            balanceWarning =
+              `\n\n⚠️ *Insufficient ${inputSymbol} balance*\n` +
+              `   Your balance: ${balance} ${inputSymbol}\n` +
+              `   Needed: ${amount} ${inputSymbol}\n` +
+              `   Add at least ${shortfall} ${inputSymbol} to proceed`;
+          }
+          if (lowGas) {
+            balanceWarning += `\n\n⚠️ *Low SOL for gas:* You have ${solBalance.toFixed(4)} SOL (need ~${EST_GAS_SOL} SOL)`;
           }
         }
       } catch {
-        // Balance check failed for SPL token
+        balanceWarning =
+          `\n\n⚠️ *No ${inputSymbol} found* in your wallet\n` +
+          `   You need: ${amount} ${inputSymbol} + ~${EST_GAS_SOL} SOL for gas`;
       }
     }
   } catch (err) {
