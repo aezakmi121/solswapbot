@@ -273,16 +273,15 @@ Track what's done vs pending here — update this section as you build:
 - [x] /price command (token price via Jupiter price API)
 - [x] /referral command (referral link, count, lifetime earnings)
 - [x] /history command (last 10 swaps with status icons)
-
-### 🔨 In Progress
-- [ ] Jupiter quote + swap integration (src/jupiter/)
+- [x] Jupiter quote client (src/jupiter/quote.ts — Zod-validated response, platformFeeBps baked in)
+- [x] Jupiter swap transaction builder (src/jupiter/swap.ts — builds base64 serialized tx)
+- [x] Phantom deeplink generation (src/solana/phantom.ts — signAndSendTransaction URL)
+- [x] /swap command (full flow: parse → quote → inline confirm/cancel → build tx → Phantom deeplink)
+- [x] Swap callback handlers (swap_confirm + swap_cancel inline keyboard callbacks)
 
 ### 📋 Backlog
-- [ ] Jupiter quote client (src/jupiter/quote.ts)
-- [ ] Jupiter swap transaction builder (src/jupiter/swap.ts)
-- [ ] Phantom deeplink generation (src/solana/phantom.ts)
-- [ ] /swap command (full flow: quote → confirm → deeplink)
-- [ ] Fee tracking in DB (record fee amounts on swap)
+- [ ] Fee tracking in DB (record fee USD amounts on confirmed swaps)
+- [ ] Transaction confirmation polling (watch for on-chain confirmation after signing)
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)

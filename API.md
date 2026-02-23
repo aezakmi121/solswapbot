@@ -10,6 +10,15 @@ We use Jupiter's **Metis Swap API (v6)** — their most current and recommended 
 
 **Jupiter's fee cut:** 2.5% of whatever `platformFeeBps` you set. If you set 50 bps (0.5%), Jupiter keeps 2.5% of that (1.25 bps), you net ~48.75 bps. Practically negligible.
 
+### Implementation Status
+
+| Endpoint | File | Status |
+|----------|------|--------|
+| `GET /quote` | `src/jupiter/quote.ts` | ✅ Implemented — Zod-validated response, platformFeeBps baked in |
+| `POST /swap` | `src/jupiter/swap.ts` | ✅ Implemented — builds base64 serialized tx with feeAccount |
+| `GET /price` | `src/bot/commands/price.ts` | ✅ Implemented — via Jupiter price API v4 |
+| Phantom deeplink | `src/solana/phantom.ts` | ✅ Implemented — signAndSendTransaction URL builder |
+
 ---
 
 ## Endpoint 1: Get Quote

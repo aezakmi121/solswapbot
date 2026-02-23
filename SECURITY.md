@@ -172,13 +172,13 @@ pm2 stop solana-swap-bot
 ## Security Audit Plan
 
 **Pre-launch (MVP):** Manual code review using this checklist:
-- [ ] No private keys handled anywhere
-- [ ] All inputs validated with Zod
-- [ ] Rate limiting active on all commands
-- [ ] No secrets in code or logs
-- [ ] `.env` not in Git
-- [ ] Phantom deeplinks constructed correctly (no parameter injection)
-- [ ] Jupiter API responses validated before use
+- [x] No private keys handled anywhere — verified, non-custodial throughout
+- [x] All inputs validated with Zod — Jupiter quote/swap responses use Zod schemas (`src/jupiter/quote.ts`)
+- [x] Rate limiting active on all commands — Grammy middleware (`src/bot/middleware/rateLimit.ts`)
+- [x] No secrets in code or logs — bot token, RPC URL only in `.env`
+- [x] `.env` not in Git — `.gitignore` covers it
+- [x] Phantom deeplinks constructed correctly — URL-encoded params, no user injection (`src/solana/phantom.ts`)
+- [x] Jupiter API responses validated before use — Zod `.parse()` on all Jupiter responses
 
 **At 100 DAU:** Consider a peer review from a developer you trust
 
