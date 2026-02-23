@@ -107,17 +107,35 @@ User types: /swap 1 SOL USDC
                 │
                 ▼
         Bot sends deeplink button to user
-        "Tap to sign in Phantom 👆"
+        "Tap to sign in Phantom"
                 │
            User taps → Phantom opens
            User reviews → User signs
            Phantom submits → Solana confirms
                 │
                 ▼
+        User sends: /status <TX_SIGNATURE>
+                │
+                ▼
+        Bot starts background polling:
+        (src/solana/transaction.ts)
+        Loop every 3s for up to ~2 min:
+          → getSignatureStatus(txSignature)
+          → If confirmed → update DB status to CONFIRMED
+          → If failed → update DB status to FAILED
+                │
+                ▼
+        On confirmation:
+        → Fetch output token price (src/jupiter/price.ts)
+        → Calculate fee USD value
+        → Update swap.feeAmountUsd in DB
+        → Notify user: "Transaction confirmed! Fee earned: $0.12"
+                │
+                ▼
         On-chain result:
         - User receives ~23.45 USDC
         - Our FEE_WALLET receives 0.5% fee automatically
-        - Transaction recorded in our DB
+        - Transaction + fee USD recorded in our DB
 ```
 
 ---
