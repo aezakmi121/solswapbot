@@ -1,70 +1,70 @@
 # SolSwap Bot
 
-A non-custodial Telegram trading bot for Solana tokens, powered by Jupiter API. Users swap tokens directly in Telegram using their own Phantom wallet — we earn a 0.5% platform fee on every trade, automatically, on-chain.
+**Non-custodial Solana trading bot for Telegram** — swap tokens instantly via Jupiter, with the lowest fees in the market (0.5%).
 
-## Why Non-Custodial?
+## What It Does
 
-We never hold user private keys or funds. Users retain full custody at all times. This eliminates the #1 security risk that has plagued custodial trading bots (Banana Gun $980K exploit, Maestro exploit, Unibot exploit). Our security surface is fundamentally smaller.
+Users swap Solana tokens directly inside Telegram through an embedded **Mini App**. Connect your Phantom wallet, pick tokens, see a live quote with full fee breakdown, and sign the transaction — all without leaving Telegram.
 
-## Features
+Your funds stay in YOUR wallet. We never hold your keys.
 
-- **Instant swaps** — Any Solana token pair via Jupiter's best-route aggregation
-- **No custody risk** — Users sign with their own Phantom wallet
-- **Referral system** — 25% of earned fees paid to referrers, forever
-- **Token prices** — Real-time price lookups
-- **Swap history** — Track past trades
+## Revenue Model
 
-## Tech Stack
+| You Earn | Jupiter Keeps | User Pays |
+|----------|-------------|-----------|
+| ~0.4875% | 2.5% of our fee | 0.5% per swap |
 
-- **Node.js 20 + TypeScript**
-- **Grammy** (Telegram bot framework)
-- **Jupiter Metis API v6** (swap routing + fee collection)
-- **Prisma + SQLite** (database — upgrades to PostgreSQL at scale)
-- **Solana web3.js** (transaction handling)
+At $100K monthly volume → ~$490/month passive income, scaling with usage.
 
-## Documentation
+## Architecture
 
-| File | Contents |
-|------|----------|
-| `CLAUDE.md` | Master context file for Claude Code — start here |
-| `ARCHITECTURE.md` | System design, data flows, phase roadmap |
-| `SECURITY.md` | Threat model, security rules, incident response |
-| `API.md` | Jupiter API reference and integration notes |
-| `TESTING.md` | Testing guide — devnet setup, mainnet testing, full checklist |
-| `DEPLOY.md` | Production deployment — VPS setup, PM2, backups, monitoring |
+```
+Telegram Chat
+  ├── /start, /help, /price, /referral, /history (text commands)
+  └── /trade → Opens Mini App (embedded web UI)
+        ├── React + Vite (Vercel, free hosting)
+        ├── Solana Wallet Adapter (Phantom, Solflare)
+        └── Calls Express API → Jupiter → Solana
+```
 
 ## Quick Start
 
 ```bash
-# 1. Clone repo and install
-git clone <your-repo>
-cd solana-swap-bot
+# Backend (bot + API)
 npm install
-
-# 2. Set up environment
-cp .env.example .env
-# Edit .env with your values
-
-# 3. Set up database
+cp .env.example .env      # Fill in your tokens
 npx prisma migrate dev
+npm run dev
 
-# 4. Start in development
+# Frontend (Mini App)
+cd webapp
+npm install
 npm run dev
 ```
 
-## Environment Variables
+## Deployment
 
-See `.env.example` for all required variables. Minimum to run:
-- `TELEGRAM_BOT_TOKEN` — from @BotFather
-- `SOLANA_RPC_URL` — Helius recommended
-- `FEE_WALLET_ADDRESS` — your wallet that receives fees
+- **Backend**: Hostinger VPS ($5/mo) via PM2
+- **Frontend**: Vercel (free) — connect GitHub repo, set root to `webapp/`
+- **Configure BotFather**: Set Mini App URL via `/mybots → Bot Settings → Menu Button`
 
-## Revenue Model
+## Tech Stack
 
-Every swap through the bot generates a 0.5% fee, collected automatically on-chain by Jupiter's fee mechanism. No invoicing, no manual collection — it accumulates in our wallet with every transaction.
+| Layer | Technology |
+|-------|-----------|
+| Bot | Grammy (Telegram) |
+| Mini App | Vite + React + TypeScript |
+| API | Express.js |
+| Blockchain | Solana Web3.js + Jupiter API |
+| Wallet | Solana Wallet Adapter (Phantom) |
+| Database | SQLite (Prisma ORM) |
+| Hosting | VPS + Vercel |
 
-At 500 swaps/day averaging $200 each = $500/day in fee revenue.
+## Docs
 
-## License
-
-MIT
+- `CLAUDE.md` — Full project context
+- `ARCHITECTURE.md` — System design
+- `SECURITY.md` — Threat model
+- `API.md` — Jupiter + REST API reference
+- `TESTING.md` — Testing guide
+- `DEPLOY.md` — Production deployment

@@ -37,6 +37,11 @@ const envSchema = z.object({
     .enum(["debug", "info", "warn", "error"])
     .default("info"),
 
+  // API Server (for Mini App)
+  API_PORT: z.coerce.number().int().default(3001),
+  CORS_ORIGIN: z.string().default("*"),
+  MINIAPP_URL: z.string().url().optional(),
+
   // Referral
   REFERRAL_FEE_SHARE_PERCENT: z.coerce
     .number()

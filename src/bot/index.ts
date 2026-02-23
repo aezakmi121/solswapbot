@@ -32,6 +32,23 @@ export function createBot(): Bot {
   bot.callbackQuery("swap_confirm", handleSwapConfirm);
   bot.callbackQuery("swap_cancel", handleSwapCancel);
 
+  // Mini App trade button
+  bot.command("trade", async (ctx) => {
+    const miniAppUrl = config.MINIAPP_URL;
+    if (!miniAppUrl) {
+      await ctx.reply("⚠️ Mini App not configured yet. Use /swap for now.");
+      return;
+    }
+    await ctx.reply("🔄 *Open the trading panel below to swap tokens:*", {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "🔄 Open Trading Panel", web_app: { url: miniAppUrl } }
+        ]]
+      }
+    });
+  });
+
   bot.command("help", (ctx) =>
     ctx.reply(
       `📖 *SolSwap Bot Commands*\n\n` +
@@ -40,7 +57,8 @@ export function createBot(): Bot {
       `/connect \`<ADDRESS>\` — Link your Phantom wallet\n` +
       `/wallet — View wallet & SOL balance\n\n` +
       `💱 *Trading*\n` +
-      `/swap \`<AMOUNT> <FROM> <TO>\` — Swap tokens\n` +
+      `/trade — Open swap panel (Mini App)\n` +
+      `/swap \`<AMOUNT> <FROM> <TO>\` — Quick swap\n` +
       `   _Example: /swap 1 SOL USDC_\n` +
       `/price \`<TOKEN>\` — Check token price\n` +
       `/status \`<TX>\` — Track your transaction\n` +

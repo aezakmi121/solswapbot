@@ -1,6 +1,7 @@
 import { config } from "./config";
 import { prisma } from "./db/client";
 import { createBot } from "./bot";
+import { startApiServer } from "./api/server";
 
 async function main(): Promise<void> {
   console.log(`Starting SolSwap Bot (${config.NODE_ENV})...`);
@@ -8,6 +9,9 @@ async function main(): Promise<void> {
   // Verify database connection
   await prisma.$connect();
   console.log("Database connected");
+
+  // Start the API server for Mini App
+  startApiServer();
 
   // Create and start the bot
   const bot = createBot();

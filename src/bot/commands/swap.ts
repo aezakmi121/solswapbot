@@ -4,7 +4,7 @@ import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
 import { getQuote, QuoteResponse } from "../../jupiter/quote";
 import { buildSwapTransaction } from "../../jupiter/swap";
-import { buildPhantomDeeplink } from "../../solana/phantom";
+
 import { pollTransactionInBackground } from "../../solana/transaction";
 import { estimateFeeUsd, getTokenPriceUsd } from "../../jupiter/price";
 import { sanitizeInput, isValidSwapAmount } from "../../utils/validation";
@@ -309,26 +309,35 @@ export async function handleSwapConfirm(ctx: Context): Promise<void> {
     },
   });
 
-  // Generate Phantom deeplink
-  const botInfo = await ctx.api.getMe();
-  const deeplink = buildPhantomDeeplink({
-    swapTransaction,
-    botUsername: botInfo.username ?? "",
-  });
-
   const outputDecimals = TOKEN_DECIMALS[pending.outputSymbol] ?? 9;
   const outFormatted = formatTokenAmount(pending.quote.outAmount, outputDecimals);
 
-  const keyboard = new InlineKeyboard().url("Sign in Phantom", deeplink);
+  // Direct user to Mini App for signing (or show info if Mini App not configured)
+  const { config } = await import("../../config");
+  const miniAppUrl = config.MINIAPP_URL;
 
-  await ctx.reply(
-    `*Ready to sign!*\n\n` +
-    `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
-    `Tap the button below to open Phantom and sign.\n` +
-    `I'll automatically check for confirmation.\n\n` +
-    `_Or send_ \`/status <TX_SIGNATURE>\` _after signing for faster tracking._`,
-    { parse_mode: "Markdown", reply_markup: keyboard }
-  );
+  if (miniAppUrl) {
+    await ctx.reply(
+      `✅ *Swap ready!*\n\n` +
+      `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
+      `Tap below to sign the transaction in the trading panel:`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "🔄 Sign in Trading Panel", web_app: { url: miniAppUrl } }
+          ]]
+        }
+      }
+    );
+  } else {
+    await ctx.reply(
+      `✅ *Swap ready!*\n\n` +
+      `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
+      `Use /trade to open the trading panel and sign.`,
+      { parse_mode: "Markdown" }
+    );
+  }
 
   pendingQuotes.delete(telegramId);
 
