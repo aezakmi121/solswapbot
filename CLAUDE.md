@@ -255,19 +255,34 @@ npx prisma generate
 Track what's done vs pending here — update this section as you build:
 
 ### ✅ Done
-- [ ] Nothing yet — starting fresh
+- [x] Project scaffolding (package.json, tsconfig.json, .gitignore, .env.example)
+- [x] Prisma schema + migrations (User + Swap models, SQLite)
+- [x] Config validation (src/config.ts — Zod validates all env vars at startup)
+- [x] Database client singleton (src/db/client.ts)
+- [x] Bot skeleton (src/bot/index.ts — Grammy instance with middleware)
+- [x] Rate limiting middleware (per-user, per-command limits)
+- [x] Logger middleware (request/response logging)
+- [x] Entry point (src/app.ts — graceful startup/shutdown)
+- [x] Utility files (constants, validation, formatting)
+- [x] Solana RPC connection helper (src/solana/connection.ts)
+
+- [x] DB query layer (src/db/queries/ — users, referrals, fees)
+- [x] /start command (referral code parsing, user creation, returning user handling)
+- [x] /connect command (wallet address validation via PublicKey + save to DB)
+- [x] /wallet command (SOL balance lookup via RPC)
+- [x] /price command (token price via Jupiter price API)
+- [x] /referral command (referral link, count, lifetime earnings)
+- [x] /history command (last 10 swaps with status icons)
 
 ### 🔨 In Progress
-- [ ] Initial scaffolding
+- [ ] Jupiter quote + swap integration (src/jupiter/)
 
 ### 📋 Backlog
-- [ ] Core bot commands (/start, /wallet, /swap, /price, /referral)
-- [ ] Jupiter quote + swap integration
-- [ ] Phantom deeplink generation
-- [ ] Prisma schema + migrations
-- [ ] Rate limiting middleware
-- [ ] Fee tracking in DB
-- [ ] Referral system
+- [ ] Jupiter quote client (src/jupiter/quote.ts)
+- [ ] Jupiter swap transaction builder (src/jupiter/swap.ts)
+- [ ] Phantom deeplink generation (src/solana/phantom.ts)
+- [ ] /swap command (full flow: quote → confirm → deeplink)
+- [ ] Fee tracking in DB (record fee amounts on swap)
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)
