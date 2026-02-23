@@ -2,11 +2,14 @@ import { CommandContext, Context } from "grammy";
 import { TOKENS } from "../../utils/constants";
 import { sanitizeInput } from "../../utils/validation";
 
-const JUPITER_PRICE_URL = "https://price.jup.ag/v4/price";
+const JUPITER_PRICE_URL = "https://lite-api.jup.ag/price/v3";
 
-interface JupiterPriceResponse {
-  data: Record<string, { id: string; mintSymbol: string; price: number }>;
+interface JupiterPriceV3Entry {
+  usdPrice: number;
+  decimals: number;
 }
+
+type JupiterPriceResponse = Record<string, JupiterPriceV3Entry>;
 
 /**
  * /price <TOKEN> — Get token price in USD via Jupiter price API.
@@ -17,7 +20,7 @@ export async function priceCommand(ctx: CommandContext<Context>): Promise<void> 
   if (!input) {
     await ctx.reply(
       "Usage: `/price <TOKEN>`\n\nExample: `/price SOL`\n\n" +
-        `Supported: ${Object.keys(TOKENS).join(", ")}`,
+      `Supported: ${Object.keys(TOKENS).join(", ")}`,
       { parse_mode: "Markdown" }
     );
     return;
@@ -27,7 +30,7 @@ export async function priceCommand(ctx: CommandContext<Context>): Promise<void> 
   if (!mintAddress) {
     await ctx.reply(
       `Unknown token: "${input}"\n\n` +
-        `Supported tokens: ${Object.keys(TOKENS).join(", ")}`,
+      `Supported tokens: ${Object.keys(TOKENS).join(", ")}`,
     );
     return;
   }
@@ -41,14 +44,14 @@ export async function priceCommand(ctx: CommandContext<Context>): Promise<void> 
     }
 
     const data = (await response.json()) as JupiterPriceResponse;
-    const priceInfo = data.data[mintAddress];
+    const priceInfo = data[mintAddress];
 
     if (!priceInfo) {
       await ctx.reply(`No price data available for ${input}.`);
       return;
     }
 
-    const price = priceInfo.price;
+    const price = priceInfo.usdPrice;
     const formatted = price < 0.01
       ? `$${price.toPrecision(4)}`
       : `$${price.toFixed(2)}`;
