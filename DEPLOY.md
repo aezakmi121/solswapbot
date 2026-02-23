@@ -1,208 +1,332 @@
 # DEPLOY.md — Production Deployment on Hostinger VPS
 
+> Complete beginner guide. Windows PC assumed. Every single step explained.
+
 ## Overview
 
-We deploy on a **Hostinger VPS** running Ubuntu 22.04. PM2 keeps the bot alive indefinitely — auto-restarts on crash, reboots, and memory leaks.
+We deploy on a **Hostinger VPS** (KVM 1, Ubuntu 22.04 Plain OS, Kuala Lumpur datacenter). PM2 keeps the bot alive 24/7 — auto-restarts on crash, reboots, and memory leaks.
 
-**Why VPS and not Hostinger's managed Node.js hosting?** Hostinger offers managed Node.js on their shared/cloud plans (no SSH, GitHub auto-deploy) — but that's for web apps serving HTTP requests. Our Telegram bot is a long-running background process that polls Telegram 24/7, so we need a VPS with PM2.
-
-**Total monthly cost:** ~$5 (Hostinger KVM 1) + $0 (Helius free RPC) = **~$5/month**
+**Total monthly cost:** ~$5–9 (Hostinger) + $0 (Helius free RPC) = **~$5–9/month**
 
 ---
 
-## Prerequisites (Before You Start)
+## What You Should Already Have
 
-You'll need these three things ready:
+Before starting, make sure you have:
 
-1. **Telegram Bot Token** — from @BotFather on Telegram
-2. **Helius API Key** — free at https://helius.dev (100k requests/month)
-3. **Solana Wallet Address** — your fee wallet that receives 0.5% of every swap
-
----
-
-## Step 1: Create Hostinger Account & Buy VPS
-
-1. Go to https://www.hostinger.com/vps-hosting
-2. Pick **KVM 1** plan — 1 vCPU, 4GB RAM, 50GB NVMe, 4TB bandwidth
-   - Monthly: ~$8.99/month
-   - 12 months: ~$5.99/month
-   - 48 months: ~$4.99/month (best value)
-3. Create an account and pay
-
-> **Tip:** The 12-month plan hits the sweet spot — you'll know within a year if this is working. Don't overthink it.
+- [x] Hostinger VPS purchased and set up (Ubuntu 22.04 Plain OS, Kuala Lumpur)
+- [x] Root password set during VPS setup
+- [x] Helius API key (free at https://helius.dev)
+- [x] Telegram bot token (from @BotFather)
+- [x] Your Solana wallet address (fee wallet)
 
 ---
 
-## Step 2: Set Up the VPS in Hostinger Panel
+## PART 1: Connect to Your Server from Windows
 
-1. Go to https://hpanel.hostinger.com → **VPS** section
-2. Click your new VPS → **Setup**
+You need to "SSH into" your server — that means opening a remote terminal session from your Windows PC to your Hostinger server. Think of it like remote desktop, but text-only.
 
-Configure:
+### Step 1: Find Your Server's IP Address and Root Password
 
-| Setting | Value |
-|---------|-------|
-| **OS** | Ubuntu 22.04 (Plain OS — no panel) |
-| **Server Name** | `solswap-bot` |
-| **Root Password** | Set a strong password (you'll change to SSH keys shortly) |
-| **SSH Key (optional)** | You can add one here — see Step 3 |
+1. Go to https://hpanel.hostinger.com
+2. Click **VPS** in the top menu
+3. Click on your server (the one you just set up)
+4. You'll land on the **Overview** page
+5. Look for the **SSH access** section — it shows:
+   - **IP Address** — something like `103.xx.xx.xx` (write this down)
+   - **Port** — `22` (this is the default, don't change it)
+   - **Username** — `root`
+6. Your **root password** is the one you set during VPS setup
+   - If you forgot it: on the same Overview page, scroll to **Root Password** → click **Change Root Password** to set a new one
 
-3. Click **Complete Setup** — provisioning takes 1–2 minutes
-4. Once ready, you'll see your **IP address** on the VPS dashboard
+### Step 2: Open PowerShell on Your Windows PC
 
-> **Important:** Choose "Plain OS", NOT "with CloudPanel". We don't need a web hosting panel — just a clean Ubuntu server.
+Windows 10 and 11 have SSH built in — you do NOT need to install anything extra.
 
----
+1. Press **Windows key + X** on your keyboard
+2. Click **"Terminal"** or **"Windows PowerShell"** (either one works)
+3. A blue/black window opens — this is your terminal
 
-## Step 3: Generate SSH Key (On Your Local Machine)
+> **Can't find it?** Press **Windows key**, type `powershell`, click the app that appears.
 
-If you didn't add an SSH key during setup, do this now. SSH keys are more secure than passwords.
+### Step 3: Connect to Your Server
 
-```bash
-# On your local machine (Mac/Linux/WSL)
-ssh-keygen -t ed25519 -C "solswap-bot"
+In the PowerShell window, type this command (replace `YOUR_IP` with the IP from Step 1):
 
-# Press Enter for default location (~/.ssh/id_ed25519)
-# Set a passphrase (recommended) or press Enter for none
-
-# Copy your PUBLIC key to clipboard:
-cat ~/.ssh/id_ed25519.pub
-# Copy the entire output — it starts with "ssh-ed25519"
+```powershell
+ssh root@YOUR_IP
 ```
 
-**Windows (no WSL):** Use PuTTYgen to generate a key pair.
-
-**Add key to Hostinger:** hPanel → VPS → Settings → SSH Keys → Add SSH Key → paste your public key.
-
----
-
-## Step 4: Connect to Your Server
-
-```bash
-# SSH into the server (replace with your IP from hPanel)
-ssh root@YOUR_SERVER_IP
-
-# If it asks about fingerprint, type "yes"
-# Enter your root password (or SSH key passphrase)
-# You should now see: root@solswap-bot:~#
+**Example:** If your IP is `103.45.67.89`, type:
+```powershell
+ssh root@103.45.67.89
 ```
 
-**Alternative:** Hostinger has a **Browser Terminal** in hPanel → VPS → your server → Terminal button. This lets you skip SSH setup entirely for initial config, but you'll want proper SSH for daily use.
+Press **Enter**.
+
+**What happens next:**
+
+1. First time connecting? It asks:
+   ```
+   The authenticity of host '103.45.67.89' can't be established.
+   Are you sure you want to continue connecting (yes/no/[fingerprint])?
+   ```
+   Type `yes` and press **Enter**. (This is normal — it's just your PC saying "I haven't seen this server before".)
+
+2. It asks for your password:
+   ```
+   root@103.45.67.89's password:
+   ```
+   Type your root password and press **Enter**.
+   **The password won't show as you type** — no dots, no stars, nothing. This is normal. Just type it blind and press Enter.
+
+3. If successful, you'll see something like:
+   ```
+   Welcome to Ubuntu 22.04.x LTS
+   root@solswap-bot:~#
+   ```
+
+**You're in!** You're now controlling your Hostinger server from your Windows PC.
+
+### Step 3b: Alternative — Use Hostinger's Browser Terminal (Easier)
+
+If SSH feels confusing, Hostinger has a built-in terminal in your browser:
+
+1. Go to hPanel → VPS → click your server
+2. On the Overview page, click the **Browser Terminal** button
+3. A terminal opens right in your browser — you're already logged in as root
+4. Skip to **PART 2** below
+
+> This is great for getting started, but real SSH from PowerShell is better for daily use (faster, supports copy-paste, won't time out).
 
 ---
 
-## Step 5: Secure the Server
+## PART 2: Secure Your Server (Do This First!)
 
-Do this immediately after first login.
+You're now logged into your server as `root`. Run these commands one by one. Copy each line, paste it into the terminal, press Enter, and wait for it to finish before running the next one.
+
+> **How to paste in PowerShell:** Right-click anywhere in the window (or press `Ctrl+V`).
+>
+> **How to paste in Browser Terminal:** `Ctrl+Shift+V` or right-click → Paste.
+
+### Step 4: Update the System
 
 ```bash
-# 1. Update system packages
 apt update && apt upgrade -y
+```
 
-# 2. Create a non-root user (NEVER run the bot as root)
+This updates all software on the server. Takes 1–2 minutes. If it asks any questions, just press Enter to accept defaults.
+
+### Step 5: Create a Non-Root User
+
+Never run the bot as root — it's a security risk. Create a separate user:
+
+```bash
 adduser solbot
-# Set a password when prompted, skip the rest with Enter
+```
 
-# 3. Give sudo access
+It will ask:
+```
+New password:           ← Type a password, press Enter
+Retype new password:    ← Type it again, press Enter
+Full Name []:           ← Just press Enter (skip)
+Room Number []:         ← Just press Enter (skip)
+Work Phone []:          ← Just press Enter (skip)
+Home Phone []:          ← Just press Enter (skip)
+Other []:               ← Just press Enter (skip)
+Is the information correct? [Y/n]  ← Type Y, press Enter
+```
+
+Now give this user admin powers:
+
+```bash
 usermod -aG sudo solbot
+```
 
-# 4. Copy your SSH key to the new user
-mkdir -p /home/solbot/.ssh
-cp ~/.ssh/authorized_keys /home/solbot/.ssh/
-chown -R solbot:solbot /home/solbot/.ssh
-chmod 700 /home/solbot/.ssh
-chmod 600 /home/solbot/.ssh/authorized_keys
+### Step 6: Set Up SSH Key (So You Don't Need Passwords)
 
-# 5. Test the new user (open a NEW terminal window)
-# ssh solbot@YOUR_SERVER_IP
-# If it works, continue below. If not, check SSH key copy.
+This step is optional but highly recommended. SSH keys let you connect without typing a password every time, and they're much more secure.
 
-# 6. Disable root SSH login and password auth
+**Open a SECOND PowerShell window on your Windows PC** (leave the server connection open). In the NEW window, run:
+
+```powershell
+ssh-keygen -t ed25519 -C "solswap-bot"
+```
+
+It will ask:
+```
+Enter file in which to save the key (C:\Users\YourName\.ssh\id_ed25519):
+```
+Just press **Enter** to accept the default location.
+
+```
+Enter passphrase (empty for no passphrase):
+```
+Press **Enter** for no passphrase (simpler), or type a passphrase (more secure). Either is fine.
+
+```
+Enter same passphrase again:
+```
+Press **Enter** again.
+
+Now **copy your public key to the server**. Still in the NEW PowerShell window on your PC, run:
+
+```powershell
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@YOUR_IP "mkdir -p /home/solbot/.ssh && cat >> /home/solbot/.ssh/authorized_keys && chown -R solbot:solbot /home/solbot/.ssh && chmod 700 /home/solbot/.ssh && chmod 600 /home/solbot/.ssh/authorized_keys"
+```
+
+(Replace `YOUR_IP` with your server IP. It will ask for your root password one more time.)
+
+**Test it:** In the same PowerShell window on your PC:
+```powershell
+ssh solbot@YOUR_IP
+```
+
+If it logs you in without asking for a password (or just asks for your SSH passphrase) — it worked!
+
+> **If it asks for a password**, the key copy didn't work. Don't worry — you can still use password login. Just use `ssh solbot@YOUR_IP` and type the password you set in Step 5.
+
+### Step 7: Lock Down the Server
+
+Go back to your **root** terminal session (the first PowerShell window, or Browser Terminal). Run these one at a time:
+
+```bash
+# Set up firewall — only allow SSH connections
+ufw allow OpenSSH
+ufw --force enable
+```
+
+You should see: `Firewall is active and enabled on system startup`
+
+```bash
+# Install Fail2Ban — blocks anyone who tries to guess your password
+apt install -y fail2ban
+systemctl enable fail2ban
+systemctl start fail2ban
+```
+
+```bash
+# Turn on automatic security updates
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+```
+
+When it asks "Automatically download and install stable updates?" → select **Yes** → press Enter.
+
+### Step 8: (Optional) Disable Root Login and Password Auth
+
+**Only do this if Step 6 worked** (you can SSH in as `solbot` without a password). If you skip Step 6, skip this too — or you'll lock yourself out.
+
+```bash
 sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 systemctl restart sshd
-
-# 7. Set up firewall — only allow SSH
-ufw allow OpenSSH
-ufw --force enable
-ufw status
-# Should show: OpenSSH ALLOW Anywhere
-
-# 8. Install Fail2Ban (blocks brute-force SSH attempts)
-apt install -y fail2ban
-systemctl enable fail2ban
-systemctl start fail2ban
-
-# 9. Enable automatic security updates
-apt install -y unattended-upgrades
-dpkg-reconfigure -plow unattended-upgrades
-# Select "Yes" when prompted
 ```
 
-Now log out of root and use your new user from now on:
+### Step 9: Switch to Your New User
+
+From now on, always use `solbot`, not `root`:
+
 ```bash
 exit
-ssh solbot@YOUR_SERVER_IP
 ```
+
+In PowerShell on your PC:
+```powershell
+ssh solbot@YOUR_IP
+```
+
+You should see: `solbot@solswap-bot:~$`
 
 ---
 
-## Step 6: Install Node.js 20 + PM2
+## PART 3: Install Everything the Bot Needs
+
+You should now be logged in as `solbot`. All commands from here use `sudo` (which means "run as admin").
+
+### Step 10: Install Node.js 20
 
 ```bash
-# Install Node.js 20 LTS
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
+```
 
-# Verify
-node --version   # Should show v20.x
-npm --version    # Should show 10.x
+Verify it worked:
+```bash
+node --version
+```
+Should show `v20.x.x`
 
-# Install PM2 globally
+```bash
+npm --version
+```
+Should show `10.x.x`
+
+### Step 11: Install PM2
+
+PM2 is what keeps the bot running forever — even when you close your terminal or the server reboots.
+
+```bash
 sudo npm install -g pm2
+```
 
-# Enable PM2 to start on boot
+Set it up to start on boot:
+```bash
 pm2 startup
-# PM2 will print a command starting with "sudo env PATH=..."
-# COPY AND RUN THAT EXACT COMMAND
+```
+
+**IMPORTANT:** PM2 will print a line that looks like:
+```
+[PM2] To setup the Startup Script, copy/paste the following command:
+sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u solbot --hp /home/solbot
+```
+
+**Copy that entire line and run it.** Every person's output is slightly different, so use YOUR output, not this example.
+
+### Step 12: Install Git
+
+```bash
+sudo apt-get install -y git
 ```
 
 ---
 
-## Step 7: Deploy the Bot
+## PART 4: Deploy the Bot
+
+### Step 13: Clone the Code
 
 ```bash
-# Install git (if not already installed)
-sudo apt-get install -y git
-
-# Clone your repository
 cd ~
 git clone YOUR_REPO_URL solswap-bot
 cd solswap-bot
+```
 
-# Install dependencies (need devDeps for TypeScript build)
+Replace `YOUR_REPO_URL` with your actual GitHub/GitLab repo URL.
+
+### Step 14: Install Dependencies and Build
+
+```bash
 npm install
-
-# Build TypeScript
 npm run build
 ```
 
----
+The `npm install` takes 1–2 minutes. `npm run build` compiles TypeScript to JavaScript.
 
-## Step 8: Configure Environment
+### Step 15: Set Up the Environment File
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Fill in these values:
+`nano` is a simple text editor. Use arrow keys to move around. Fill in these values:
+
 ```env
 # Telegram — from @BotFather
 TELEGRAM_BOT_TOKEN=7123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Solana — Helius RPC (free: https://helius.dev)
+# Solana — your Helius API key
 SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_KEY
 
 # Your wallet that receives 0.5% swap fees
@@ -221,13 +345,14 @@ LOG_LEVEL=info
 REFERRAL_FEE_SHARE_PERCENT=25
 ```
 
-Save: `Ctrl+O`, `Enter`, `Ctrl+X`
+**How to save in nano:**
+1. Press `Ctrl+O` (that's the letter O, not zero)
+2. Press `Enter` to confirm the filename
+3. Press `Ctrl+X` to exit
 
-**IMPORTANT:** Do NOT use public `api.mainnet-beta.solana.com` as your RPC. It rate-limits aggressively and will break the bot. Use Helius (free tier: 100k requests/month) or QuickNode.
+> **IMPORTANT:** Do NOT use public `api.mainnet-beta.solana.com` as your RPC. It rate-limits aggressively and will break the bot. Use Helius (free tier: 100k requests/month).
 
----
-
-## Step 9: Initialize Database
+### Step 16: Set Up the Database
 
 ```bash
 mkdir -p data logs
@@ -236,99 +361,202 @@ npx prisma migrate deploy
 
 ---
 
-## Step 10: Start the Bot
+## PART 5: Start the Bot
+
+### Step 17: Launch with PM2
 
 ```bash
-# Start with PM2
 pm2 start ecosystem.config.js
+```
 
-# Check it's running
+Check it's running:
+```bash
 pm2 status
-# Should show: solswap-bot │ online
+```
 
-# Check logs for errors
-pm2 logs solswap-bot --lines 20
-# Should see: "Bot is running! Listening for messages..."
+You should see a table like:
+```
+┌─────┬──────────────┬─────────────┬─────────┬──────────┬──────┐
+│ id  │ name         │ namespace   │ mode    │ status   │ cpu  │
+├─────┼──────────────┼─────────────┼─────────┼──────────┼──────┤
+│ 0   │ solswap-bot  │ default     │ fork    │ online   │ 0%   │
+└─────┴──────────────┴─────────────┴─────────┴──────────┴──────┘
+```
 
-# Save PM2 state (survives reboot)
+**Status should say `online`.** If it says `errored`, check logs:
+```bash
+pm2 logs solswap-bot --lines 30
+```
+
+Save PM2 state so it survives reboots:
+```bash
 pm2 save
+```
 
-# Set database file permissions
+Lock down the database file:
+```bash
 chmod 600 ~/solswap-bot/data/prod.db
 ```
 
----
+### Step 18: Test Your Bot!
 
-## Step 11: Verify It Works
-
-1. Open Telegram on your phone
-2. Find your bot (search its @username)
-3. Send `/start` — should get welcome message
+1. Open **Telegram** on your phone
+2. Search for your bot by its @username
+3. Send `/start` — should get a welcome message
 4. Send `/price SOL` — should show current SOL price
 5. Send `/help` — should list all commands
 
-**If something is wrong:**
-```bash
-pm2 logs solswap-bot --lines 50   # Check for errors
-pm2 restart solswap-bot            # Try restarting
-```
+**If it works — congratulations! Your bot is live and earning fees on every swap.**
 
 ---
 
-## Running Indefinitely
+## PART 6: Everyday Operations
 
-PM2 handles all failure scenarios automatically:
+### How to Check if the Bot is Running
 
-| Scenario | What Happens |
-|----------|-------------|
-| Bot crashes (unhandled error) | PM2 auto-restarts with exponential backoff |
-| VPS reboots (maintenance) | PM2 auto-starts on boot (via `pm2 startup`) |
-| Memory leak (>256MB) | PM2 kills and restarts the process |
-| You deploy new code | `pm2 restart solswap-bot` — instant restart |
-| Network blip | Grammy reconnects Telegram polling automatically |
-
-### Key PM2 Commands
-
-```bash
-pm2 status                         # Check bot status
-pm2 logs solswap-bot               # Stream live logs
-pm2 logs solswap-bot --lines 100   # Last 100 log lines
-pm2 restart solswap-bot            # Restart after code changes
-pm2 stop solswap-bot               # Stop the bot
-pm2 monit                          # Real-time CPU/memory dashboard
+From your Windows PC:
+```powershell
+ssh solbot@YOUR_IP "pm2 status"
 ```
 
----
+### How to See Live Logs
 
-## Deploying Updates
+```powershell
+ssh solbot@YOUR_IP
+pm2 logs solswap-bot
+```
 
-When you push new code:
+Press `Ctrl+C` to stop watching logs.
 
-```bash
+### How to Deploy Code Updates
+
+```powershell
+ssh solbot@YOUR_IP
 cd ~/solswap-bot
 git pull origin main
 npm install
 npm run build
-npx prisma migrate deploy    # Apply any new DB migrations
+npx prisma migrate deploy
 pm2 restart solswap-bot
-pm2 logs solswap-bot --lines 10    # Verify clean startup
+pm2 logs solswap-bot --lines 10
 ```
+
+### How to Restart the Bot
+
+```powershell
+ssh solbot@YOUR_IP "pm2 restart solswap-bot"
+```
+
+### How to Stop the Bot
+
+```powershell
+ssh solbot@YOUR_IP "pm2 stop solswap-bot"
+```
+
+### Useful PM2 Commands (Run on the Server)
+
+| Command | What It Does |
+|---------|-------------|
+| `pm2 status` | Show if bot is running |
+| `pm2 logs solswap-bot` | Stream live logs (Ctrl+C to stop) |
+| `pm2 logs solswap-bot --lines 50` | Show last 50 lines of logs |
+| `pm2 restart solswap-bot` | Restart the bot |
+| `pm2 stop solswap-bot` | Stop the bot |
+| `pm2 monit` | Real-time CPU/memory dashboard |
 
 ---
 
-## Database Backups
+## PART 7: Automatic Stuff (Set Up Once, Forget Forever)
+
+### PM2 Auto-Recovery
+
+PM2 already handles these automatically:
+
+| Scenario | What Happens |
+|----------|-------------|
+| Bot crashes (unhandled error) | PM2 auto-restarts it |
+| Server reboots (Hostinger maintenance) | PM2 starts bot on boot |
+| Memory leak (>256MB) | PM2 kills and restarts |
+| Network blip | Grammy reconnects to Telegram automatically |
+
+### Database Backups (Daily at 3 AM)
 
 ```bash
-# Create backup directory
+# Create backup folder
 mkdir -p ~/backups
 
-# Set up daily backup at 3 AM via cron
+# Open cron editor
 crontab -e
-# Add this line:
+```
+
+If it asks which editor, choose `1` for nano.
+
+Add this line at the bottom:
+```
 0 3 * * * cp ~/solswap-bot/data/prod.db ~/backups/prod-$(date +\%Y\%m\%d).db && find ~/backups -mtime +30 -delete
 ```
 
-This keeps 30 days of daily backups and auto-deletes older ones.
+Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
+
+This copies your database every night at 3 AM and deletes backups older than 30 days.
+
+---
+
+## PART 8: Quick Setup for Next Time (SSH Config)
+
+Typing `ssh solbot@103.45.67.89` every time is annoying. Let's fix that.
+
+**On your Windows PC**, open PowerShell and run:
+
+```powershell
+notepad $env:USERPROFILE\.ssh\config
+```
+
+If it asks to create the file, click **Yes**. Add this:
+
+```
+Host bot
+    HostName YOUR_IP
+    User solbot
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+Replace `YOUR_IP` with your actual server IP. Save and close.
+
+Now you can just type:
+```powershell
+ssh bot
+```
+
+That's it — one word and you're in.
+
+---
+
+## Hostinger-Specific Tips
+
+### hPanel Dashboard
+
+Your VPS dashboard at hpanel.hostinger.com shows:
+- **Overview:** CPU, RAM, disk usage graphs
+- **Browser Terminal:** SSH from your browser (no PowerShell needed)
+- **Snapshots:** Save/restore server state
+- **Firewall:** Add port rules (in addition to UFW on server)
+- **OS Reinstall:** Nuclear option — wipe and start fresh
+
+### Take Snapshots Before Big Changes
+
+Before major updates:
+1. hPanel → VPS → your server → **Snapshots**
+2. Click **Create** — takes a few seconds
+3. If something breaks, restore in 1 click
+
+### Scaling Path
+
+| Plan | Specs | Price | When |
+|------|-------|-------|------|
+| **KVM 1** (you are here) | 1 vCPU, 4GB RAM, 50GB NVMe | ~$5–9/mo | 0–500 DAU |
+| KVM 2 | 2 vCPU, 8GB RAM, 100GB NVMe | ~$7–13/mo | 500–2000 DAU |
+| KVM 4 | 4 vCPU, 16GB RAM, 200GB NVMe | ~$11–18/mo | 2000+ DAU |
 
 ---
 
@@ -336,50 +564,19 @@ This keeps 30 days of daily backups and auto-deletes older ones.
 
 ### Option 1: PM2 Built-in (Free)
 ```bash
-pm2 monit   # Real-time CPU/memory/log dashboard
+pm2 monit   # Real-time dashboard
 ```
 
 ### Option 2: UptimeRobot (Free)
 1. Sign up at https://uptimerobot.com
-2. Create a monitor that hits the Telegram Bot API:
-   `https://api.telegram.org/bot<YOUR_TOKEN>/getMe`
-3. If this returns an error, your bot token is still valid but bot may be down
-4. Get email/SMS alerts on downtime
+2. Create a monitor that hits: `https://api.telegram.org/bot<YOUR_TOKEN>/getMe`
+3. Get email/SMS alerts if bot goes down
 
-### Option 3: Simple Health Check Script
+### Option 3: Cron Health Check
 ```bash
-# Add to crontab — checks every 5 minutes if bot is running
+# Add to crontab — checks every 5 minutes
 */5 * * * * pm2 pid solswap-bot > /dev/null || pm2 start ~/solswap-bot/ecosystem.config.js
 ```
-
----
-
-## Hostinger-Specific Tips
-
-### hPanel VPS Dashboard
-Hostinger's hPanel gives you a nice dashboard for your VPS:
-- **Overview:** CPU, RAM, disk usage at a glance
-- **Snapshots:** Create/restore server snapshots (see below)
-- **Firewall:** Hostinger has a built-in firewall editor in hPanel under VPS → Settings → Firewall — you can add port rules there in addition to UFW on the server
-- **Browser Terminal:** SSH into your server directly from the browser — useful when you're on a machine without SSH configured
-- **OS Reinstall:** One-click wipe and reinstall if things go sideways
-
-### Hostinger Snapshots (Before Major Changes)
-Before risky updates, take a snapshot:
-1. hPanel → VPS → your server → Snapshots
-2. Click "Create" — takes a few seconds
-3. Restore in 1 click if something goes wrong
-4. You get a limited number of snapshot slots depending on plan
-
-### Hostinger Scaling Path
-
-| Plan | Specs | Price (monthly) | When |
-|------|-------|-----------------|------|
-| **KVM 1** (start here) | 1 vCPU, 4GB RAM, 50GB NVMe | ~$5–9/mo | 0–500 DAU |
-| KVM 2 | 2 vCPU, 8GB RAM, 100GB NVMe | ~$7–13/mo | 500–2000 DAU |
-| KVM 4 | 4 vCPU, 16GB RAM, 200GB NVMe | ~$11–18/mo | 2000+ DAU |
-
-Upgrades are done through hPanel. May require a brief server restart.
 
 ---
 
@@ -388,43 +585,58 @@ Upgrades are done through hPanel. May require a brief server restart.
 | Item | Cost | Notes |
 |------|------|-------|
 | Hostinger KVM 1 | ~$5–9/month | 1 vCPU, 4GB RAM, 50GB NVMe, 4TB bandwidth |
-| Helius RPC (free tier) | $0/month | 100k requests/month. Upgrade to $49/mo for 1M |
-| Domain (optional) | ~$10/year | Only needed for Phase 3 web terminal |
-| **Total** | **~$5–9/month** | Depends on billing period (longer = cheaper) |
+| Helius RPC (free tier) | $0/month | 100k requests/month |
+| Domain (optional) | ~$10/year | Only for Phase 3 web terminal |
+| **Total** | **~$5–9/month** | |
 
 ---
 
 ## Troubleshooting
 
-### Bot won't start
+### Can't connect via SSH
+
+**Symptom:** `ssh: connect to host ... port 22: Connection timed out`
+
+- Double-check the IP in hPanel → VPS → Overview
+- Make sure you typed it correctly: `ssh root@YOUR_IP`
+- Try Hostinger's **Browser Terminal** as a fallback (hPanel → VPS → Terminal button)
+- If you locked yourself out (disabled password auth before keys worked): in hPanel, go to your VPS → **Settings → OS Reinstall** to start fresh
+
+### Password not working
+
+- Remember: password is invisible when you type it. Just type it and press Enter.
+- Reset it: hPanel → VPS → Overview → **Root Password** → Change Root Password
+
+### Bot won't start (pm2 shows "errored")
+
 ```bash
-pm2 logs solswap-bot --lines 50   # Check error messages
-cat ~/solswap-bot/.env             # Verify env vars are set
-node -e "require('./dist/config')" # Test config loads
+pm2 logs solswap-bot --lines 50
 ```
 
-### "TELEGRAM_BOT_TOKEN is required"
-Your `.env` file is missing or the token is empty. Check `nano .env`.
-
-### "FEE_WALLET_ADDRESS must be a valid Solana public key"
-Your fee wallet address is malformed. Verify it's a real Solana address (32-44 chars, base58).
-
-### "SOLANA_RPC_URL must be a valid URL"
-Check your Helius API key is correct and the URL format is right.
+Common errors:
+- `TELEGRAM_BOT_TOKEN is required` → your `.env` file is missing the token. Run `nano .env` and check.
+- `FEE_WALLET_ADDRESS must be a valid Solana public key` → wallet address is wrong. Should be 32-44 characters, letters and numbers only.
+- `SOLANA_RPC_URL must be a valid URL` → check your Helius API key in `.env`.
+- `Cannot find module` → you forgot to build. Run `npm run build`.
 
 ### Bot is online but not responding in Telegram
-- Make sure no other instance of this bot is running (only one process can poll the same bot token)
-- Check `pm2 logs` for Grammy errors
-- Verify the bot token with: `curl https://api.telegram.org/bot<TOKEN>/getMe`
 
-### Can't SSH into server
-- Verify IP address in hPanel dashboard
-- Try Hostinger's Browser Terminal as fallback (hPanel → VPS → Terminal)
-- If you locked yourself out with SSH config changes, use hPanel to access the recovery console or reinstall OS
+- Only one bot process can use the same token. Make sure you don't have it running somewhere else.
+- Check: `pm2 logs solswap-bot --lines 20`
+- Test: `curl https://api.telegram.org/bot<YOUR_TOKEN>/getMe` (replace with your actual token)
 
 ### High memory usage
+
 ```bash
-pm2 monit                          # Check current usage
-pm2 restart solswap-bot            # Quick fix: restart
+pm2 monit
 ```
-Our `ecosystem.config.js` auto-restarts at 256MB. Normal usage is 50–100MB.
+
+Normal usage is 50–100MB. The `ecosystem.config.js` auto-restarts at 256MB. If it keeps climbing, just restart: `pm2 restart solswap-bot`.
+
+### "npm: command not found" or "node: command not found"
+
+Node.js wasn't installed properly. Run Step 10 again.
+
+### "permission denied"
+
+You probably need `sudo` in front of the command. Try: `sudo <your command>`.
