@@ -1,44 +1,63 @@
 import { useState, useEffect, useCallback } from "react";
-import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
 import {
+    TOKENS,
     TokenInfo,
     QuoteDisplay,
-    fetchTokens,
+    UserData,
+    fetchUser,
     fetchQuote,
     fetchSwapTransaction,
 } from "./lib/api";
 
-export function App() {
-    const { publicKey, signTransaction, connected } = useWallet();
-    const { connection } = useConnection();
+// Telegram WebApp SDK type
+const tg = (window as any).Telegram?.WebApp;
 
-    // Token list
-    const [tokens, setTokens] = useState<TokenInfo[]>([]);
-    const [inputToken, setInputToken] = useState<TokenInfo | null>(null);
-    const [outputToken, setOutputToken] = useState<TokenInfo | null>(null);
+/** Get the Telegram user ID from the WebApp SDK */
+function getTelegramUserId(): string | null {
+    try {
+        return tg?.initDataUnsafe?.user?.id?.toString() ?? null;
+    } catch {
+        return null;
+    }
+}
+
+export function App() {
+    // User state
+    const [user, setUser] = useState<UserData | null>(null);
+    const [userLoading, setUserLoading] = useState(true);
+    const [userError, setUserError] = useState("");
+
+    // Swap form
+    const [inputToken, setInputToken] = useState<TokenInfo>(TOKENS[0]); // SOL
+    const [outputToken, setOutputToken] = useState<TokenInfo>(TOKENS[1]); // USDC
     const [amount, setAmount] = useState("");
 
     // Quote state
-    const [quote, setQuote] = useState<{ raw: unknown; display: QuoteDisplay } | null>(null);
+    const [quote, setQuote] = useState<{ raw: any; display: QuoteDisplay } | null>(null);
     const [quoteLoading, setQuoteLoading] = useState(false);
     const [quoteError, setQuoteError] = useState("");
 
     // Swap state
-    const [swapStatus, setSwapStatus] = useState<"idle" | "building" | "signing" | "sending" | "confirmed" | "failed">("idle");
-    const [txSignature, setTxSignature] = useState("");
+    const [swapStatus, setSwapStatus] = useState<
+        "idle" | "building" | "opening" | "done" | "error"
+    >("idle");
 
-    // Load tokens
+    // Load user on mount
     useEffect(() => {
-        fetchTokens().then((t) => {
-            setTokens(t);
-            setInputToken(t.find((x) => x.symbol === "SOL") ?? t[0]);
-            setOutputToken(t.find((x) => x.symbol === "USDC") ?? t[1]);
-        });
+        const telegramId = getTelegramUserId();
+        if (!telegramId) {
+            setUserError("Open this app from the Telegram bot to get started.");
+            setUserLoading(false);
+            return;
+        }
+
+        fetchUser(telegramId)
+            .then(setUser)
+            .catch((err) => setUserError(err.message))
+            .finally(() => setUserLoading(false));
     }, []);
 
-    // Fetch quote when inputs change
+    // Fetch quote when inputs change (debounced)
     const getQuote = useCallback(async () => {
         if (!inputToken || !outputToken || !amount || Number(amount) <= 0) {
             setQuote(null);
@@ -71,82 +90,170 @@ export function App() {
     }, [inputToken, outputToken, amount]);
 
     useEffect(() => {
-        const timer = setTimeout(getQuote, 500); // Debounce
+        const timer = setTimeout(getQuote, 600);
         return () => clearTimeout(timer);
     }, [getQuote]);
 
-    // Swap tokens direction
+    // Flip tokens
     const flipTokens = () => {
+        const temp = inputToken;
         setInputToken(outputToken);
-        setOutputToken(inputToken);
+        setOutputToken(temp);
         setAmount("");
         setQuote(null);
     };
 
-    // Execute swap
+    // Execute swap — builds tx then opens Phantom to sign
     const handleSwap = async () => {
-        if (!publicKey || !signTransaction || !quote) return;
+        if (!user?.walletAddress || !quote) return;
 
         try {
             setSwapStatus("building");
 
             const { swapTransaction } = await fetchSwapTransaction({
                 quoteResponse: quote.raw,
-                userPublicKey: publicKey.toBase58(),
+                userPublicKey: user.walletAddress,
             });
 
-            setSwapStatus("signing");
+            setSwapStatus("opening");
 
-            // Deserialize and sign the transaction
-            const txBuffer = Buffer.from(swapTransaction, "base64");
-            const transaction = VersionedTransaction.deserialize(txBuffer);
-            const signed = await signTransaction(transaction);
+            // Convert base64 to base64url for the Phantom deep link
+            const base64url = swapTransaction
+                .replace(/\+/g, "-")
+                .replace(/\//g, "_")
+                .replace(/=+$/, "");
 
-            setSwapStatus("sending");
+            // Build Phantom universal link for signing
+            const redirectUrl = encodeURIComponent(
+                window.location.origin + "/?signed=true"
+            );
+            const phantomUrl =
+                `https://phantom.app/ul/v1/signAndSendTransaction` +
+                `?transaction=${encodeURIComponent(base64url)}` +
+                `&redirect_link=${redirectUrl}`;
 
-            // Send the signed transaction
-            const signature = await connection.sendRawTransaction(signed.serialize(), {
-                maxRetries: 3,
-                skipPreflight: true,
-            });
-
-            setTxSignature(signature);
-
-            // Wait for confirmation
-            const confirmation = await connection.confirmTransaction(signature, "confirmed");
-
-            if (confirmation.value.err) {
-                setSwapStatus("failed");
+            // Open in external browser (not Telegram's WebView)
+            // This allows Phantom to intercept on mobile or open in browser with extension
+            if (tg?.openLink) {
+                tg.openLink(phantomUrl);
             } else {
-                setSwapStatus("confirmed");
+                window.open(phantomUrl, "_blank");
             }
+
+            setSwapStatus("done");
         } catch (err) {
-            console.error("Swap failed:", err);
-            setSwapStatus("failed");
+            console.error("Swap error:", err);
+            setSwapStatus("error");
         }
     };
 
-    const formatUsd = (v: number | null) => (v !== null ? `$${v.toFixed(2)}` : "");
-    const formatRate = (r: number) => r < 0.01 ? r.toPrecision(4) : r < 1 ? r.toFixed(6) : r.toFixed(2);
+    // Helpers
+    const formatUsd = (v: number | null) =>
+        v !== null ? `$${v.toFixed(2)}` : "";
+    const formatRate = (r: number) =>
+        r < 0.01
+            ? r.toPrecision(4)
+            : r < 1
+                ? r.toFixed(6)
+                : r.toFixed(r > 100 ? 0 : 2);
+    const shortAddr = (addr: string) =>
+        `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 
+    // ────────────────── RENDER ──────────────────
+
+    // Loading state
+    if (userLoading) {
+        return (
+            <div className="app">
+                <div className="loading-screen">
+                    <div className="spinner" />
+                    <p>Loading your wallet...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Error / not in Telegram
+    if (userError) {
+        return (
+            <div className="app">
+                <div className="onboard-screen">
+                    <div className="onboard-icon">⚡</div>
+                    <h2>SolSwap</h2>
+                    <p className="onboard-text">{userError}</p>
+                    <p className="onboard-hint">
+                        Open @YourBot on Telegram and type <code>/trade</code>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // No wallet connected
+    if (!user?.walletAddress) {
+        return (
+            <div className="app">
+                <div className="onboard-screen">
+                    <div className="onboard-icon">🔗</div>
+                    <h2>Connect Your Wallet</h2>
+                    <p className="onboard-text">
+                        You need to link your Phantom wallet first.
+                    </p>
+                    <div className="onboard-steps">
+                        <div className="step">
+                            <span className="step-num">1</span>
+                            <span>
+                                Open the bot chat and send:
+                                <br />
+                                <code>/connect YOUR_WALLET_ADDRESS</code>
+                            </span>
+                        </div>
+                        <div className="step">
+                            <span className="step-num">2</span>
+                            <span>Come back here and tap the button below</span>
+                        </div>
+                    </div>
+                    <button
+                        className="swap-btn"
+                        onClick={() => window.location.reload()}
+                    >
+                        🔄 I've Connected — Refresh
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ────────── MAIN SWAP UI ──────────
     return (
         <div className="app">
             <header className="header">
                 <h1 className="logo">⚡ SolSwap</h1>
-                <WalletMultiButton />
+                <div className="wallet-badge">
+                    <span className="wallet-dot" />
+                    {shortAddr(user.walletAddress)}
+                    {user.solBalance !== null && (
+                        <span className="wallet-bal">
+                            {user.solBalance.toFixed(3)} SOL
+                        </span>
+                    )}
+                </div>
             </header>
 
             <main className="swap-card">
-                {/* Input token */}
+                {/* ── You sell ── */}
                 <div className="token-section">
                     <label className="token-label">You sell</label>
                     <div className="token-row">
                         <select
                             className="token-select"
-                            value={inputToken?.symbol ?? ""}
-                            onChange={(e) => setInputToken(tokens.find((t) => t.symbol === e.target.value) ?? null)}
+                            value={inputToken.symbol}
+                            onChange={(e) => {
+                                const t = TOKENS.find((x) => x.symbol === e.target.value);
+                                if (t) setInputToken(t);
+                            }}
                         >
-                            {tokens.map((t) => (
+                            {TOKENS.map((t) => (
                                 <option key={t.symbol} value={t.symbol}>
                                     {t.symbol}
                                 </option>
@@ -157,126 +264,154 @@ export function App() {
                             className="amount-input"
                             placeholder="0.0"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={(e) => {
+                                setAmount(e.target.value);
+                                setSwapStatus("idle");
+                            }}
                             min="0"
                             step="any"
+                            inputMode="decimal"
                         />
                     </div>
-                    {quote?.display.inputUsd && (
-                        <span className="usd-value">~{formatUsd(quote.display.inputUsd)}</span>
+                    {quote?.display.inputUsd != null && (
+                        <span className="usd-value">
+                            ~{formatUsd(quote.display.inputUsd)}
+                        </span>
                     )}
                 </div>
 
-                {/* Flip button */}
-                <button className="flip-btn" onClick={flipTokens} aria-label="Swap direction">
+                {/* ── Flip ── */}
+                <button
+                    className="flip-btn"
+                    onClick={flipTokens}
+                    aria-label="Swap direction"
+                >
                     ⇅
                 </button>
 
-                {/* Output token */}
+                {/* ── You receive ── */}
                 <div className="token-section">
                     <label className="token-label">You receive</label>
                     <div className="token-row">
                         <select
                             className="token-select"
-                            value={outputToken?.symbol ?? ""}
-                            onChange={(e) => setOutputToken(tokens.find((t) => t.symbol === e.target.value) ?? null)}
+                            value={outputToken.symbol}
+                            onChange={(e) => {
+                                const t = TOKENS.find((x) => x.symbol === e.target.value);
+                                if (t) setOutputToken(t);
+                            }}
                         >
-                            {tokens.map((t) => (
+                            {TOKENS.map((t) => (
                                 <option key={t.symbol} value={t.symbol}>
                                     {t.symbol}
                                 </option>
                             ))}
                         </select>
                         <div className="output-amount">
-                            {quoteLoading ? "..." : quote?.display.outputAmount ?? "0.0"}
+                            {quoteLoading ? (
+                                <span className="pulse">Fetching...</span>
+                            ) : quote ? (
+                                quote.display.outputAmount
+                            ) : (
+                                "0.0"
+                            )}
                         </div>
                     </div>
-                    {quote?.display.outputUsd && (
-                        <span className="usd-value">~{formatUsd(quote.display.outputUsd)}</span>
+                    {quote?.display.outputUsd != null && (
+                        <span className="usd-value">
+                            ~{formatUsd(quote.display.outputUsd)}
+                        </span>
                     )}
                 </div>
 
-                {/* Quote breakdown */}
+                {/* ── Quote breakdown ── */}
                 {quote && (
                     <div className="breakdown">
                         <div className="breakdown-row">
                             <span>Rate</span>
-                            <span>1 {inputToken?.symbol} = {formatRate(quote.display.exchangeRate)} {outputToken?.symbol}</span>
+                            <span>
+                                1 {inputToken.symbol} ={" "}
+                                {formatRate(quote.display.exchangeRate)} {outputToken.symbol}
+                            </span>
                         </div>
                         <div className="breakdown-row">
-                            <span>Platform fee (0.5%)</span>
+                            <span>Fee (0.5%)</span>
                             <span>
-                                {quote.display.feeAmount} {outputToken?.symbol}
-                                {quote.display.feeUsd !== null && ` (~${formatUsd(quote.display.feeUsd)})`}
+                                {quote.display.feeAmount} {outputToken.symbol}
+                                {quote.display.feeUsd != null &&
+                                    ` (~${formatUsd(quote.display.feeUsd)})`}
                             </span>
                         </div>
                         <div className="breakdown-row">
                             <span>Price impact</span>
-                            <span>{quote.display.priceImpactPct < 0.01 ? "<0.01%" : `${quote.display.priceImpactPct.toFixed(2)}%`}</span>
+                            <span>
+                                {quote.display.priceImpactPct < 0.01
+                                    ? "<0.01%"
+                                    : `${quote.display.priceImpactPct.toFixed(2)}%`}
+                            </span>
                         </div>
                         <div className="breakdown-row">
                             <span>Slippage</span>
                             <span>{(quote.display.slippageBps / 100).toFixed(1)}%</span>
                         </div>
                         <div className="breakdown-route">
-                            ⚡ Best route via Jupiter aggregator
+                            ⚡ Best route via Jupiter
                         </div>
                     </div>
                 )}
 
                 {quoteError && <div className="error-msg">❌ {quoteError}</div>}
 
-                {/* Swap button */}
+                {/* ── Swap button ── */}
                 <button
                     className="swap-btn"
-                    disabled={!connected || !quote || swapStatus !== "idle"}
+                    disabled={!quote || swapStatus === "building" || swapStatus === "opening"}
                     onClick={handleSwap}
                 >
-                    {!connected
-                        ? "Connect Wallet"
-                        : swapStatus === "building"
-                            ? "Building transaction..."
-                            : swapStatus === "signing"
-                                ? "Sign in wallet..."
-                                : swapStatus === "sending"
-                                    ? "Confirming on-chain..."
-                                    : swapStatus === "confirmed"
-                                        ? "✅ Swap Complete!"
-                                        : swapStatus === "failed"
-                                            ? "❌ Swap Failed — Try Again"
-                                            : quote
-                                                ? "🔄 Swap Now"
-                                                : "Enter an amount"}
+                    {swapStatus === "building"
+                        ? "⏳ Building transaction..."
+                        : swapStatus === "opening"
+                            ? "🔓 Opening Phantom..."
+                            : swapStatus === "done"
+                                ? "✅ Sent! Sign in Phantom"
+                                : swapStatus === "error"
+                                    ? "❌ Failed — Try Again"
+                                    : quote
+                                        ? `🔄 Swap ${amount} ${inputToken.symbol} → ${outputToken.symbol}`
+                                        : "Enter an amount"}
                 </button>
 
-                {txSignature && (
-                    <a
-                        className="tx-link"
-                        href={`https://solscan.io/tx/${txSignature}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        View on Solscan ↗
-                    </a>
+                {swapStatus === "done" && (
+                    <div className="sign-hint">
+                        <p>
+                            Phantom should open now. <strong>Approve the transaction</strong>{" "}
+                            to complete your swap.
+                        </p>
+                        <button
+                            className="reset-btn"
+                            onClick={() => {
+                                setSwapStatus("idle");
+                                setAmount("");
+                                setQuote(null);
+                            }}
+                        >
+                            New Swap
+                        </button>
+                    </div>
                 )}
 
-                {(swapStatus === "confirmed" || swapStatus === "failed") && (
+                {swapStatus === "error" && (
                     <button
                         className="reset-btn"
-                        onClick={() => {
-                            setSwapStatus("idle");
-                            setTxSignature("");
-                            setAmount("");
-                            setQuote(null);
-                        }}
+                        onClick={() => setSwapStatus("idle")}
                     >
-                        New Swap
+                        Try Again
                     </button>
                 )}
             </main>
 
             <footer className="footer">
-                Non-custodial · Your keys, your coins · 0.5% fee
+                🔒 Non-custodial · Your keys, your coins · 0.5% fee
             </footer>
         </div>
     );

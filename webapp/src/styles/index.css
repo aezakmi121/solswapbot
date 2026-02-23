@@ -43,15 +43,54 @@ body {
   flex-direction: column;
 }
 
-/* Header */
-.header {
+/* ── Loading Screen ── */
+.loading-screen {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 0 20px;
+  justify-content: center;
+  gap: 16px;
 }
 
-.logo {
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-screen p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Onboarding Screen ── */
+.onboard-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px 20px;
+}
+
+.onboard-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+.onboard-screen h2 {
   font-size: 1.4rem;
   font-weight: 700;
   background: linear-gradient(135deg, var(--accent), #a78bfa);
@@ -60,23 +99,111 @@ body {
   background-clip: text;
 }
 
-/* Override wallet adapter button */
-.wallet-adapter-button {
-  font-family: var(--font) !important;
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-sm) !important;
-  font-size: 0.85rem !important;
-  padding: 8px 14px !important;
-  transition: all 0.2s ease !important;
+.onboard-text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
-.wallet-adapter-button:hover {
-  background: var(--bg-secondary) !important;
-  border-color: var(--accent) !important;
+.onboard-hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
 }
 
-/* Swap Card */
+.onboard-hint code {
+  background: var(--bg-card);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+.onboard-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  margin: 12px 0;
+  width: 100%;
+  max-width: 300px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.step code {
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 20px;
+}
+
+.logo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.wallet-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.wallet-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.wallet-bal {
+  color: var(--text-muted);
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+/* ── Swap Card ── */
 .swap-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -90,7 +217,7 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Token sections */
+/* ── Token Sections ── */
 .token-section {
   background: var(--bg-input);
   border-radius: var(--radius-sm);
@@ -106,7 +233,7 @@ body {
 
 .token-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
   font-weight: 500;
   text-transform: uppercase;
@@ -165,12 +292,12 @@ body {
   color: var(--text-muted);
 }
 
-/* Remove number input spinners */
 .amount-input::-webkit-inner-spin-button,
 .amount-input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 .amount-input[type="number"] {
   -moz-appearance: textfield;
 }
@@ -191,7 +318,7 @@ body {
   margin-top: 6px;
 }
 
-/* Flip button */
+/* ── Flip Button ── */
 .flip-btn {
   align-self: center;
   width: 36px;
@@ -218,13 +345,14 @@ body {
   transform: rotate(180deg);
 }
 
-/* Quote breakdown */
+/* ── Quote Breakdown ── */
 .breakdown {
   background: var(--bg-input);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
   margin-top: 8px;
   border: 1px solid var(--border);
+  animation: fadeIn 0.3s ease;
 }
 
 .breakdown-row {
@@ -252,7 +380,7 @@ body {
   font-weight: 500;
 }
 
-/* Error message */
+/* ── Messages ── */
 .error-msg {
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid rgba(248, 113, 113, 0.2);
@@ -263,13 +391,26 @@ body {
   margin-top: 8px;
 }
 
-/* Swap button */
+.sign-hint {
+  text-align: center;
+  margin-top: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.sign-hint p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+/* ── Swap Button ── */
 .swap-btn {
   width: 100%;
   padding: 16px;
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 600;
   font-family: var(--font);
   cursor: pointer;
@@ -309,23 +450,6 @@ body {
   background: var(--bg-secondary);
 }
 
-/* Transaction link */
-.tx-link {
-  display: block;
-  text-align: center;
-  color: var(--accent);
-  font-size: 0.85rem;
-  margin-top: 10px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.tx-link:hover {
-  color: var(--accent-hover);
-}
-
-/* Reset button */
 .reset-btn {
   width: 100%;
   padding: 12px;
@@ -346,7 +470,7 @@ body {
   color: var(--text-primary);
 }
 
-/* Footer */
+/* ── Footer ── */
 .footer {
   text-align: center;
   padding: 16px 0 8px;
@@ -355,19 +479,41 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* Animations */
+/* ── Animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pulse {
+  animation: pulsate 1.2s ease-in-out infinite;
+}
+
+@keyframes pulsate {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .token-section,
-.breakdown,
 .swap-btn {
   animation: fadeIn 0.3s ease;
 }
 
-/* Responsive */
+/* ── Responsive ── */
 @media (max-width: 420px) {
   .app {
     padding: 12px;
@@ -376,5 +522,11 @@ body {
   .amount-input,
   .output-amount {
     font-size: 1.3rem;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
   }
 }

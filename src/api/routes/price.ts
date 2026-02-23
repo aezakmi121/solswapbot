@@ -9,7 +9,7 @@ export const priceRouter = Router();
  */
 priceRouter.get("/price/:mint", async (req: Request, res: Response) => {
     try {
-        const { mint } = req.params;
+        const mint = req.params.mint as string;
 
         if (!mint || mint.length < 32) {
             res.status(400).json({ error: "Invalid mint address" });
