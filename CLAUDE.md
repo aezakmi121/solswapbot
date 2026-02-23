@@ -266,20 +266,23 @@ Track what's done vs pending here — update this section as you build:
 - [x] Utility files (constants, validation, formatting)
 - [x] Solana RPC connection helper (src/solana/connection.ts)
 
+- [x] DB query layer (src/db/queries/ — users, referrals, fees)
+- [x] /start command (referral code parsing, user creation, returning user handling)
+- [x] /connect command (wallet address validation via PublicKey + save to DB)
+- [x] /wallet command (SOL balance lookup via RPC)
+- [x] /price command (token price via Jupiter price API)
+- [x] /referral command (referral link, count, lifetime earnings)
+- [x] /history command (last 10 swaps with status icons)
+
 ### 🔨 In Progress
-- [ ] Core bot commands (/start with referral, /wallet, /connect)
+- [ ] Jupiter quote + swap integration (src/jupiter/)
 
 ### 📋 Backlog
-- [ ] Full /start command (referral code parsing, user creation)
-- [ ] /connect command (wallet validation + save)
-- [ ] /wallet command (balance lookup via RPC)
-- [ ] Jupiter quote + swap integration (src/jupiter/)
+- [ ] Jupiter quote client (src/jupiter/quote.ts)
+- [ ] Jupiter swap transaction builder (src/jupiter/swap.ts)
 - [ ] Phantom deeplink generation (src/solana/phantom.ts)
 - [ ] /swap command (full flow: quote → confirm → deeplink)
-- [ ] /price command (token price lookup)
-- [ ] Fee tracking in DB
-- [ ] Referral system (/referral command + earnings tracking)
-- [ ] /history command
+- [ ] Fee tracking in DB (record fee amounts on swap)
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)

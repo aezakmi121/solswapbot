@@ -2,6 +2,12 @@ import { Bot } from "grammy";
 import { config } from "../config";
 import { loggerMiddleware } from "./middleware/logger";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
+import { startCommand } from "./commands/start";
+import { connectCommand } from "./commands/connect";
+import { walletCommand } from "./commands/wallet";
+import { priceCommand } from "./commands/price";
+import { referralCommand } from "./commands/referral";
+import { historyCommand } from "./commands/history";
 
 /** Creates and configures the Grammy bot instance */
 export function createBot(): Bot {
@@ -12,15 +18,12 @@ export function createBot(): Bot {
   bot.use(rateLimitMiddleware);
 
   // Register command handlers
-  bot.command("start", (ctx) =>
-    ctx.reply(
-      "Welcome to SolSwap Bot!\n\n" +
-        "Swap any Solana token directly from Telegram — non-custodial, powered by Jupiter.\n\n" +
-        "Connect your Phantom wallet to get started:\n" +
-        "/connect <YOUR_WALLET_ADDRESS>\n\n" +
-        "Type /help for all commands."
-    )
-  );
+  bot.command("start", startCommand);
+  bot.command("connect", connectCommand);
+  bot.command("wallet", walletCommand);
+  bot.command("price", priceCommand);
+  bot.command("referral", referralCommand);
+  bot.command("history", historyCommand);
 
   bot.command("help", (ctx) =>
     ctx.reply(
