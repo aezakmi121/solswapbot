@@ -1,10 +1,12 @@
-# DEPLOY.md — Production Deployment on Hetzner Cloud
+# DEPLOY.md — Production Deployment on Hostinger VPS
 
 ## Overview
 
-We deploy on **Hetzner Cloud CX22** (~$4/month) running Ubuntu 22.04. PM2 keeps the bot alive indefinitely — auto-restarts on crash, reboots, and memory leaks.
+We deploy on a **Hostinger VPS** running Ubuntu 22.04. PM2 keeps the bot alive indefinitely — auto-restarts on crash, reboots, and memory leaks.
 
-**Total monthly cost:** ~$4 (Hetzner) + $0 (Helius free RPC) = **~$4/month**
+**Why VPS and not Hostinger's managed Node.js hosting?** Hostinger offers managed Node.js on their shared/cloud plans (no SSH, GitHub auto-deploy) — but that's for web apps serving HTTP requests. Our Telegram bot is a long-running background process that polls Telegram 24/7, so we need a VPS with PM2.
+
+**Total monthly cost:** ~$5 (Hostinger KVM 1) + $0 (Helius free RPC) = **~$5/month**
 
 ---
 
@@ -18,18 +20,43 @@ You'll need these three things ready:
 
 ---
 
-## Step 1: Create Hetzner Account
+## Step 1: Create Hostinger Account & Buy VPS
 
-1. Go to https://accounts.hetzner.com/signUp
-2. Sign up with email
-3. **If you're in the US:** You'll need to verify identity with passport. Manual approval takes 1–3 hours.
-4. Add a payment method (credit card or PayPal)
+1. Go to https://www.hostinger.com/vps-hosting
+2. Pick **KVM 1** plan — 1 vCPU, 4GB RAM, 50GB NVMe, 4TB bandwidth
+   - Monthly: ~$8.99/month
+   - 12 months: ~$5.99/month
+   - 48 months: ~$4.99/month (best value)
+3. Create an account and pay
+
+> **Tip:** The 12-month plan hits the sweet spot — you'll know within a year if this is working. Don't overthink it.
 
 ---
 
-## Step 2: Generate SSH Key (On Your Local Machine)
+## Step 2: Set Up the VPS in Hostinger Panel
 
-SSH keys are required — Hetzner disables password login when you add a key (which is what we want).
+1. Go to https://hpanel.hostinger.com → **VPS** section
+2. Click your new VPS → **Setup**
+
+Configure:
+
+| Setting | Value |
+|---------|-------|
+| **OS** | Ubuntu 22.04 (Plain OS — no panel) |
+| **Server Name** | `solswap-bot` |
+| **Root Password** | Set a strong password (you'll change to SSH keys shortly) |
+| **SSH Key (optional)** | You can add one here — see Step 3 |
+
+3. Click **Complete Setup** — provisioning takes 1–2 minutes
+4. Once ready, you'll see your **IP address** on the VPS dashboard
+
+> **Important:** Choose "Plain OS", NOT "with CloudPanel". We don't need a web hosting panel — just a clean Ubuntu server.
+
+---
+
+## Step 3: Generate SSH Key (On Your Local Machine)
+
+If you didn't add an SSH key during setup, do this now. SSH keys are more secure than passwords.
 
 ```bash
 # On your local machine (Mac/Linux/WSL)
@@ -45,42 +72,22 @@ cat ~/.ssh/id_ed25519.pub
 
 **Windows (no WSL):** Use PuTTYgen to generate a key pair.
 
----
-
-## Step 3: Create the Server
-
-1. Log into Hetzner Cloud Console: https://console.hetzner.cloud
-2. Click **"+ New Project"** → name it "solswap-bot"
-3. Open the project → click **"Add Server"**
-
-Configure:
-
-| Setting | Value |
-|---------|-------|
-| **Location** | Falkenstein (EU) or Ashburn (US) — pick closest to you |
-| **Image** | Ubuntu 22.04 |
-| **Type** | Shared vCPU → **CX22** (2 vCPU, 4GB RAM, 40GB NVMe) |
-| **Networking** | Keep IPv4 + IPv6 (default) |
-| **SSH Keys** | Click "Add SSH Key" → paste your public key from Step 2 |
-| **Firewalls** | Skip for now (we'll configure UFW on the server) |
-| **Name** | `solswap-bot` |
-
-4. Click **"Create & Buy"**
-5. Note the **IP address** shown — you'll need it to SSH in
-
-**Cost:** ~€3.79/month (~$4.15 USD). Billed hourly, cancel anytime.
+**Add key to Hostinger:** hPanel → VPS → Settings → SSH Keys → Add SSH Key → paste your public key.
 
 ---
 
 ## Step 4: Connect to Your Server
 
 ```bash
-# SSH into the server (replace with your IP)
+# SSH into the server (replace with your IP from hPanel)
 ssh root@YOUR_SERVER_IP
 
 # If it asks about fingerprint, type "yes"
+# Enter your root password (or SSH key passphrase)
 # You should now see: root@solswap-bot:~#
 ```
+
+**Alternative:** Hostinger has a **Browser Terminal** in hPanel → VPS → your server → Terminal button. This lets you skip SSH setup entirely for initial config, but you'll want proper SSH for daily use.
 
 ---
 
@@ -110,7 +117,7 @@ chmod 600 /home/solbot/.ssh/authorized_keys
 # ssh solbot@YOUR_SERVER_IP
 # If it works, continue below. If not, check SSH key copy.
 
-# 6. Disable root SSH login
+# 6. Disable root SSH login and password auth
 sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -166,6 +173,9 @@ pm2 startup
 ## Step 7: Deploy the Bot
 
 ```bash
+# Install git (if not already installed)
+sudo apt-get install -y git
+
 # Clone your repository
 cd ~
 git clone YOUR_REPO_URL solswap-bot
@@ -272,7 +282,7 @@ PM2 handles all failure scenarios automatically:
 | Scenario | What Happens |
 |----------|-------------|
 | Bot crashes (unhandled error) | PM2 auto-restarts with exponential backoff |
-| Hetzner VPS reboots (maintenance) | PM2 auto-starts on boot (via `pm2 startup`) |
+| VPS reboots (maintenance) | PM2 auto-starts on boot (via `pm2 startup`) |
 | Memory leak (>256MB) | PM2 kills and restarts the process |
 | You deploy new code | `pm2 restart solswap-bot` — instant restart |
 | Network blip | Grammy reconnects Telegram polling automatically |
@@ -344,31 +354,32 @@ pm2 monit   # Real-time CPU/memory/log dashboard
 
 ---
 
-## Hetzner-Specific Tips
+## Hostinger-Specific Tips
 
-### Hetzner Cloud Firewall (Optional — Extra Layer)
-In addition to UFW on the server, you can add a Hetzner Cloud Firewall:
+### hPanel VPS Dashboard
+Hostinger's hPanel gives you a nice dashboard for your VPS:
+- **Overview:** CPU, RAM, disk usage at a glance
+- **Snapshots:** Create/restore server snapshots (see below)
+- **Firewall:** Hostinger has a built-in firewall editor in hPanel under VPS → Settings → Firewall — you can add port rules there in addition to UFW on the server
+- **Browser Terminal:** SSH into your server directly from the browser — useful when you're on a machine without SSH configured
+- **OS Reinstall:** One-click wipe and reinstall if things go sideways
 
-1. Go to Hetzner Console → Firewalls → Create Firewall
-2. Add Inbound Rule: TCP Port 22 (SSH) from your IP only
-3. Attach firewall to your server
-
-This adds network-level filtering before traffic even reaches your VPS.
-
-### Hetzner Snapshots (Before Major Changes)
+### Hostinger Snapshots (Before Major Changes)
 Before risky updates, take a snapshot:
-1. Hetzner Console → Your Server → Snapshots → Create Snapshot
-2. Cost: €0.012/GB/month (~€0.50 for our 40GB server)
+1. hPanel → VPS → your server → Snapshots
+2. Click "Create" — takes a few seconds
 3. Restore in 1 click if something goes wrong
+4. You get a limited number of snapshot slots depending on plan
 
-### Hetzner Scaling Path
-| Plan | Specs | Price | When |
-|------|-------|-------|------|
-| **CX22** (start here) | 2 vCPU, 4GB RAM | €3.79/mo | 0–500 DAU |
-| CX32 | 4 vCPU, 8GB RAM | €6.80/mo | 500–2000 DAU |
-| CX42 | 8 vCPU, 16GB RAM | €16.40/mo | 2000+ DAU |
+### Hostinger Scaling Path
 
-Upgrades are one-click in Hetzner Console (requires a brief reboot).
+| Plan | Specs | Price (monthly) | When |
+|------|-------|-----------------|------|
+| **KVM 1** (start here) | 1 vCPU, 4GB RAM, 50GB NVMe | ~$5–9/mo | 0–500 DAU |
+| KVM 2 | 2 vCPU, 8GB RAM, 100GB NVMe | ~$7–13/mo | 500–2000 DAU |
+| KVM 4 | 4 vCPU, 16GB RAM, 200GB NVMe | ~$11–18/mo | 2000+ DAU |
+
+Upgrades are done through hPanel. May require a brief server restart.
 
 ---
 
@@ -376,10 +387,10 @@ Upgrades are one-click in Hetzner Console (requires a brief reboot).
 
 | Item | Cost | Notes |
 |------|------|-------|
-| Hetzner CX22 | €3.79/month (~$4) | 2 vCPU, 4GB RAM, 40GB NVMe, 20TB traffic |
+| Hostinger KVM 1 | ~$5–9/month | 1 vCPU, 4GB RAM, 50GB NVMe, 4TB bandwidth |
 | Helius RPC (free tier) | $0/month | 100k requests/month. Upgrade to $49/mo for 1M |
 | Domain (optional) | ~$10/year | Only needed for Phase 3 web terminal |
-| **Total** | **~$4/month** | |
+| **Total** | **~$5–9/month** | Depends on billing period (longer = cheaper) |
 
 ---
 
@@ -405,6 +416,11 @@ Check your Helius API key is correct and the URL format is right.
 - Make sure no other instance of this bot is running (only one process can poll the same bot token)
 - Check `pm2 logs` for Grammy errors
 - Verify the bot token with: `curl https://api.telegram.org/bot<TOKEN>/getMe`
+
+### Can't SSH into server
+- Verify IP address in hPanel dashboard
+- Try Hostinger's Browser Terminal as fallback (hPanel → VPS → Terminal)
+- If you locked yourself out with SSH config changes, use hPanel to access the recovery console or reinstall OS
 
 ### High memory usage
 ```bash

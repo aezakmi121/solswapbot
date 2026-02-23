@@ -38,7 +38,7 @@ Users connect their own Phantom wallet. The bot constructs a Jupiter swap transa
 | HTTP Client | Native fetch (Node 20) | — | No axios needed |
 | Environment | dotenv | Latest | Env var management |
 | Process Manager | PM2 | Latest | Keep bot alive in production |
-| Deployment | VPS (Ubuntu 22.04) | — | $5–10/month Hetzner or DigitalOcean |
+| Deployment | VPS (Ubuntu 22.04) | — | $5–10/month Hostinger VPS |
 
 ---
 
