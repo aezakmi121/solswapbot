@@ -8,6 +8,7 @@ import { walletCommand } from "./commands/wallet";
 import { priceCommand } from "./commands/price";
 import { referralCommand } from "./commands/referral";
 import { historyCommand } from "./commands/history";
+import { swapCommand, handleSwapConfirm, handleSwapCancel } from "./commands/swap";
 
 /** Creates and configures the Grammy bot instance */
 export function createBot(): Bot {
@@ -24,6 +25,11 @@ export function createBot(): Bot {
   bot.command("price", priceCommand);
   bot.command("referral", referralCommand);
   bot.command("history", historyCommand);
+  bot.command("swap", swapCommand);
+
+  // Inline keyboard callback handlers for swap confirmation
+  bot.callbackQuery("swap_confirm", handleSwapConfirm);
+  bot.callbackQuery("swap_cancel", handleSwapCancel);
 
   bot.command("help", (ctx) =>
     ctx.reply(

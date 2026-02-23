@@ -240,14 +240,15 @@ Your VPS (Ubuntu 22.04)
 
 ## Phase Roadmap
 
-### Phase 1 — MVP (Weeks 1–2)
+### Phase 1 — MVP (Weeks 1–2) ✅ COMPLETE
 Core swap functionality. Everything needed to go live and earn fees.
-- Bot scaffolding with Grammy
-- Jupiter quote + swap integration
-- Phantom deeplink generation
-- `/start`, `/wallet`, `/swap`, `/price`, `/referral` commands
-- Prisma DB with User + Swap models
-- Rate limiting
+- Bot scaffolding with Grammy ✅
+- Jupiter quote + swap integration ✅ (`src/jupiter/quote.ts`, `src/jupiter/swap.ts`)
+- Phantom deeplink generation ✅ (`src/solana/phantom.ts`)
+- `/start`, `/connect`, `/wallet`, `/swap`, `/price`, `/referral`, `/history` commands ✅
+- Swap inline keyboard confirmation flow (confirm/cancel callbacks) ✅
+- Prisma DB with User + Swap models ✅
+- Rate limiting ✅
 - Deploy to VPS with PM2
 
 ### Phase 2 — Growth (Month 2)
