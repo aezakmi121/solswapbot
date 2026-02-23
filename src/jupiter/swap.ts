@@ -7,7 +7,7 @@ import { QuoteResponse } from "./quote";
 const swapResponseSchema = z.object({
   swapTransaction: z.string(),
   lastValidBlockHeight: z.number(),
-  prioritizationFeeLamports: z.number().optional(),
+  prioritizationFeeLamports: z.union([z.number(), z.record(z.unknown())]).optional(),
 });
 
 export type SwapResponse = z.infer<typeof swapResponseSchema>;

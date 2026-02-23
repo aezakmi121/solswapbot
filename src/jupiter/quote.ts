@@ -15,8 +15,8 @@ const routeStepSchema = z.object({
   outputMint: z.string(),
   inAmount: z.string(),
   outAmount: z.string(),
-  feeAmount: z.string(),
-  feeMint: z.string(),
+  feeAmount: z.string().optional(),
+  feeMint: z.string().optional(),
 });
 
 const routePlanSchema = z.object({

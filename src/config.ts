@@ -20,7 +20,7 @@ const envSchema = z.object({
   JUPITER_API_URL: z
     .string()
     .url()
-    .default("https://quote-api.jup.ag/v6"),
+    .default("https://lite-api.jup.ag/swap/v1"),
   PLATFORM_FEE_BPS: z.coerce
     .number()
     .int()

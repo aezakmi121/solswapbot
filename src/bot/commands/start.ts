@@ -14,11 +14,11 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
   const existingUser = await findUserByTelegramId(telegramId);
   if (existingUser) {
     const walletStatus = existingUser.walletAddress
-      ? `Wallet: \`${existingUser.walletAddress}\``
-      : "No wallet connected yet. Use /connect <ADDRESS> to link your Phantom wallet.";
+      ? `✅ Wallet connected: \`${existingUser.walletAddress}\``
+      : "⚠️ No wallet connected yet.\n\nTo start trading, link your Phantom wallet:\n`/connect <YOUR_WALLET_ADDRESS>`";
 
     await ctx.reply(
-      `Welcome back!\n\n${walletStatus}\n\nType /help for all commands.`,
+      `👋 Welcome back!\n\n${walletStatus}\n\nType /help to see what I can do.`,
       { parse_mode: "Markdown" }
     );
     return;
@@ -46,18 +46,21 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
   });
 
   const referralNote = referredById
-    ? "\nYou were referred by a friend — welcome aboard!"
+    ? "\n🤝 You were referred by a friend — welcome aboard!"
     : "";
 
   await ctx.reply(
-    `Welcome to SolSwap Bot! 🔄\n\n` +
-      `Swap any Solana token directly from Telegram — non-custodial, powered by Jupiter.\n` +
-      `${referralNote}\n` +
-      `To get started, connect your Phantom wallet:\n` +
-      `/connect <YOUR_WALLET_ADDRESS>\n\n` +
-      `Your referral code: \`${user.referralCode}\`\n` +
-      `Share it to earn 25% of fees from anyone you refer!\n\n` +
-      `Type /help for all commands.`,
+    `🔄 *Welcome to SolSwap Bot!*\n\n` +
+    `Swap any Solana token instantly — right here in Telegram.\n` +
+    `Your funds stay in YOUR wallet. We never hold your keys.${referralNote}\n\n` +
+    `*Get started in 2 steps:*\n\n` +
+    `1️⃣ Connect your Phantom wallet:\n` +
+    `/connect <YOUR_WALLET_ADDRESS>\n\n` +
+    `2️⃣ Start trading:\n` +
+    `/swap 1 SOL USDC\n\n` +
+    `💎 Your referral code: \`${user.referralCode}\`\n` +
+    `Share it to earn 25% of fees from anyone you refer!\n\n` +
+    `Type /help for all commands.`,
     { parse_mode: "Markdown" }
   );
 }

@@ -6,7 +6,7 @@ import { getQuote, QuoteResponse } from "../../jupiter/quote";
 import { buildSwapTransaction } from "../../jupiter/swap";
 import { buildPhantomDeeplink } from "../../solana/phantom";
 import { pollTransactionInBackground } from "../../solana/transaction";
-import { estimateFeeUsd } from "../../jupiter/price";
+import { estimateFeeUsd, getTokenPriceUsd } from "../../jupiter/price";
 import { sanitizeInput, isValidSwapAmount } from "../../utils/validation";
 import { TOKENS, TOKEN_DECIMALS } from "../../utils/constants";
 import { formatTokenAmount, formatUsd } from "../../utils/formatting";
@@ -52,7 +52,7 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
     if (ageMs < 120_000) {
       await ctx.reply(
         "You already have a pending swap. Complete it first or wait for it to expire.\n\n" +
-          "If you already signed, send: `/status <TX_SIGNATURE>`",
+        "If you already signed, send: `/status <TX_SIGNATURE>`",
         { parse_mode: "Markdown" }
       );
       return;
@@ -71,8 +71,8 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
   if (parts.length < 3) {
     await ctx.reply(
       "Usage: `/swap <AMOUNT> <FROM> <TO>`\n\n" +
-        "Example: `/swap 1 SOL USDC`\n" +
-        `Supported tokens: ${Object.keys(TOKENS).join(", ")}`,
+      "Example: `/swap 1 SOL USDC`\n" +
+      `Supported tokens: ${Object.keys(TOKENS).join(", ")}`,
       { parse_mode: "Markdown" }
     );
     return;
@@ -107,7 +107,7 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
   const amountSmallest = toSmallestUnit(amount, inputDecimals).toString();
 
   // Fetch quote from Jupiter
-  await ctx.reply("Fetching best swap route...");
+  await ctx.reply("⏳ Finding the best swap route...");
 
   let quote: QuoteResponse;
   try {
@@ -119,10 +119,10 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     if (message.includes("No routes found") || message.includes("404")) {
-      await ctx.reply("No swap route found for this pair. Try a different amount or token.");
+      await ctx.reply("❌ No swap route found for this pair. Try a different amount or token.");
     } else {
       console.error("Jupiter quote error:", message);
-      await ctx.reply("Failed to get swap quote. Please try again later.");
+      await ctx.reply("❌ Failed to get swap quote. Please try again later.");
     }
     return;
   }
@@ -135,8 +135,60 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
   const priceImpact = parseFloat(quote.priceImpactPct);
   const priceImpactStr = priceImpact < 0.01 ? "<0.01%" : `${priceImpact.toFixed(2)}%`;
 
-  // Estimate fee USD now (at quote time) for accurate tracking
+  // Fetch USD prices for both tokens for detailed breakdown
+  const [inputPriceUsd, outputPriceUsd] = await Promise.all([
+    getTokenPriceUsd(inputMint),
+    getTokenPriceUsd(outputMint),
+  ]);
+
+  const inputUsdValue = inputPriceUsd !== null ? amount * inputPriceUsd : null;
+  const outputTokens = Number(quote.outAmount) / 10 ** outputDecimals;
+  const outputUsdValue = outputPriceUsd !== null ? outputTokens * outputPriceUsd : null;
+
+  // Calculate exchange rate
+  const exchangeRate = outputTokens / amount;
+  const exchangeRateStr = exchangeRate < 0.01
+    ? exchangeRate.toPrecision(4)
+    : exchangeRate.toFixed(exchangeRate < 1 ? 6 : 2);
+
+  // Estimate fee USD
   const estimatedFeeUsd = await estimateFeeUsd({ outputMint, feeAmount });
+
+  // Balance check — soft warning only, don't block the swap
+  let balanceWarning = "";
+  try {
+    const { connection } = await import("../../solana/connection");
+    const { PublicKey } = await import("@solana/web3.js");
+    const pubkey = new PublicKey(user.walletAddress);
+
+    if (inputSymbol === "SOL") {
+      const balanceLamports = await connection.getBalance(pubkey);
+      const balanceSol = balanceLamports / 1e9;
+      if (balanceSol < amount + 0.01) { // +0.01 for gas
+        balanceWarning = `\n\n⚠️ *Low balance:* You have ${balanceSol.toFixed(4)} SOL (need ${amount} + gas)`;
+      }
+    } else {
+      // SPL token balance check via RPC
+      const mintPubkey = new PublicKey(inputMint);
+      try {
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, { mint: mintPubkey });
+        const accountInfo = tokenAccounts.value[0];
+        if (!accountInfo) {
+          balanceWarning = `\n\n⚠️ *No ${inputSymbol} found* in your wallet`;
+        } else {
+          const balance = accountInfo.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+          if (balance < amount) {
+            balanceWarning = `\n\n⚠️ *Low balance:* You have ${balance} ${inputSymbol} (need ${amount})`;
+          }
+        }
+      } catch {
+        // Balance check failed for SPL token
+      }
+    }
+  } catch (err) {
+    // Balance check failed — don't block the swap
+    console.warn("Balance check failed:", err);
+  }
 
   // Store quote for confirmation callback
   pendingQuotes.set(telegramId, {
@@ -152,20 +204,27 @@ export async function swapCommand(ctx: CommandContext<Context>): Promise<void> {
     if (val.expiresAt < Date.now()) pendingQuotes.delete(key);
   }
 
+  // Build detailed quote message
+  const inputUsdStr = inputUsdValue !== null ? ` (~${formatUsd(inputUsdValue)})` : "";
+  const outputUsdStr = outputUsdValue !== null ? ` (~${formatUsd(outputUsdValue)})` : "";
   const feeUsdStr = estimatedFeeUsd !== null ? ` (~${formatUsd(estimatedFeeUsd)})` : "";
 
   const keyboard = new InlineKeyboard()
-    .text("Confirm Swap", "swap_confirm")
-    .text("Cancel", "swap_cancel");
+    .text("✅ Confirm Swap", "swap_confirm")
+    .text("❌ Cancel", "swap_cancel");
 
   await ctx.reply(
-    `*Swap Quote*\n\n` +
-      `Sell: ${amount} ${inputSymbol}\n` +
-      `Receive: ~${outFormatted} ${outputSymbol}\n` +
-      `Fee: ${feeFormatted} ${outputSymbol}${feeUsdStr} (0.5%)\n` +
-      `Price impact: ${priceImpactStr}\n` +
-      `Slippage tolerance: 0.5%\n\n` +
-      `_Quote valid for 60 seconds_`,
+    `📊 *Swap Quote*\n\n` +
+    `💰 You sell: ${amount} ${inputSymbol}${inputUsdStr}\n` +
+    `📥 You receive: ~${outFormatted} ${outputSymbol}${outputUsdStr}\n\n` +
+    `📋 *Breakdown:*\n` +
+    `   Rate: 1 ${inputSymbol} = ${exchangeRateStr} ${outputSymbol}\n` +
+    `   Platform fee (0.5%): ${feeFormatted} ${outputSymbol}${feeUsdStr}\n` +
+    `   Price impact: ${priceImpactStr}\n` +
+    `   Slippage tolerance: 0.5%\n\n` +
+    `⚡ Best route via Jupiter aggregator` +
+    balanceWarning +
+    `\n\n_⏱ Quote valid for 60 seconds_`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
@@ -238,10 +297,10 @@ export async function handleSwapConfirm(ctx: Context): Promise<void> {
 
   await ctx.reply(
     `*Ready to sign!*\n\n` +
-      `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
-      `Tap the button below to open Phantom and sign.\n` +
-      `I'll automatically check for confirmation.\n\n` +
-      `_Or send_ \`/status <TX_SIGNATURE>\` _after signing for faster tracking._`,
+    `Swapping ${pending.inputSymbol} → ~${outFormatted} ${pending.outputSymbol}\n\n` +
+    `Tap the button below to open Phantom and sign.\n` +
+    `I'll automatically check for confirmation.\n\n` +
+    `_Or send_ \`/status <TX_SIGNATURE>\` _after signing for faster tracking._`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 

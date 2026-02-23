@@ -34,16 +34,21 @@ export function createBot(): Bot {
 
   bot.command("help", (ctx) =>
     ctx.reply(
-      "Available commands:\n\n" +
-        "/start — Get started\n" +
-        "/connect <ADDRESS> — Connect your Phantom wallet\n" +
-        "/wallet — View connected wallet & balance\n" +
-        "/swap <AMOUNT> <FROM> <TO> — Swap tokens\n" +
-        "/status <TX> — Track transaction after signing\n" +
-        "/price <TOKEN> — Get token price\n" +
-        "/referral — Your referral link & earnings\n" +
-        "/history — Last 10 swaps\n" +
-        "/help — Show this message"
+      `📖 *SolSwap Bot Commands*\n\n` +
+      `🚀 *Getting Started*\n` +
+      `/start — Create your account\n` +
+      `/connect \`<ADDRESS>\` — Link your Phantom wallet\n` +
+      `/wallet — View wallet & SOL balance\n\n` +
+      `💱 *Trading*\n` +
+      `/swap \`<AMOUNT> <FROM> <TO>\` — Swap tokens\n` +
+      `   _Example: /swap 1 SOL USDC_\n` +
+      `/price \`<TOKEN>\` — Check token price\n` +
+      `/status \`<TX>\` — Track your transaction\n` +
+      `/history — Last 10 swaps\n\n` +
+      `🤝 *Referrals*\n` +
+      `/referral — Your link & earnings\n\n` +
+      `💡 *Supported tokens:* SOL, USDC, USDT, BONK, WIF, JUP`,
+      { parse_mode: "Markdown" }
     )
   );
 
