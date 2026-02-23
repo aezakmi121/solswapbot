@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "../config";
+import { withRetry } from "../utils/retry";
 
 /** Zod schema for Jupiter quote response — validates unknown API data */
 const platformFeeSchema = z.object({
@@ -40,29 +41,31 @@ export const quoteResponseSchema = z.object({
 
 export type QuoteResponse = z.infer<typeof quoteResponseSchema>;
 
-/** Fetch a swap quote from Jupiter with our platform fee baked in. */
+/** Fetch a swap quote from Jupiter with our platform fee baked in. Retries on transient errors. */
 export async function getQuote(params: {
   inputMint: string;
   outputMint: string;
   amount: string;
   slippageBps?: number;
 }): Promise<QuoteResponse> {
-  const searchParams = new URLSearchParams({
-    inputMint: params.inputMint,
-    outputMint: params.outputMint,
-    amount: params.amount,
-    slippageBps: String(params.slippageBps ?? 50),
-    platformFeeBps: String(config.PLATFORM_FEE_BPS),
-  });
+  return withRetry(async () => {
+    const searchParams = new URLSearchParams({
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      amount: params.amount,
+      slippageBps: String(params.slippageBps ?? 50),
+      platformFeeBps: String(config.PLATFORM_FEE_BPS),
+    });
 
-  const url = `${config.JUPITER_API_URL}/quote?${searchParams}`;
-  const response = await fetch(url);
+    const url = `${config.JUPITER_API_URL}/quote?${searchParams}`;
+    const response = await fetch(url);
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Jupiter quote failed (${response.status}): ${body}`);
-  }
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Jupiter quote failed (${response.status}): ${body}`);
+    }
 
-  const raw: unknown = await response.json();
-  return quoteResponseSchema.parse(raw);
+    const raw: unknown = await response.json();
+    return quoteResponseSchema.parse(raw);
+  }, { label: "Jupiter quote" });
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "../config";
+import { withRetry } from "../utils/retry";
 import { QuoteResponse } from "./quote";
 
 /** Zod schema for Jupiter swap response */
@@ -11,30 +12,32 @@ const swapResponseSchema = z.object({
 
 export type SwapResponse = z.infer<typeof swapResponseSchema>;
 
-/** Build a swap transaction via Jupiter. Returns a base64 serialized transaction. */
+/** Build a swap transaction via Jupiter. Returns a base64 serialized transaction. Retries on transient errors. */
 export async function buildSwapTransaction(params: {
   quoteResponse: QuoteResponse;
   userPublicKey: string;
 }): Promise<SwapResponse> {
-  const url = `${config.JUPITER_API_URL}/swap`;
+  return withRetry(async () => {
+    const url = `${config.JUPITER_API_URL}/swap`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      quoteResponse: params.quoteResponse,
-      userPublicKey: params.userPublicKey,
-      feeAccount: config.FEE_WALLET_ADDRESS,
-      wrapAndUnwrapSol: true,
-      asLegacyTransaction: false,
-    }),
-  });
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: params.quoteResponse,
+        userPublicKey: params.userPublicKey,
+        feeAccount: config.FEE_WALLET_ADDRESS,
+        wrapAndUnwrapSol: true,
+        asLegacyTransaction: false,
+      }),
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Jupiter swap build failed (${response.status}): ${body}`);
-  }
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Jupiter swap build failed (${response.status}): ${body}`);
+    }
 
-  const raw: unknown = await response.json();
-  return swapResponseSchema.parse(raw);
+    const raw: unknown = await response.json();
+    return swapResponseSchema.parse(raw);
+  }, { label: "Jupiter swap" });
 }
