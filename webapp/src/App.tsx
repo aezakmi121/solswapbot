@@ -124,16 +124,13 @@ export function App() {
                 .replace(/=+$/, "");
 
             // Build Phantom universal link for signing
-            const redirectUrl = encodeURIComponent(
-                window.location.origin + "/?signed=true"
-            );
+            // NO redirect_link — avoids the loop where webapp opens in browser
+            // instead of going back to Telegram
             const phantomUrl =
                 `https://phantom.app/ul/v1/signAndSendTransaction` +
-                `?transaction=${encodeURIComponent(base64url)}` +
-                `&redirect_link=${redirectUrl}`;
+                `?transaction=${encodeURIComponent(base64url)}`;
 
-            // Open in external browser (not Telegram's WebView)
-            // This allows Phantom to intercept on mobile or open in browser with extension
+            // Open in external browser — Phantom intercepts this on mobile
             if (tg?.openLink) {
                 tg.openLink(phantomUrl);
             } else {
@@ -384,8 +381,11 @@ export function App() {
                 {swapStatus === "done" && (
                     <div className="sign-hint">
                         <p>
-                            Phantom should open now. <strong>Approve the transaction</strong>{" "}
-                            to complete your swap.
+                            ✅ Phantom should open now. <strong>Approve the transaction</strong> there.
+                        </p>
+                        <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: 4 }}>
+                            After approving, just switch back to Telegram.
+                            Your swap will be confirmed on-chain automatically.
                         </p>
                         <button
                             className="reset-btn"
@@ -395,7 +395,7 @@ export function App() {
                                 setQuote(null);
                             }}
                         >
-                            New Swap
+                            ↩️ New Swap
                         </button>
                     </div>
                 )}
