@@ -255,19 +255,31 @@ npx prisma generate
 Track what's done vs pending here — update this section as you build:
 
 ### ✅ Done
-- [ ] Nothing yet — starting fresh
+- [x] Project scaffolding (package.json, tsconfig.json, .gitignore, .env.example)
+- [x] Prisma schema + migrations (User + Swap models, SQLite)
+- [x] Config validation (src/config.ts — Zod validates all env vars at startup)
+- [x] Database client singleton (src/db/client.ts)
+- [x] Bot skeleton (src/bot/index.ts — Grammy instance with middleware)
+- [x] Rate limiting middleware (per-user, per-command limits)
+- [x] Logger middleware (request/response logging)
+- [x] Entry point (src/app.ts — graceful startup/shutdown)
+- [x] Utility files (constants, validation, formatting)
+- [x] Solana RPC connection helper (src/solana/connection.ts)
 
 ### 🔨 In Progress
-- [ ] Initial scaffolding
+- [ ] Core bot commands (/start with referral, /wallet, /connect)
 
 ### 📋 Backlog
-- [ ] Core bot commands (/start, /wallet, /swap, /price, /referral)
-- [ ] Jupiter quote + swap integration
-- [ ] Phantom deeplink generation
-- [ ] Prisma schema + migrations
-- [ ] Rate limiting middleware
+- [ ] Full /start command (referral code parsing, user creation)
+- [ ] /connect command (wallet validation + save)
+- [ ] /wallet command (balance lookup via RPC)
+- [ ] Jupiter quote + swap integration (src/jupiter/)
+- [ ] Phantom deeplink generation (src/solana/phantom.ts)
+- [ ] /swap command (full flow: quote → confirm → deeplink)
+- [ ] /price command (token price lookup)
 - [ ] Fee tracking in DB
-- [ ] Referral system
+- [ ] Referral system (/referral command + earnings tracking)
+- [ ] /history command
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)

@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  telegramId       String   @unique
+  telegramUsername  String?
+  walletAddress    String?
+  referralCode     String   @unique @default(cuid())
+  referredById     String?
+  referredBy       User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals        User[]   @relation("Referrals")
+  swaps            Swap[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Swap {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  inputMint     String
+  outputMint    String
+  inputAmount   BigInt
+  outputAmount  BigInt
+  feeAmountUsd  Float?
+  txSignature   String?
+  status        SwapStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+}
+
+enum SwapStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
