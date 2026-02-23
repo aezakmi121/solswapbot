@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { PublicKey } from "@solana/web3.js";
 
 const envSchema = z.object({
   // Telegram
@@ -10,7 +11,10 @@ const envSchema = z.object({
   FEE_WALLET_ADDRESS: z
     .string()
     .min(32, "FEE_WALLET_ADDRESS must be a valid Solana address")
-    .max(44, "FEE_WALLET_ADDRESS must be a valid Solana address"),
+    .max(44, "FEE_WALLET_ADDRESS must be a valid Solana address")
+    .refine((addr) => {
+      try { new PublicKey(addr); return true; } catch { return false; }
+    }, "FEE_WALLET_ADDRESS must be a valid Solana public key"),
 
   // Jupiter
   JUPITER_API_URL: z

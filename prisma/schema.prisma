@@ -33,6 +33,9 @@ model Swap {
   txSignature   String?
   status        SwapStatus @default(PENDING)
   createdAt     DateTime   @default(now())
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 enum SwapStatus {

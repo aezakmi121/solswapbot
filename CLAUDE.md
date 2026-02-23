@@ -52,12 +52,14 @@ solana-swap-bot/
 ├── SECURITY.md                  ← Threat model and security rules
 ├── API.md                       ← Jupiter API reference and integration notes
 ├── TESTING.md                   ← Testing guide (devnet, mainnet, checklist)
+├── DEPLOY.md                    ← Production deployment guide (VPS, PM2, backups)
 ├── .env                         ← Local secrets (NEVER commit)
 ├── .env.example                 ← Template with all required vars (commit this)
 ├── .env.devnet                  ← Devnet testing env template
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
+├── ecosystem.config.js          ← PM2 production config
 ├── prisma/
 │   └── schema.prisma            ← Single source of truth for DB schema
 ├── src/
@@ -285,9 +287,18 @@ Track what's done vs pending here — update this section as you build:
 - [x] /status command (submit tx signature → background poll → notify on confirm/fail)
 - [x] Token price service (src/jupiter/price.ts — getTokenPriceUsd + estimateFeeUsd)
 - [x] Testing guide (TESTING.md — devnet setup, mainnet testing, full checklist)
+- [x] Auto-poll transaction confirmation after swap confirm (no manual /status needed)
+- [x] Fee USD estimated at quote time (not just confirmation) for accurate tracking
+- [x] Duplicate swap prevention (blocks new swap if one is pending <2 min)
+- [x] FEE_WALLET_ADDRESS validated as real Solana PublicKey at startup
+- [x] Jupiter API retry logic with exponential backoff (429, 503, network errors)
+- [x] Tx polling timeout increased to 5 min (handles mainnet congestion)
+- [x] DB indexes on Swap table (userId+status, userId+createdAt)
+- [x] Audit logging for swap/connect/start/status commands
+- [x] PM2 deployment config (ecosystem.config.js)
+- [x] Deployment guide (DEPLOY.md)
 
 ### 📋 Backlog
-- [ ] Deploy to VPS with PM2 (final Phase 1 step)
 - [ ] Token sniping (Phase 2)
 - [ ] Copy trading (Phase 3)
 - [ ] Web terminal frontend (Phase 3)

@@ -31,6 +31,7 @@ We never hold user private keys or funds. Users retain full custody at all times
 | `SECURITY.md` | Threat model, security rules, incident response |
 | `API.md` | Jupiter API reference and integration notes |
 | `TESTING.md` | Testing guide — devnet setup, mainnet testing, full checklist |
+| `DEPLOY.md` | Production deployment — VPS setup, PM2, backups, monitoring |
 
 ## Quick Start
 

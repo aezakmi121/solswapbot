@@ -2,7 +2,7 @@ import { connection } from "./connection";
 import { prisma } from "../db/client";
 
 const POLL_INTERVAL_MS = 3_000;
-const MAX_POLL_ATTEMPTS = 40; // ~2 minutes total
+const MAX_POLL_ATTEMPTS = 100; // ~5 minutes total (handles mainnet congestion)
 
 /**
  * Polls Solana for transaction confirmation after the user signs.
