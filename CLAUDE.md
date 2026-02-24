@@ -109,7 +109,8 @@ solswapbot/
 │   │       ├── tokens.ts      # GET /api/tokens
 │   │       ├── user.ts        # GET /api/user
 │   │       ├── scan.ts        # GET /api/scan (token safety)
-│   │       └── crossChain.ts  # GET /api/cross-chain/quote|chains|tokens
+│   │       ├── crossChain.ts  # GET /api/cross-chain/quote|chains|tokens
+│   │       └── history.ts    # GET /api/history (last 20 swaps)
 │   ├── bot/
 │   │   ├── index.ts           # Bot setup — /start + /help only, catch-all → Mini App
 │   │   ├── commands/
@@ -216,7 +217,7 @@ User clicks exchange link (future)
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Grammy bot (/start launcher) | DONE | Catch-all redirects to Mini App |
-| Express API (7 route groups) | DONE | quote, swap, price, tokens, user, scan, cross-chain |
+| Express API (8 route groups) | DONE | quote, swap, price, tokens, user, scan, cross-chain, history |
 | Jupiter swap integration | DONE | Quote + TX builder + platformFeeBps |
 | Jupiter price feed | DONE | v3 API, no auth needed |
 | LI.FI cross-chain routing | DONE | 6 chains, works without API key |
@@ -225,17 +226,23 @@ User clicks exchange link (future)
 | DB schema (5 models) | DONE | All models + indexes |
 | Retry logic + validation | DONE | Exponential backoff, Zod throughout |
 | Rate limiting middleware | DONE | Per-user per-command |
-| Webapp — basic swap page | DONE | Single page, Phantom deep-link |
+| Webapp — Privy-integrated swap page | DONE | Telegram login, embedded wallet, in-app signing |
+| Privy SDK integration | DONE | PrivyProvider + useWallets + useSignAndSendTransaction |
+| POST /api/user/wallet | DONE | Auto-saves Privy wallet address to DB |
+| GET /api/history | DONE | Returns last 20 swaps with token symbol resolution |
+| History panel (slide-up UI) | DONE | Tap wallet badge to open |
 
-### Phase 1 — WALLET & CORE SWAP (Critical Path)
+### Phase 1 — WALLET & CORE SWAP (COMPLETED 2026-02-24)
 
 | Task | Status | Priority |
 |------|--------|----------|
-| Integrate Privy SDK in webapp | NOT STARTED | P0 |
-| Privy wallet creation on first open | NOT STARTED | P0 |
-| In-app transaction signing (replace Phantom deep-link) | NOT STARTED | P0 |
-| End-to-end swap flow (deposit → swap → confirm) | NOT STARTED | P0 |
-| GET /api/history endpoint | NOT STARTED | P1 |
+| Integrate Privy SDK in webapp | DONE | P0 |
+| Privy wallet creation on first open | DONE | P0 |
+| In-app transaction signing (replace Phantom deep-link) | DONE | P0 |
+| End-to-end swap flow (deposit → swap → confirm) | DONE | P0 |
+| GET /api/history endpoint | DONE | P1 |
+| POST /api/user/wallet endpoint | DONE | P1 |
+| Swap history panel UI | DONE | P1 |
 
 ### Phase 2 — MINI APP UI
 
@@ -246,7 +253,7 @@ User clicks exchange link (future)
 | ScanPanel component (token scanner UI) | NOT STARTED | P1 |
 | WalletHeader component (balance + address) | NOT STARTED | P1 |
 | TokenSelector component (search + select) | NOT STARTED | P1 |
-| History section in swap tab | NOT STARTED | P2 |
+| History section in swap tab | DONE (via slide-up panel) | P2 |
 
 ### Phase 3 — PREMIUM FEATURES
 
@@ -333,6 +340,18 @@ pm2 restart ecosystem.config.js
 ---
 
 ## Changelog
+
+### 2026-02-24 — Phase 1: Privy Wallet Integration
+- Integrated @privy-io/react-auth SDK in webapp (v3.14.1)
+- Replaced Phantom deep-link flow with Privy embedded wallet signing
+- Added Telegram login via PrivyProvider config
+- Auto-create Solana wallet on first login (createOnLogin: "all-users")
+- Added useSignAndSendTransaction for in-app swap signing
+- Added POST /api/user/wallet route (auto-saves Privy wallet to DB)
+- Added GET /api/history route (last 20 swaps, symbol resolution)
+- Added swap history slide-up panel (tap wallet badge to open)
+- Added logout button, tx confirmation link (Solscan)
+- Removed @solana/web3.js dependency from webapp (only used in backend now)
 
 ### 2026-02-24 — Documentation Overhaul
 - Merged CONTEXT.md into CLAUDE.md as single source of truth

@@ -8,6 +8,7 @@ import { tokensRouter } from "./routes/tokens";
 import { userRouter } from "./routes/user";
 import { scanRouter } from "./routes/scan";
 import { crossChainRouter } from "./routes/crossChain";
+import { historyRouter } from "./routes/history";
 
 /**
  * Creates and configures the Express API server.
@@ -38,6 +39,7 @@ export function createApiServer(): express.Express {
     app.use("/api", userRouter);
     app.use("/api", scanRouter);
     app.use("/api", crossChainRouter);
+    app.use("/api", historyRouter);
 
     // Error handler
     app.use(

@@ -79,6 +79,20 @@ export interface UserData {
     message?: string;
 }
 
+export interface SwapRecord {
+    id: string;
+    inputMint: string;
+    outputMint: string;
+    inputSymbol: string;
+    outputSymbol: string;
+    inputAmount: string;
+    outputAmount: string;
+    feeAmountUsd: number | null;
+    txSignature: string | null;
+    status: string;
+    createdAt: string;
+}
+
 export async function fetchUser(telegramId: string): Promise<UserData> {
     const res = await fetch(`${API_BASE}/api/user?telegramId=${telegramId}`);
     if (!res.ok) {
@@ -118,4 +132,31 @@ export async function fetchSwapTransaction(params: {
         throw new Error(body.error || "Failed to build swap");
     }
     return res.json();
+}
+
+/** Save a Privy-managed wallet address to the user's account */
+export async function saveWalletAddress(
+    telegramId: string,
+    walletAddress: string
+): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/user/wallet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, walletAddress }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to save wallet");
+    }
+}
+
+/** Fetch swap history for a user */
+export async function fetchHistory(telegramId: string): Promise<SwapRecord[]> {
+    const res = await fetch(`${API_BASE}/api/history?telegramId=${telegramId}`);
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch history");
+    }
+    const data = await res.json();
+    return data.swaps;
 }
