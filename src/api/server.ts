@@ -6,6 +6,7 @@ import { swapRouter } from "./routes/swap";
 import { priceRouter } from "./routes/price";
 import { tokensRouter } from "./routes/tokens";
 import { userRouter } from "./routes/user";
+import { scanRouter } from "./routes/scan";
 
 /**
  * Creates and configures the Express API server.
@@ -34,6 +35,7 @@ export function createApiServer(): express.Express {
     app.use("/api", priceRouter);
     app.use("/api", tokensRouter);
     app.use("/api", userRouter);
+    app.use("/api", scanRouter);
 
     // Error handler
     app.use(
