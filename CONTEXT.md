@@ -103,9 +103,9 @@ solswapbot/
 │   │   └── middleware/
 │   │       ├── logger.ts
 │   │       └── rateLimit.ts
-│   ├── scanner/            # [NEW] Token safety analysis
-│   │   ├── analyze.ts      # Main analysis orchestrator
-│   │   └── checks.ts       # Individual safety checks
+│   ├── scanner/
+│   │   ├── analyze.ts      # Main analysis orchestrator (risk score 0-100)
+│   │   └── checks.ts       # Safety checks (mint auth, freeze, holders, age)
 │   ├── aggregator/         # [NEW] Cross-chain swap routing
 │   │   ├── router.ts       # Jupiter vs Rango decision logic
 │   │   ├── rango.ts        # Rango API client
