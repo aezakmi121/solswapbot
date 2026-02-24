@@ -4,14 +4,14 @@
  * Used by the aggregator router to:
  *   - Identify which chain a token belongs to
  *   - Map ticker symbols to mint/contract addresses
- *   - Provide chain metadata (name, icon, RPC)
+ *   - Provide chain metadata (name, icon, LI.FI chain key)
  */
 
 export interface ChainInfo {
     id: string;           // e.g. "solana", "ethereum", "bsc"
     name: string;         // e.g. "Solana", "Ethereum"
     shortName: string;    // e.g. "SOL", "ETH"
-    rangoId: string;      // Chain identifier in Rango API
+    lifiChainKey: string; // Chain key for LI.FI API (e.g. "SOL", "ETH", "BSC")
     nativeToken: string;  // Native token ticker
     icon: string;         // Emoji icon
 }
@@ -31,7 +31,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "solana",
         name: "Solana",
         shortName: "SOL",
-        rangoId: "SOLANA",
+        lifiChainKey: "SOL",
         nativeToken: "SOL",
         icon: "🟣",
     },
@@ -39,7 +39,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "ethereum",
         name: "Ethereum",
         shortName: "ETH",
-        rangoId: "ETH",
+        lifiChainKey: "ETH",
         nativeToken: "ETH",
         icon: "🔷",
     },
@@ -47,7 +47,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "bsc",
         name: "BNB Chain",
         shortName: "BNB",
-        rangoId: "BSC",
+        lifiChainKey: "BSC",
         nativeToken: "BNB",
         icon: "🟡",
     },
@@ -55,7 +55,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "polygon",
         name: "Polygon",
         shortName: "MATIC",
-        rangoId: "POLYGON",
+        lifiChainKey: "POL",
         nativeToken: "MATIC",
         icon: "🟣",
     },
@@ -63,7 +63,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "arbitrum",
         name: "Arbitrum",
         shortName: "ARB",
-        rangoId: "ARBITRUM",
+        lifiChainKey: "ARB",
         nativeToken: "ETH",
         icon: "🔵",
     },
@@ -71,7 +71,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "base",
         name: "Base",
         shortName: "BASE",
-        rangoId: "BASE",
+        lifiChainKey: "BAS",
         nativeToken: "ETH",
         icon: "🔵",
     },
@@ -89,18 +89,18 @@ export const CROSS_CHAIN_TOKENS: TokenInfo[] = [
     { symbol: "WIF", name: "dogwifhat", chainId: "solana", address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", decimals: 6, icon: "🎩" },
 
     // Ethereum tokens
-    { symbol: "ETH", name: "Ethereum", chainId: "ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, icon: "🔷" },
+    { symbol: "ETH", name: "Ethereum", chainId: "ethereum", address: "0x0000000000000000000000000000000000000000", decimals: 18, icon: "🔷" },
     { symbol: "USDC", name: "USD Coin", chainId: "ethereum", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, icon: "💵" },
     { symbol: "USDT", name: "Tether", chainId: "ethereum", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, icon: "💵" },
     { symbol: "WETH", name: "Wrapped ETH", chainId: "ethereum", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18, icon: "🔷" },
 
     // BNB Chain tokens
-    { symbol: "BNB", name: "BNB", chainId: "bsc", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, icon: "🟡" },
+    { symbol: "BNB", name: "BNB", chainId: "bsc", address: "0x0000000000000000000000000000000000000000", decimals: 18, icon: "🟡" },
     { symbol: "USDC", name: "USD Coin", chainId: "bsc", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, icon: "💵" },
     { symbol: "USDT", name: "Tether", chainId: "bsc", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, icon: "💵" },
 
     // Polygon tokens
-    { symbol: "MATIC", name: "Polygon", chainId: "polygon", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, icon: "🟣" },
+    { symbol: "MATIC", name: "Polygon", chainId: "polygon", address: "0x0000000000000000000000000000000000000000", decimals: 18, icon: "🟣" },
     { symbol: "USDC", name: "USD Coin", chainId: "polygon", address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6, icon: "💵" },
 ];
 

@@ -35,7 +35,7 @@ It also provides **token safety scanning**, **whale tracking**, and **AI market 
 ┌─────────────────────────────────────────┐
 │ External APIs                           │
 │  • Jupiter (Solana swaps + fees)        │
-│  • Rango (cross-chain routing)          │
+│  • LI.FI (cross-chain routing)          │
 │  • Helius (webhooks, RPC)               │
 │  • Privy (embedded wallets, MPC)        │
 │  • Gemini API (AI signals)              │
@@ -73,7 +73,7 @@ The app is read-heavy with light writes. At 1K users → ~4 MB/month. SQLite via
 | Mini App Frontend | Vite + React + TypeScript |
 | Wallet Infrastructure | Privy (MPC embedded wallets) |
 | Solana DEX | Jupiter API (swap + quote + price) |
-| Cross-Chain | Rango API (routing + bridging) |
+| Cross-Chain | LI.FI API (routing + bridging, no key required) |
 | Blockchain RPC | Helius (Solana) |
 | AI | Google Gemini API |
 | Validation | Zod schemas |
@@ -107,7 +107,7 @@ solswapbot/
 │   │   └── checks.ts       # Safety checks (mint auth, freeze, holders, age)
 │   ├── aggregator/
 │   │   ├── router.ts       # Smart router: Jupiter (same-chain) vs Rango (cross-chain)
-│   │   ├── rango.ts        # Rango API client with affiliate tag
+│   │   ├── lifi.ts         # LI.FI API client (no key required for basic use)
 │   │   └── chains.ts       # Chain + token registry (6 chains, 15 tokens)
 │   ├── tracker/            # [NEW] Whale wallet tracking
 │   │   ├── webhooks.ts     # Helius webhook handler
@@ -184,8 +184,8 @@ User swaps SOL → USDC via Mini App
         └→ On-chain, trustless — we just pass the param
 
 User swaps SOL → ETH (cross-chain)
-  └→ Rango API receives affiliateRef
-     └→ Fee share paid monthly by Rango
+  └→ LI.FI API routes through best bridge
+     └→ Integrator fee collected via LI.FI partner portal
 
 User subscribes to Whale Tracker
   └→ Telegram Stars payment → converts to revenue
@@ -211,8 +211,8 @@ PLATFORM_FEE_BPS=50         # 0.5% platform fee
 # Privy (embedded wallets)
 NEXT_PUBLIC_PRIVY_APP_ID=   # From Privy dashboard
 
-# Rango (cross-chain)
-RANGO_API_KEY=              # From Rango dashboard
+# LI.FI (Cross-Chain) — optional, works without key!
+# LIFI_API_KEY=             # From LI.FI partner portal (optional)
 
 # Helius (webhooks + RPC)
 HELIUS_API_KEY=             # From Helius dashboard

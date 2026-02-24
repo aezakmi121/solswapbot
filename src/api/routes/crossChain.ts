@@ -7,7 +7,7 @@ export const crossChainRouter = Router();
 /**
  * GET /api/cross-chain/quote
  *
- * Smart quote endpoint: automatically uses Jupiter (same-chain) or Rango (cross-chain).
+ * Smart quote endpoint: automatically uses Jupiter (same-chain) or LI.FI (cross-chain).
  *
  * Query params:
  *   inputToken   — symbol (SOL) or address

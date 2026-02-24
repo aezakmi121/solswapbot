@@ -31,8 +31,8 @@ const envSchema = z.object({
   // Privy (Embedded Wallets)
   PRIVY_APP_ID: z.string().optional(),
 
-  // Rango (Cross-Chain)
-  RANGO_API_KEY: z.string().optional(),
+  // LI.FI (Cross-Chain) — optional, works without key but key enables higher limits + fees
+  LIFI_API_KEY: z.string().optional(),
 
   // Helius (Webhooks + Enhanced RPC)
   HELIUS_API_KEY: z.string().optional(),

@@ -1,16 +1,15 @@
 import { getQuote } from "../jupiter/quote";
-import { buildSwapTransaction } from "../jupiter/swap";
-import { getRangoQuote, buildRangoSwap, RangoQuoteResult } from "./rango";
+import { getLiFiQuote } from "./lifi";
 import { isCrossChainSwap, findToken, getChain, CHAINS } from "./chains";
 import { config } from "../config";
 
 /**
- * Smart router: automatically picks Jupiter (same-chain) or Rango (cross-chain)
+ * Smart router: automatically picks Jupiter (same-chain) or LI.FI (cross-chain)
  * based on the input/output chain pair.
  *
  * Revenue:
  *   - Same-chain (Jupiter): platformFeeBps collected on-chain
- *   - Cross-chain (Rango): affiliate fee paid monthly by Rango
+ *   - Cross-chain (LI.FI): integrator fee via LI.FI partner portal
  */
 
 export interface RouteQuoteRequest {
@@ -23,7 +22,7 @@ export interface RouteQuoteRequest {
 }
 
 export interface RouteQuoteResult {
-    provider: "jupiter" | "rango";
+    provider: "jupiter" | "lifi";
     isCrossChain: boolean;
     inputChain: string;
     outputChain: string;
@@ -36,14 +35,14 @@ export interface RouteQuoteResult {
     estimatedTimeSeconds: number;
 
     // For building the actual swap transaction
-    rawQuote: any;            // Jupiter QuoteResponse or Rango requestId
-    rangoRequestId?: string;  // Only for cross-chain
+    rawQuote: any;            // Jupiter QuoteResponse or LI.FI quote
+    transactionRequest?: any; // LI.FI transaction data (ready to sign)
 
     error: string | null;
 }
 
 /**
- * Get the best route for a swap, automatically selecting Jupiter or Rango.
+ * Get the best route for a swap, automatically selecting Jupiter or LI.FI.
  */
 export async function getSmartQuote(req: RouteQuoteRequest): Promise<RouteQuoteResult> {
     const crossChain = isCrossChainSwap(req.inputChain, req.outputChain);
@@ -58,7 +57,6 @@ export async function getSmartQuote(req: RouteQuoteRequest): Promise<RouteQuoteR
 // ─── Same-Chain (Jupiter) ───────────────────────────────────────────
 async function getSameChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResult> {
     try {
-        // Resolve token addresses
         const inputTokenInfo = findToken(req.inputToken, req.inputChain);
         const outputTokenInfo = findToken(req.outputToken, req.outputChain);
 
@@ -85,9 +83,9 @@ async function getSameChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResu
             outputChain: req.outputChain,
             inputAmount: req.amount,
             outputAmount: quote.outAmount,
-            outputAmountUsd: "0", // Jupiter doesn't include USD — Mini App calculates
+            outputAmountUsd: "0",
             feeUsd: "0",
-            estimatedTimeSeconds: 15, // Solana is fast
+            estimatedTimeSeconds: 15,
             rawQuote: quote,
             error: null,
         };
@@ -109,7 +107,7 @@ async function getSameChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResu
     }
 }
 
-// ─── Cross-Chain (Rango) ────────────────────────────────────────────
+// ─── Cross-Chain (LI.FI) ───────────────────────────────────────────
 async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResult> {
     try {
         const inputTokenInfo = findToken(req.inputToken, req.inputChain);
@@ -117,7 +115,7 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
 
         if (!inputTokenInfo || !outputTokenInfo) {
             return {
-                provider: "rango",
+                provider: "lifi",
                 isCrossChain: true,
                 inputChain: req.inputChain,
                 outputChain: req.outputChain,
@@ -136,7 +134,7 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
 
         if (!inputChainInfo || !outputChainInfo) {
             return {
-                provider: "rango",
+                provider: "lifi",
                 isCrossChain: true,
                 inputChain: req.inputChain,
                 outputChain: req.outputChain,
@@ -150,24 +148,23 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
             };
         }
 
-        const rangoResult = await getRangoQuote({
-            from: {
-                blockchain: inputChainInfo.rangoId,
-                symbol: inputTokenInfo.symbol,
-                address: inputTokenInfo.address,
-            },
-            to: {
-                blockchain: outputChainInfo.rangoId,
-                symbol: outputTokenInfo.symbol,
-                address: outputTokenInfo.address,
-            },
-            amount: req.amount,
-            slippage: ((req.slippageBps ?? 50) / 100).toString(), // BPS to percent
+        // Convert human amount to smallest unit for LI.FI
+        const amountInSmallestUnit = Math.round(
+            parseFloat(req.amount) * Math.pow(10, inputTokenInfo.decimals)
+        ).toString();
+
+        const lifiResult = await getLiFiQuote({
+            fromChain: inputChainInfo.lifiChainKey,
+            toChain: outputChainInfo.lifiChainKey,
+            fromToken: inputTokenInfo.address,
+            toToken: outputTokenInfo.address,
+            fromAmount: amountInSmallestUnit,
+            slippage: (req.slippageBps ?? 50) / 10000, // BPS to decimal
         });
 
-        if (rangoResult.resultType !== "OK" || !rangoResult.route) {
+        if (lifiResult.error) {
             return {
-                provider: "rango",
+                provider: "lifi",
                 isCrossChain: true,
                 inputChain: req.inputChain,
                 outputChain: req.outputChain,
@@ -177,28 +174,28 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
                 feeUsd: "0",
                 estimatedTimeSeconds: 0,
                 rawQuote: null,
-                error: rangoResult.error ?? "No cross-chain route found",
+                error: lifiResult.error,
             };
         }
 
         return {
-            provider: "rango",
+            provider: "lifi",
             isCrossChain: true,
             inputChain: req.inputChain,
             outputChain: req.outputChain,
             inputAmount: req.amount,
-            outputAmount: rangoResult.route.outputAmount,
-            outputAmountUsd: rangoResult.route.outputAmountUsd,
-            feeUsd: rangoResult.route.feeUsd,
-            estimatedTimeSeconds: rangoResult.route.estimatedTimeInSeconds,
-            rawQuote: rangoResult,
-            rangoRequestId: rangoResult.requestId,
+            outputAmount: lifiResult.toAmount,
+            outputAmountUsd: lifiResult.toAmountUsd,
+            feeUsd: lifiResult.gasCostUsd,
+            estimatedTimeSeconds: lifiResult.estimatedTimeInSeconds,
+            rawQuote: lifiResult,
+            transactionRequest: lifiResult.transactionRequest,
             error: null,
         };
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return {
-            provider: "rango",
+            provider: "lifi",
             isCrossChain: true,
             inputChain: req.inputChain,
             outputChain: req.outputChain,
