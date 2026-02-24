@@ -61,9 +61,13 @@ export async function getLiFiQuote(req: LiFiQuoteRequest): Promise<LiFiQuoteResu
             fromToken: req.fromToken,
             toToken: req.toToken,
             fromAmount: req.fromAmount,
-            // LI.FI requires fromAddress — use dummy if not provided (quote amounts still accurate)
-            fromAddress: req.fromAddress ?? "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0",
-            toAddress: req.toAddress ?? "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0",
+            // LI.FI requires fromAddress — use chain-appropriate dummy for quote-only
+            fromAddress: req.fromAddress ?? (req.fromChain === "1151111081099710"
+                ? "GsbwXfJraMomNxBcjYLcG3mxkBUiyWXAB32fGbSMQRdW"  // dummy Solana address
+                : "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0"),  // dummy EVM address
+            toAddress: req.toAddress ?? (req.toChain === "1151111081099710"
+                ? "GsbwXfJraMomNxBcjYLcG3mxkBUiyWXAB32fGbSMQRdW"
+                : "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0"),
         });
 
         if (req.slippage !== undefined) params.set("slippage", req.slippage.toString());
