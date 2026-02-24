@@ -92,9 +92,8 @@ solswapbot/
 │   │       ├── quote.ts    # GET /api/quote
 │   │       ├── swap.ts     # POST /api/swap
 │   │       ├── price.ts    # GET /api/price/:mint
-│   │       ├── scan.ts     # GET /api/scan?mint=       [NEW]
-│   │       ├── tokens.ts   # GET /api/tokens
-│   │       ├── user.ts     # GET /api/user
+│   │       ├── scan.ts     # GET /api/scan?mint=
+│   │       ├── crossChain.ts # GET /api/cross-chain/quote|chains|tokens
 │   │       └── webhooks.ts # POST /api/webhooks/helius [NEW]
 │   ├── bot/
 │   │   ├── index.ts        # Bot setup — only /start + /help, all point to Mini App
@@ -106,10 +105,10 @@ solswapbot/
 │   ├── scanner/
 │   │   ├── analyze.ts      # Main analysis orchestrator (risk score 0-100)
 │   │   └── checks.ts       # Safety checks (mint auth, freeze, holders, age)
-│   ├── aggregator/         # [NEW] Cross-chain swap routing
-│   │   ├── router.ts       # Jupiter vs Rango decision logic
-│   │   ├── rango.ts        # Rango API client
-│   │   └── chains.ts       # Chain + token registry
+│   ├── aggregator/
+│   │   ├── router.ts       # Smart router: Jupiter (same-chain) vs Rango (cross-chain)
+│   │   ├── rango.ts        # Rango API client with affiliate tag
+│   │   └── chains.ts       # Chain + token registry (6 chains, 15 tokens)
 │   ├── tracker/            # [NEW] Whale wallet tracking
 │   │   ├── webhooks.ts     # Helius webhook handler
 │   │   └── alerts.ts       # Format + send TG alerts
