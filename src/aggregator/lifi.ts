@@ -61,10 +61,11 @@ export async function getLiFiQuote(req: LiFiQuoteRequest): Promise<LiFiQuoteResu
             fromToken: req.fromToken,
             toToken: req.toToken,
             fromAmount: req.fromAmount,
+            // LI.FI requires fromAddress — use dummy if not provided (quote amounts still accurate)
+            fromAddress: req.fromAddress ?? "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0",
+            toAddress: req.toAddress ?? "0x552008c0f6870c2f77e5cC1d2eb9bdff03e30Ea0",
         });
 
-        if (req.fromAddress) params.set("fromAddress", req.fromAddress);
-        if (req.toAddress) params.set("toAddress", req.toAddress);
         if (req.slippage !== undefined) params.set("slippage", req.slippage.toString());
 
         // Add integrator tag for revenue (if API key is set)
