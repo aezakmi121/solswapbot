@@ -2,6 +2,8 @@
 
 Base URL: `http://YOUR_VPS_IP:3001/api`
 
+---
+
 ## Health
 
 ### `GET /api/health`
@@ -14,17 +16,25 @@ Returns server status.
 ## Swap
 
 ### `GET /api/quote`
-Get a swap quote with platform fee.
+Get a swap quote with platform fee and USD breakdown.
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `inputMint` | string | Source token mint address |
-| `outputMint` | string | Destination token mint address |
-| `amount` | string | Amount in smallest unit (lamports, etc.) |
-| `slippageBps` | number | Optional. Default: 50 |
-| `crossChain` | boolean | Optional. If true, uses LI.FI for cross-chain routing |
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `inputMint` | string | Yes | Source token mint address |
+| `outputMint` | string | Yes | Destination token mint address |
+| `amount` | string | Yes | Amount in smallest unit (lamports, etc.) |
+| `slippageBps` | number | No | Default: 50 |
 
-**Response:** Jupiter QuoteResponse with platformFee included.
+**Response:**
+```json
+{
+  "quote": { "...Jupiter QuoteResponse with platformFee..." },
+  "inputUsd": 148.50,
+  "outputUsd": 147.76,
+  "feeUsd": 0.74,
+  "priceImpactPct": 0.01
+}
+```
 
 ### `POST /api/swap`
 Build an unsigned swap transaction.
@@ -41,11 +51,11 @@ Build an unsigned swap transaction.
 ## Token Scanner
 
 ### `GET /api/scan`
-Analyze a token for safety.
+Analyze a token for safety risks.
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `mint` | string | Token mint address |
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mint` | string | Yes | Solana token mint address |
 
 **Response:**
 ```json
@@ -56,9 +66,7 @@ Analyze a token for safety.
     "mintAuthority": { "safe": true, "detail": "Disabled" },
     "freezeAuthority": { "safe": true, "detail": "Disabled" },
     "topHolders": { "safe": true, "detail": "Top 10 hold 28%" },
-    "liquidity": { "safe": true, "detail": "$2.1M" },
-    "tokenAge": { "safe": true, "detail": "2+ years" },
-    "devWallet": { "safe": false, "detail": "Holds 3.2%" }
+    "tokenAge": { "safe": true, "detail": "2+ years" }
   },
   "tokenInfo": {
     "name": "BONK",
@@ -70,12 +78,14 @@ Analyze a token for safety.
 }
 ```
 
+Risk scoring: 0-20 = LOW, 21-50 = MEDIUM, 51+ = HIGH
+
 ---
 
 ## Price
 
 ### `GET /api/price/:mint`
-Get USD price for a token.
+Get USD price for a token via Jupiter Price API v3.
 
 **Response:** `{ "price": 148.50, "mint": "So11...112" }`
 
@@ -84,37 +94,87 @@ Get USD price for a token.
 ## Tokens
 
 ### `GET /api/tokens`
-List supported tokens with mint addresses and icons.
+List supported tokens with mint addresses, symbols, and decimals.
+
+**Response:**
+```json
+[
+  { "symbol": "SOL", "name": "Solana", "mint": "So11...", "decimals": 9, "icon": "..." },
+  { "symbol": "USDC", "name": "USD Coin", "mint": "EPjF...", "decimals": 6, "icon": "..." }
+]
+```
+
+---
+
+## Cross-Chain
+
+### `GET /api/cross-chain/quote`
+Get a cross-chain swap quote via smart router (Jupiter for same-chain, LI.FI for cross-chain).
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `fromChain` | string | Yes | Source chain (e.g., "solana", "ethereum") |
+| `toChain` | string | Yes | Destination chain |
+| `fromToken` | string | Yes | Source token symbol or address |
+| `toToken` | string | Yes | Destination token symbol or address |
+| `amount` | string | Yes | Human-readable amount (e.g., "1.5") |
+
+**Response:**
+```json
+{
+  "provider": "lifi",
+  "fromChain": "solana",
+  "toChain": "ethereum",
+  "inputAmount": "1.5",
+  "outputAmount": "0.0089",
+  "route": "SOL → USDC → bridge → ETH",
+  "estimatedTime": "5-10 min"
+}
+```
+
+### `GET /api/cross-chain/chains`
+List supported chains.
+
+**Response:**
+```json
+[
+  { "name": "Solana", "chainId": 1151111081099710 },
+  { "name": "Ethereum", "chainId": 1 },
+  { "name": "BNB Chain", "chainId": 56 },
+  { "name": "Polygon", "chainId": 137 },
+  { "name": "Arbitrum", "chainId": 42161 },
+  { "name": "Base", "chainId": 8453 }
+]
+```
+
+### `GET /api/cross-chain/tokens`
+List tokens available on a specific chain.
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `chain` | string | Yes | Chain name (e.g., "solana") |
 
 ---
 
 ## User
 
 ### `GET /api/user`
-Get user info by Telegram initData.
+Get or create user by Telegram initData.
 
 | Header | Description |
 |--------|-------------|
 | `x-telegram-init-data` | Telegram WebApp initData string |
 
----
-
-## History
-
-### `GET /api/history`
-Get user's last 10 swaps.
-
-| Header | Description |
-|--------|-------------|
-| `x-telegram-init-data` | Telegram WebApp initData string |
+**Response:** `{ "user": { "telegramId": "123", "walletAddress": "...", "referralCode": "..." }, "solBalance": 1.5 }`
 
 ---
 
-## Webhooks
+## NOT YET IMPLEMENTED
 
-### `POST /api/webhooks/helius`
-Receives Helius webhook events for tracked wallets.
+The following endpoints are planned but do not exist yet:
 
-| Header | Description |
-|--------|-------------|
-| `authorization` | Helius webhook secret |
+| Endpoint | Phase | Description |
+|----------|-------|-------------|
+| `GET /api/history` | Phase 1 | User's swap history (last 10) |
+| `POST /api/webhooks/helius` | Phase 3 | Helius webhook receiver for whale tracking |
+| `POST /api/subscribe` | Phase 3 | Telegram Stars subscription purchase |

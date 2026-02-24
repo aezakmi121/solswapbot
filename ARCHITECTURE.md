@@ -6,7 +6,7 @@
 User → Telegram Bot (/start) → Mini App (Vercel)
                                     │
                                     ▼
-                              Express API (VPS :3001)
+                              Express API (Hostinger VPS :3001)
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
@@ -18,56 +18,65 @@ User → Telegram Bot (/start) → Mini App (Vercel)
 
 ### 1. Telegram Bot (Grammy)
 - **Purpose**: Launcher only + push notifications
-- **Commands**: `/start` (shows "Open SolSwap" button)
-- **Notifications**: Whale alerts, swap confirmations, daily signals
+- **Commands**: `/start` (shows "Open SolSwap" button), `/help` (redirects to Mini App)
+- **Catch-all**: Any text message → "Use the Mini App" redirect
+- **Rate limiting**: Per-user per-command (swap: 3/10s, price: 10/60s, start: 1/30s)
 - **Location**: `src/bot/`
 
 ### 2. Mini App (Vite + React)
 - **Purpose**: ALL user interaction happens here
-- **Tabs**: Swap | Scan | Track | Signals
-- **Wallet**: Privy embedded wallet (auto-created on first open)
+- **Current state**: Single swap page with Phantom deep-link
+- **Target state**: Tabbed UI — Swap | Scan | Track | Signals
+- **Wallet**: Privy embedded wallet (NOT YET INTEGRATED — Phase 1)
 - **Deployed**: Vercel (`webapp/`)
 - **Location**: `webapp/src/`
 
 ### 3. Express API Server
 - **Purpose**: Backend for Mini App + bot
-- **Port**: 3001 (configurable)
-- **Routes**: See `API.md`
+- **Port**: 3001 (configurable via `API_PORT`)
+- **CORS**: Configurable via `CORS_ORIGIN`
+- **Error handling**: Global error handler with status codes
 - **Location**: `src/api/`
 
 ### 4. SQLite Database (Prisma)
-- **Purpose**: Users, swaps, scans, subscriptions
-- **File**: `prisma/dev.db`
+- **Purpose**: Users, swaps, scans, watched wallets, subscriptions
+- **File**: `prisma/dev.db` (gitignored)
 - **Schema**: `prisma/schema.prisma`
+- **Why SQLite**: Single-instance PM2, read-heavy workload, <1K users initially
 
-## Swap Flow (Non-Custodial)
+## Swap Flow
 
-### Same-Chain (SOL → USDC)
+### Same-Chain (SOL → USDC) — IMPLEMENTED
 ```
-Mini App → API /api/quote → Jupiter API
-Mini App ← quote with platformFee
-User confirms → API /api/swap → Jupiter builds TX
-Mini App ← unsigned TX
-Privy signs TX inside Mini App → broadcasts to Solana
-API polls for confirmation → updates DB
-```
-
-### Cross-Chain (SOL → ETH)
-```
-Mini App → API /api/cross-chain/quote → LI.FI API
-Mini App ← route (SOL→USDC→bridge→ETH) with affiliate fee
-User confirms → LI.FI builds TX
-Privy signs Solana TX → bridge handles cross-chain delivery
-ETH arrives in user's Privy EVM wallet
+1. Mini App → GET /api/quote (inputMint, outputMint, amount)
+2. API → Jupiter quote API (with platformFeeBps=50)
+3. API → Jupiter price API (for USD values)
+4. API ← returns quote + inputUsd + outputUsd + feeUsd
+5. User confirms → POST /api/swap (quoteResponse, userPublicKey)
+6. API → Jupiter swap API (with feeAccount)
+7. API ← returns unsigned base64 transaction
+8. Mini App sends TX to wallet for signing
+   └── Currently: Phantom deep-link (placeholder)
+   └── Target: Privy in-app signing (Phase 1)
+9. TX broadcast to Solana → polled for confirmation
 ```
 
-## Wallet Architecture (Privy MPC)
+### Cross-Chain (SOL → ETH) — IMPLEMENTED (quote only)
+```
+1. Mini App → GET /api/cross-chain/quote
+2. API → Smart Router checks if same-chain or cross-chain
+3. If cross-chain → LI.FI API for route + quote
+4. API ← returns route, amounts, estimated time
+5. TX building + signing → NOT YET (needs Privy + LI.FI TX builder)
+```
+
+## Wallet Architecture (Privy MPC) — NOT YET INTEGRATED
 
 ```
-User authenticates via Telegram
+User opens Mini App
         │
         ▼
-Privy creates wallet keypair
+Privy creates wallet keypair (automatic)
         │
         ▼
 Key is split via MPC (Multi-Party Computation)
@@ -82,6 +91,7 @@ Key is split via MPC (Multi-Party Computation)
 - Both shards required to reconstruct signing key
 - Signing happens client-side in the Mini App
 - Developer (us) never sees the full private key
+- User gets both Solana AND EVM wallet from one login
 
 ## Deployment
 
@@ -92,6 +102,8 @@ npm install && npm run build
 npx prisma db push
 pm2 restart ecosystem.config.js
 ```
+
+PM2 config: single instance, 256M max memory, exponential backoff on crashes, logs to `./logs/`.
 
 ### Frontend (Vercel)
 1. Import repo on Vercel

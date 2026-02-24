@@ -4,18 +4,20 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 
 ## Features
 
-- **🔄 Cross-Chain Swaps** — Swap SOL ↔ ETH, USDC ↔ BNB, and more via Jupiter + LI.FI
-- **🔍 Token Scanner** — Paste any contract address, get an instant safety score and rug-pull analysis
-- **🐋 Whale Tracker** — Follow smart money wallets and get instant trade alerts
-- **🤖 AI Signals** — Daily market analysis and trade signals powered by AI
-- **💰 Zero Custody** — We never hold your keys. Privy MPC wallets sign inside the Mini App
+| Feature | Status |
+|---------|--------|
+| Cross-Chain Swaps — SOL, ETH, BNB, MATIC, ARB, BASE via Jupiter + LI.FI | Backend done, UI in progress |
+| Token Scanner — Paste any contract, get instant safety score | Backend done, UI in progress |
+| Whale Tracker — Follow smart money wallets, get alerts | Schema done, not built |
+| AI Signals — Daily market analysis powered by Gemini | Planned |
+| Zero Custody — Privy MPC wallets sign inside the Mini App | Integration pending |
 
 ## How It Works
 
 1. User opens the bot in Telegram → taps **"Open SolSwap"**
 2. Mini App creates an embedded wallet via Privy (automatic, one tap)
 3. User deposits SOL/ETH and starts trading — everything happens in-app
-4. Revenue earned via platform fees (0.5% per swap) + subscriptions + affiliate links
+4. Revenue earned via platform fees (0.5% per swap, on-chain via Jupiter)
 
 ## Tech Stack
 
@@ -27,42 +29,32 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 | Frontend | Vite + React |
 | Wallets | Privy (MPC, non-custodial) |
 | Solana DEX | Jupiter API |
-| Cross-Chain | LI.FI API (no key required) |
+| Cross-Chain | LI.FI API |
 | AI | Google Gemini |
 
 ## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Set up environment
-cp .env.example .env
-# Fill in your API keys
-
-# Generate Prisma client
-npx prisma generate
-npx prisma db push
-
-# Run in dev mode
+cp .env.example .env  # Fill in your API keys
+npx prisma generate && npx prisma db push
 npm run dev
 ```
 
 ## Deployment
 
-- **Backend (bot + API)**: VPS via PM2 (`ecosystem.config.js`)
+- **Backend (bot + API)**: Hostinger VPS via PM2 (`ecosystem.config.js`)
 - **Frontend (Mini App)**: Vercel (root: `webapp/`)
-
-See `ARCHITECTURE.md` for full deployment guide.
 
 ## Documentation
 
 | File | Purpose |
 |------|---------|
-| `CONTEXT.md` | Full project context for AI assistants |
-| `ARCHITECTURE.md` | Technical architecture and deployment |
+| `CLAUDE.md` | Master context — project status, phases, all details |
+| `ARCHITECTURE.md` | System design and deployment guide |
 | `API.md` | API endpoint reference |
-| `SECURITY.md` | Security model (Privy MPC) |
+| `SECURITY.md` | Security model (Privy MPC, fee collection) |
+| `TESTING.md` | Testing guide and production checklist |
 
 ## License
 
