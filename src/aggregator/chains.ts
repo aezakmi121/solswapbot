@@ -4,14 +4,22 @@
  * Used by the aggregator router to:
  *   - Identify which chain a token belongs to
  *   - Map ticker symbols to mint/contract addresses
- *   - Provide chain metadata (name, icon, LI.FI chain key)
+ *   - Provide chain metadata (name, icon, LI.FI chain ID)
+ *
+ * LI.FI uses NUMERIC chain IDs:
+ *   Solana = 1151111081099710
+ *   Ethereum = 1
+ *   BSC = 56
+ *   Polygon = 137
+ *   Arbitrum = 42161
+ *   Base = 8453
  */
 
 export interface ChainInfo {
-    id: string;           // e.g. "solana", "ethereum", "bsc"
+    id: string;           // Our internal ID: "solana", "ethereum", "bsc"
     name: string;         // e.g. "Solana", "Ethereum"
     shortName: string;    // e.g. "SOL", "ETH"
-    lifiChainKey: string; // Chain key for LI.FI API (e.g. "SOL", "ETH", "BSC")
+    lifiChainId: string;  // Numeric chain ID for LI.FI API
     nativeToken: string;  // Native token ticker
     icon: string;         // Emoji icon
 }
@@ -31,7 +39,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "solana",
         name: "Solana",
         shortName: "SOL",
-        lifiChainKey: "SOL",
+        lifiChainId: "1151111081099710",
         nativeToken: "SOL",
         icon: "🟣",
     },
@@ -39,7 +47,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "ethereum",
         name: "Ethereum",
         shortName: "ETH",
-        lifiChainKey: "ETH",
+        lifiChainId: "1",
         nativeToken: "ETH",
         icon: "🔷",
     },
@@ -47,7 +55,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "bsc",
         name: "BNB Chain",
         shortName: "BNB",
-        lifiChainKey: "BSC",
+        lifiChainId: "56",
         nativeToken: "BNB",
         icon: "🟡",
     },
@@ -55,7 +63,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "polygon",
         name: "Polygon",
         shortName: "MATIC",
-        lifiChainKey: "POL",
+        lifiChainId: "137",
         nativeToken: "MATIC",
         icon: "🟣",
     },
@@ -63,7 +71,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "arbitrum",
         name: "Arbitrum",
         shortName: "ARB",
-        lifiChainKey: "ARB",
+        lifiChainId: "42161",
         nativeToken: "ETH",
         icon: "🔵",
     },
@@ -71,7 +79,7 @@ export const CHAINS: Record<string, ChainInfo> = {
         id: "base",
         name: "Base",
         shortName: "BASE",
-        lifiChainKey: "BAS",
+        lifiChainId: "8453",
         nativeToken: "ETH",
         icon: "🔵",
     },
@@ -79,16 +87,18 @@ export const CHAINS: Record<string, ChainInfo> = {
 
 // ─── Token Registry ───────────────────────────────────────────────────
 // Common tokens across chains. Used for ticker-to-address lookups.
+// LI.FI native token address = 0x0000000000000000000000000000000000000000
+// Solana native (SOL) address = 11111111111111111111111111111111 (system program)
 export const CROSS_CHAIN_TOKENS: TokenInfo[] = [
     // Solana tokens
-    { symbol: "SOL", name: "Solana", chainId: "solana", address: "So11111111111111111111111111111111111111112", decimals: 9, icon: "🟣" },
+    { symbol: "SOL", name: "Solana", chainId: "solana", address: "11111111111111111111111111111111", decimals: 9, icon: "🟣" },
     { symbol: "USDC", name: "USD Coin", chainId: "solana", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, icon: "💵" },
     { symbol: "USDT", name: "Tether", chainId: "solana", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6, icon: "💵" },
     { symbol: "BONK", name: "Bonk", chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5, icon: "🐕" },
     { symbol: "JUP", name: "Jupiter", chainId: "solana", address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6, icon: "🪐" },
     { symbol: "WIF", name: "dogwifhat", chainId: "solana", address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", decimals: 6, icon: "🎩" },
 
-    // Ethereum tokens
+    // Ethereum tokens (0x0000...0000 = native ETH for LI.FI)
     { symbol: "ETH", name: "Ethereum", chainId: "ethereum", address: "0x0000000000000000000000000000000000000000", decimals: 18, icon: "🔷" },
     { symbol: "USDC", name: "USD Coin", chainId: "ethereum", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, icon: "💵" },
     { symbol: "USDT", name: "Tether", chainId: "ethereum", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, icon: "💵" },

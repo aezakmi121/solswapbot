@@ -154,8 +154,8 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
         ).toString();
 
         const lifiResult = await getLiFiQuote({
-            fromChain: inputChainInfo.lifiChainKey,
-            toChain: outputChainInfo.lifiChainKey,
+            fromChain: inputChainInfo.lifiChainId,
+            toChain: outputChainInfo.lifiChainId,
             fromToken: inputTokenInfo.address,
             toToken: outputTokenInfo.address,
             fromAmount: amountInSmallestUnit,
