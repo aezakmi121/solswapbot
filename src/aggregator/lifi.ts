@@ -83,8 +83,16 @@ export async function getLiFiQuote(req: LiFiQuoteRequest): Promise<LiFiQuoteResu
         const response = await fetch(`${LIFI_BASE_URL}/quote?${params}`, { headers });
 
         if (!response.ok) {
-            const text = await response.text();
-            console.error("LI.FI quote error:", response.status, text);
+            const errorBody = await response.text();
+            console.error("LI.FI quote error:", response.status, errorBody);
+
+            // Parse error message if possible
+            let errorMessage = `LI.FI API error: ${response.status}`;
+            try {
+                const parsed = JSON.parse(errorBody);
+                errorMessage = parsed.message || parsed.error || errorMessage;
+            } catch { }
+
             return {
                 id: "",
                 type: "",
@@ -96,9 +104,9 @@ export async function getLiFiQuote(req: LiFiQuoteRequest): Promise<LiFiQuoteResu
                 gasCostUsd: "0",
                 estimatedTimeInSeconds: 0,
                 steps: [],
-                error: `LI.FI API error: ${response.status}`,
+                error: errorMessage,
             };
-        }
+        };
 
         const data = await response.json() as any;
 
