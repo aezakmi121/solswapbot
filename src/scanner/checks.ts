@@ -159,22 +159,32 @@ export async function getTokenSupplyInfo(mintAddress: string): Promise<{
 export async function checkTokenAge(mintAddress: string): Promise<CheckResult> {
     try {
         const mint = new PublicKey(mintAddress);
-        // Get the oldest signatures (limit=1, order "asc" equivalent — get the earliest)
-        const signatures = await connection.getSignaturesForAddress(mint, { limit: 1 });
 
-        if (signatures.length === 0) {
-            return { name: "Token Age", safe: false, detail: "No transaction history", weight: 10 };
+        // Walk backwards through signature history to find the oldest
+        let oldestBlockTime: number | null = null;
+        let before: string | undefined = undefined;
+
+        for (let page = 0; page < 5; page++) {
+            const signatures = await connection.getSignaturesForAddress(mint, {
+                limit: 1000,
+                before,
+            });
+
+            if (signatures.length === 0) break;
+
+            const lastSig = signatures[signatures.length - 1];
+            oldestBlockTime = lastSig.blockTime ?? null;
+            before = lastSig.signature;
+
+            if (signatures.length < 1000) break;
         }
 
-        const oldestSig = signatures[signatures.length - 1];
-        const blockTime = oldestSig.blockTime;
-
-        if (!blockTime) {
+        if (!oldestBlockTime) {
             return { name: "Token Age", safe: false, detail: "Unknown age", weight: 10 };
         }
 
         const now = Math.floor(Date.now() / 1000);
-        const ageSeconds = now - blockTime;
+        const ageSeconds = now - oldestBlockTime;
         const ageHours = ageSeconds / 3600;
         const ageDays = ageHours / 24;
 
