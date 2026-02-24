@@ -1,9 +1,13 @@
 import { CommandContext, Context } from "grammy";
 import { findUserByTelegramId, findUserByReferralCode, createUser } from "../../db/queries/users";
 import { sanitizeInput } from "../../utils/validation";
+import { config } from "../../config";
 
 /**
- * /start [ref_CODE] — Onboard user, create DB record, handle referral linking.
+ * /start [ref_CODE] — Onboard user and launch the Mini App.
+ *
+ * DESIGN: This is the ONLY user-facing command.
+ * It creates the user record, handles referrals, and shows the Mini App button.
  */
 export async function startCommand(ctx: CommandContext<Context>): Promise<void> {
   if (!ctx.from) return;
@@ -13,13 +17,20 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
   // Check if user already exists
   const existingUser = await findUserByTelegramId(telegramId);
   if (existingUser) {
-    const walletStatus = existingUser.walletAddress
-      ? `✅ Wallet connected: \`${existingUser.walletAddress}\``
-      : "⚠️ No wallet connected yet.\n\nTo start trading, link your Phantom wallet:\n`/connect <YOUR_WALLET_ADDRESS>`";
-
     await ctx.reply(
-      `👋 Welcome back!\n\n${walletStatus}\n\nType /help to see what I can do.`,
-      { parse_mode: "Markdown" }
+      `👋 Welcome back to *SolSwap*!\n\n` +
+      `Tap below to open the trading app:`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: "🚀 Open SolSwap",
+              web_app: { url: config.MINIAPP_URL ?? "https://solswap.vercel.app" }
+            }
+          ]]
+        }
+      }
     );
     return;
   }
@@ -50,17 +61,23 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
     : "";
 
   await ctx.reply(
-    `🔄 *Welcome to SolSwap Bot!*\n\n` +
-    `Swap any Solana token instantly — right here in Telegram.\n` +
-    `Your funds stay in YOUR wallet. We never hold your keys.${referralNote}\n\n` +
-    `*Get started in 2 steps:*\n\n` +
-    `1️⃣ Connect your Phantom wallet:\n` +
-    `/connect <YOUR_WALLET_ADDRESS>\n\n` +
-    `2️⃣ Start trading:\n` +
-    `/swap 1 SOL USDC\n\n` +
-    `💎 Your referral code: \`${user.referralCode}\`\n` +
-    `Share it to earn 25% of fees from anyone you refer!\n\n` +
-    `Type /help for all commands.`,
-    { parse_mode: "Markdown" }
+    `⚡ *Welcome to SolSwap!*\n\n` +
+    `Swap tokens across Solana, Ethereum, and more — right here in Telegram.\n\n` +
+    `✅ No external wallets needed\n` +
+    `✅ Your keys stay safe (MPC encryption)\n` +
+    `✅ Cross-chain swaps in seconds\n` +
+    `✅ Token safety scanner built-in${referralNote}\n\n` +
+    `Tap below to get started:`,
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: "🚀 Open SolSwap",
+            web_app: { url: config.MINIAPP_URL ?? "https://solswap.vercel.app" }
+          }
+        ]]
+      }
+    }
   );
 }

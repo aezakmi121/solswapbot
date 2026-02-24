@@ -1,70 +1,69 @@
-# SolSwap Bot
+# SolSwap — Telegram Trading Suite
 
-**Non-custodial Solana trading bot for Telegram** — swap tokens instantly via Jupiter, with the lowest fees in the market (0.5%).
+A non-custodial, cross-chain token trading app built as a **Telegram Mini App**. Swap tokens across Solana, Ethereum, and more — without ever leaving Telegram.
 
-## What It Does
+## Features
 
-Users swap Solana tokens directly inside Telegram through an embedded **Mini App**. Connect your Phantom wallet, pick tokens, see a live quote with full fee breakdown, and sign the transaction — all without leaving Telegram.
+- **🔄 Cross-Chain Swaps** — Swap SOL ↔ ETH, USDC ↔ BNB, and more via Jupiter + Rango
+- **🔍 Token Scanner** — Paste any contract address, get an instant safety score and rug-pull analysis
+- **🐋 Whale Tracker** — Follow smart money wallets and get instant trade alerts
+- **🤖 AI Signals** — Daily market analysis and trade signals powered by AI
+- **💰 Zero Custody** — We never hold your keys. Privy MPC wallets sign inside the Mini App
 
-Your funds stay in YOUR wallet. We never hold your keys.
+## How It Works
 
-## Revenue Model
+1. User opens the bot in Telegram → taps **"Open SolSwap"**
+2. Mini App creates an embedded wallet via Privy (automatic, one tap)
+3. User deposits SOL/ETH and starts trading — everything happens in-app
+4. Revenue earned via platform fees (0.5% per swap) + subscriptions + affiliate links
 
-| You Earn | Jupiter Keeps | User Pays |
-|----------|-------------|-----------|
-| ~0.4875% | 2.5% of our fee | 0.5% per swap |
+## Tech Stack
 
-At $100K monthly volume → ~$490/month passive income, scaling with usage.
-
-## Architecture
-
-```
-Telegram Chat
-  ├── /start, /help, /price, /referral, /history (text commands)
-  └── /trade → Opens Mini App (embedded web UI)
-        ├── React + Vite (Vercel, free hosting)
-        ├── Solana Wallet Adapter (Phantom, Solflare)
-        └── Calls Express API → Jupiter → Solana
-```
+| Layer | Tech |
+|-------|------|
+| Bot | Grammy (TypeScript) |
+| API | Express.js |
+| DB | SQLite + Prisma |
+| Frontend | Vite + React |
+| Wallets | Privy (MPC, non-custodial) |
+| Solana DEX | Jupiter API |
+| Cross-Chain | Rango API |
+| AI | Google Gemini |
 
 ## Quick Start
 
 ```bash
-# Backend (bot + API)
+# Install dependencies
 npm install
-cp .env.example .env      # Fill in your tokens
-npx prisma migrate dev
-npm run dev
 
-# Frontend (Mini App)
-cd webapp
-npm install
+# Set up environment
+cp .env.example .env
+# Fill in your API keys
+
+# Generate Prisma client
+npx prisma generate
+npx prisma db push
+
+# Run in dev mode
 npm run dev
 ```
 
 ## Deployment
 
-- **Backend**: Hostinger VPS ($5/mo) via PM2
-- **Frontend**: Vercel (free) — connect GitHub repo, set root to `webapp/`
-- **Configure BotFather**: Set Mini App URL via `/mybots → Bot Settings → Menu Button`
+- **Backend (bot + API)**: VPS via PM2 (`ecosystem.config.js`)
+- **Frontend (Mini App)**: Vercel (root: `webapp/`)
 
-## Tech Stack
+See `ARCHITECTURE.md` for full deployment guide.
 
-| Layer | Technology |
-|-------|-----------|
-| Bot | Grammy (Telegram) |
-| Mini App | Vite + React + TypeScript |
-| API | Express.js |
-| Blockchain | Solana Web3.js + Jupiter API |
-| Wallet | Solana Wallet Adapter (Phantom) |
-| Database | SQLite (Prisma ORM) |
-| Hosting | VPS + Vercel |
+## Documentation
 
-## Docs
+| File | Purpose |
+|------|---------|
+| `CONTEXT.md` | Full project context for AI assistants |
+| `ARCHITECTURE.md` | Technical architecture and deployment |
+| `API.md` | API endpoint reference |
+| `SECURITY.md` | Security model (Privy MPC) |
 
-- `CLAUDE.md` — Full project context
-- `ARCHITECTURE.md` — System design
-- `SECURITY.md` — Threat model
-- `API.md` — Jupiter + REST API reference
-- `TESTING.md` — Testing guide
-- `DEPLOY.md` — Production deployment
+## License
+
+MIT

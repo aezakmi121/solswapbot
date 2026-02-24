@@ -1,58 +1,51 @@
-# SECURITY.md — Threat Model
+# Security Model
 
-## Core Guarantee
+## Non-Custodial Architecture
 
-**We never hold user funds.** Non-custodial architecture eliminates the most catastrophic attack vector (key theft).
+SolSwap **never holds user private keys**. All wallet operations are handled by Privy's MPC (Multi-Party Computation) infrastructure.
 
-## Immune By Design
+### How Privy MPC Works
 
-| Threat | Why Safe |
-|--------|----------|
-| Private key theft | We never generate or store keys |
-| Database breach → fund drain | DB has only public addresses |
-| Server compromise | No signing authority over user funds |
+1. When a user first opens the Mini App, Privy generates a wallet keypair
+2. The private key is **split into shards** using MPC
+3. One shard is held by Privy's secure infrastructure
+4. The other shard is held client-side (in the user's browser/device)
+5. **Neither party can sign transactions alone** — both shards are required
+6. Signing reconstructs the key temporarily in a secure enclave, signs, then discards
 
-## Active Threats
+### What This Means For Us
 
-### 1. Bot Token Theft (HIGH)
-Store in `.env` only. Rotate via @BotFather if exposed.
+| Concern | Status |
+|---------|--------|
+| Do we hold private keys? | **No** |
+| Can we move user funds? | **No** |
+| Can our DB leak compromise wallets? | **No** — keys aren't in our DB |
+| Is there a single point of failure? | **No** — MPC eliminates this |
+| Can a user lose access? | Only if they lose their Telegram account AND Privy's infra goes down simultaneously |
 
-### 2. API Server Abuse (HIGH)
-- CORS restricted to Mini App origin in production
-- Rate limiting on all endpoints
-- Input validation via Zod
+## Revenue Fee Collection
 
-### 3. TWA initData Spoofing (MEDIUM)
-- Validate Telegram `initData` on API requests
-- Set `CORS_ORIGIN` to your Vercel URL in production
+Platform fees are collected **on-chain, trustlessly** via Jupiter's referral program:
 
-### 4. Malicious Transaction (MEDIUM)
-- Display full quote breakdown before signing
-- Conservative slippage (0.5%)
-- Confirmation step before building transaction
+1. We pass `platformFeeBps=50` in the Jupiter quote API call
+2. Jupiter's on-chain program automatically deducts 0.5% and sends it to `FEE_WALLET_ADDRESS`
+3. We never touch user funds — the DEX protocol handles fee splitting
 
-### 5. Fake Bot Impersonation (MEDIUM)
-- Register bot username early
-- Warn users in `/start` that bot never DMs first
+## API Security
 
-### 6. RPC Manipulation (LOW)
-- Use dedicated RPC (Helius/QuickNode)
-- Validate responses, retry with backoff
+- **CORS**: Restricted to Mini App origin in production
+- **Rate Limiting**: Grammy middleware limits bot command frequency
+- **Input Validation**: All user input sanitized via `utils/validation.ts`
+- **Env Validation**: All environment variables validated at startup via Zod schemas
+- **Telegram initData**: Mini App verifies Telegram WebApp initData to authenticate users
 
-## Security Rules
+## Data Storage
 
-1. Never store private keys
-2. Never commit `.env`
-3. Always validate inputs (Zod)
-4. Rate limit all commands
-5. CORS lock in production
-6. SSH key auth only on VPS
-7. `npm audit` before deploy
+- **Database**: SQLite file on VPS — contains user IDs, swap history, scan results
+- **No sensitive data**: No private keys, no wallet seeds, no passwords
+- **Minimal PII**: Only Telegram user ID and optional username stored
 
-## Incident Response
+## Webhook Security
 
-1. `pm2 stop solswap-bot` — kill bot
-2. Revoke bot token via @BotFather if compromised
-3. Check logs, assess scope
-4. Communicate transparently in announcement channel
-5. Patch, review, redeploy
+- Helius webhooks verified via `HELIUS_WEBHOOK_SECRET` header
+- Only processes events for wallets in our WatchedWallet table

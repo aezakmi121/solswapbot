@@ -7,20 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Core ───────────────────────────────────────────────
 model User {
-  id               String   @id @default(cuid())
-  telegramId       String   @unique
+  id               String         @id @default(cuid())
+  telegramId       String         @unique
   telegramUsername  String?
-  walletAddress    String?
-  referralCode     String   @unique @default(cuid())
+  walletAddress    String?        // Privy-managed embedded wallet address
+  referralCode     String         @unique @default(cuid())
   referredById     String?
-  referredBy       User?    @relation("Referrals", fields: [referredById], references: [id])
-  referrals        User[]   @relation("Referrals")
+  referredBy       User?          @relation("Referrals", fields: [referredById], references: [id])
+  referrals        User[]         @relation("Referrals")
   swaps            Swap[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  scans            TokenScan[]
+  watchedWallets   WatchedWallet[]
+  subscription     Subscription?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 }
 
+// ─── Swaps ──────────────────────────────────────────────
 model Swap {
   id            String     @id @default(cuid())
   userId        String
@@ -29,6 +34,8 @@ model Swap {
   outputMint    String
   inputAmount   BigInt
   outputAmount  BigInt
+  inputChain    String     @default("solana")  // "solana", "ethereum", "bsc", etc.
+  outputChain   String     @default("solana")
   feeAmountUsd  Float?
   txSignature   String?
   status        SwapStatus @default(PENDING)
@@ -43,4 +50,54 @@ enum SwapStatus {
   SUBMITTED
   CONFIRMED
   FAILED
+}
+
+// ─── Token Scanner ──────────────────────────────────────
+model TokenScan {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  mintAddress  String
+  tokenName    String?
+  tokenSymbol  String?
+  riskScore    Int      // 0-100 (0 = safe, 100 = rug)
+  riskLevel    String   // "LOW", "MEDIUM", "HIGH"
+  flags        String   // JSON array of risk flags
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([mintAddress])
+}
+
+// ─── Whale Tracker ──────────────────────────────────────
+model WatchedWallet {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  walletAddress String
+  label         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, walletAddress])
+}
+
+// ─── Subscriptions ──────────────────────────────────────
+model Subscription {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id])
+  tier      SubTier   @default(FREE)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tier])
+}
+
+enum SubTier {
+  FREE
+  SCANNER_PRO
+  WHALE_TRACKER
+  SIGNALS
+  ALL_ACCESS
 }

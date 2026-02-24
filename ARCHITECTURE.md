@@ -1,69 +1,104 @@
-# ARCHITECTURE.md — System Design
+# Architecture
 
-## Overview
-
-SolSwap Bot is a **non-custodial** Telegram trading bot. Users swap tokens via an embedded **Telegram Mini App** (TWA) that connects to their own wallet. We construct transactions with our 0.5% fee baked in via Jupiter.
-
-## System Diagram
+## System Overview
 
 ```
-┌───────────────────────────────────────────────────┐
-│                   TELEGRAM                         │
-│                                                    │
-│  Bot Commands: /start /help /price /referral       │
-│                                                    │
-│  /trade → Opens Mini App ─────────────────┐       │
-│  ┌────────────────────────────────────────┐│       │
-│  │  MINI APP (Vite + React)              ││       │
-│  │  Hosted on Vercel (free)              ││       │
-│  │                                        ││       │
-│  │  • Wallet connect (Phantom/Solflare)  ││       │
-│  │  • Token selector + amount input      ││       │
-│  │  • Live quote + fee breakdown         ││       │
-│  │  • Sign & send transaction            ││       │
-│  └────────────────┬───────────────────────┘│       │
-└────────────────────┼──────────────────────────────┘
-                     │ API calls (HTTPS)
-                     ▼
-┌────────────────────────────────────┐
-│  EXPRESS API (VPS, port 3001)      │
-│  Runs alongside Grammy bot         │
-│                                    │
-│  GET  /api/quote    → Jupiter      │
-│  POST /api/swap     → Jupiter      │
-│  GET  /api/price    → Jupiter      │
-│  GET  /api/tokens   → Static list  │
-└──────────┬─────────────────────────┘
-           │
-    ┌──────┴──────┐
-    │ Jupiter API │ → Solana Mainnet
-    │ (v1 free)   │   (via Helius RPC)
-    └─────────────┘
+User → Telegram Bot (/start) → Mini App (Vercel)
+                                    │
+                                    ▼
+                              Express API (VPS :3001)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+              Jupiter API     Rango API       Helius RPC
+              (Solana swaps)  (cross-chain)   (webhooks)
 ```
 
-## Data Flow: Swap
+## Components
+
+### 1. Telegram Bot (Grammy)
+- **Purpose**: Launcher only + push notifications
+- **Commands**: `/start` (shows "Open SolSwap" button)
+- **Notifications**: Whale alerts, swap confirmations, daily signals
+- **Location**: `src/bot/`
+
+### 2. Mini App (Vite + React)
+- **Purpose**: ALL user interaction happens here
+- **Tabs**: Swap | Scan | Track | Signals
+- **Wallet**: Privy embedded wallet (auto-created on first open)
+- **Deployed**: Vercel (`webapp/`)
+- **Location**: `webapp/src/`
+
+### 3. Express API Server
+- **Purpose**: Backend for Mini App + bot
+- **Port**: 3001 (configurable)
+- **Routes**: See `API.md`
+- **Location**: `src/api/`
+
+### 4. SQLite Database (Prisma)
+- **Purpose**: Users, swaps, scans, subscriptions
+- **File**: `prisma/dev.db`
+- **Schema**: `prisma/schema.prisma`
+
+## Swap Flow (Non-Custodial)
+
+### Same-Chain (SOL → USDC)
+```
+Mini App → API /api/quote → Jupiter API
+Mini App ← quote with platformFee
+User confirms → API /api/swap → Jupiter builds TX
+Mini App ← unsigned TX
+Privy signs TX inside Mini App → broadcasts to Solana
+API polls for confirmation → updates DB
+```
+
+### Cross-Chain (SOL → ETH)
+```
+Mini App → API /api/quote?crossChain=true → Rango API
+Mini App ← route (SOL→USDC→bridge→ETH) with affiliate fee
+User confirms → Rango builds TX
+Privy signs Solana TX → bridge handles cross-chain delivery
+ETH arrives in user's Privy EVM wallet
+```
+
+## Wallet Architecture (Privy MPC)
 
 ```
-User taps /trade
-  → Mini App opens in Telegram
-  → User connects wallet (Phantom adapter)
-  → User selects: 1 SOL → USDC
-  → Frontend calls GET /api/quote
-  → API calls Jupiter /quote with platformFeeBps=50
-  → User sees breakdown: 148.32 USDC, fee $0.74, rate, impact
-  → User clicks "Swap Now"
-  → Frontend calls POST /api/swap
-  → API calls Jupiter /swap → returns base64 tx
-  → Frontend deserializes tx → wallet-adapter signs it
-  → Signed tx sent to Solana via RPC
-  → Fee delivered to our wallet on-chain automatically
-  → Swap recorded in DB
+User authenticates via Telegram
+        │
+        ▼
+Privy creates wallet keypair
+        │
+        ▼
+Key is split via MPC (Multi-Party Computation)
+        │
+   ┌────┴────┐
+   ▼         ▼
+ Privy    User's
+ Shard    Shard
 ```
 
-## Key Design Decisions
+- Neither party alone can sign transactions
+- Both shards required to reconstruct signing key
+- Signing happens client-side in the Mini App
+- Developer (us) never sees the full private key
 
-1. **Non-custodial**: We never hold keys. Wallet-adapter signs client-side.
-2. **Mini App over deeplinks**: Phantom deeplinks were breaking. Mini App works on mobile + desktop.
-3. **Vercel for frontend**: Free, HTTPS included, auto-deploy on push.
-4. **Express API on VPS**: Lightweight, runs alongside Grammy bot.
-5. **0.5% fee**: Half the industry standard (1%). Our competitive edge.
+## Deployment
+
+### Backend (Hostinger VPS)
+```bash
+git pull origin main
+npm install && npm run build
+npx prisma db push
+pm2 restart ecosystem.config.js
+```
+
+### Frontend (Vercel)
+1. Import repo on Vercel
+2. Root Directory: `webapp`
+3. Framework: Vite
+4. Env vars: `VITE_API_URL`, `VITE_PRIVY_APP_ID`
+
+### BotFather Setup
+1. `/mybots` → Select bot
+2. Bot Settings → Menu Button → Set URL to Vercel URL

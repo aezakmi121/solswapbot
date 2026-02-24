@@ -31,7 +31,7 @@ userRouter.get("/user", async (req: Request, res: Response) => {
                 telegramId: user.telegramId,
                 walletAddress: null,
                 solBalance: null,
-                message: "No wallet connected. Use /connect <ADDRESS> in the bot first.",
+                message: "No wallet connected. Open the Mini App to set up your wallet.",
             });
             return;
         }

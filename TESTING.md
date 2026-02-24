@@ -1,72 +1,44 @@
-# TESTING.md — Testing Guide
+# Testing
 
-## Strategy
-
-Jupiter only works on **mainnet**. Bot commands + DB work on devnet. Full swap flow requires mainnet + a few cents of SOL.
-
-## Layer 1: Bot Commands (free)
-
-```
-/start → Welcome message
-/connect <DEVNET_ADDR> → Save wallet
-/wallet → Show balance
-/referral → Show link
-/history → Show "No swaps yet"
-/help → Command list
-/trade → Mini App button (needs MINIAPP_URL set)
+## Build Check
+```bash
+npm run build    # Must pass with zero errors
+npm run lint     # Type-check
 ```
 
-## Layer 2: Mini App (free, read-only)
+## Bot Testing
+1. Start bot in dev mode: `npm run dev`
+2. Open Telegram → Send `/start` to your bot
+3. Verify: Welcome message appears with "Open SolSwap" button
+4. Tap button → Mini App should open
 
-1. Start backend: `npm run dev`
-2. Start webapp: `cd webapp && npm run dev`
-3. Open Mini App URL in browser
-4. Connect wallet
-5. Select SOL → USDC, enter 0.001
-6. Verify quote appears with breakdown
-7. Cancel (don't sign during testing)
-
-## Layer 3: Full Swap (mainnet, ~$0.01)
-
-```
-1. Set SOLANA_RPC_URL to mainnet Helius RPC
-2. npm run dev
-3. Open Mini App via /trade in Telegram
-4. Connect Phantom (mainnet)
-5. Swap 0.001 SOL → USDC
-6. Sign in Phantom
-7. Check fee wallet on Solscan
-```
-
-## Layer 4: API Endpoints
-
+## API Testing
 ```bash
 # Health check
 curl http://localhost:3001/api/health
 
-# Get tokens
-curl http://localhost:3001/api/tokens
+# Quote
+curl "http://localhost:3001/api/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000000"
 
-# Get quote
-curl "http://localhost:3001/api/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000000&inputSymbol=SOL&outputSymbol=USDC"
+# Token scan
+curl "http://localhost:3001/api/scan?mint=DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
 
-# Get price
+# Price
 curl http://localhost:3001/api/price/So11111111111111111111111111111111111111112
 ```
 
-## Checklist
+## Mini App Testing
+1. `cd webapp && npm run dev`
+2. Open in browser at localhost
+3. Test each tab: Swap, Scan, Track, Signals
+4. Verify Privy login flow
+5. Test on mobile viewport (375px width)
 
-| # | Test | Expected |
-|---|------|----------|
-| 1 | /start | Welcome message |
-| 2 | /connect valid | "Wallet connected!" |
-| 3 | /connect invalid | Error |
-| 4 | /wallet | Balance shown |
-| 5 | /price SOL | USD price |
-| 6 | /trade | Mini App button |
-| 7 | Mini App opens | Swap form loads |
-| 8 | Quote fetches | Breakdown shown |
-| 9 | Wallet connects | Address shown |
-| 10 | Swap executes | Tx confirmed |
-| 11 | API /health | Status ok |
-| 12 | Rate limiting | Gets limited on spam |
+## Webhook Testing
+Use Helius webhook simulator to test whale alerts:
+```bash
+curl -X POST http://localhost:3001/api/webhooks/helius \
+  -H "Content-Type: application/json" \
+  -H "authorization: YOUR_WEBHOOK_SECRET" \
+  -d '{"type":"SWAP","signature":"test123"}'
+```

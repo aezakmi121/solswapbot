@@ -1,99 +1,120 @@
-# API.md — API Reference
+# API Reference
 
-## Jupiter Swap API (v1)
+Base URL: `http://YOUR_VPS_IP:3001/api`
 
-**Base URL:** `https://lite-api.jup.ag/swap/v1` (free, no API key needed)
+## Health
 
-### GET /quote
+### `GET /api/health`
+Returns server status.
 
-Get the best swap route with your fee baked in.
-
-```
-GET /quote?inputMint=<MINT>&outputMint=<MINT>&amount=<LAMPORTS>&slippageBps=50&platformFeeBps=50
-```
-
-### POST /swap
-
-Build the swap transaction for client-side signing.
-
-```json
-POST /swap
-{
-  "quoteResponse": { ... },
-  "userPublicKey": "<WALLET_ADDRESS>",
-  "feeAccount": "<FEE_WALLET_ADDRESS>"
-}
-```
-
-Returns `{ swapTransaction: "<base64>", lastValidBlockHeight: number }`
+**Response:** `{ "status": "ok", "timestamp": 1234567890 }`
 
 ---
 
-## SolSwap REST API (Express)
+## Swap
 
-Served from VPS on port 3001. Used by the Mini App frontend.
+### `GET /api/quote`
+Get a swap quote with platform fee.
 
-### GET /api/quote
+| Param | Type | Description |
+|-------|------|-------------|
+| `inputMint` | string | Source token mint address |
+| `outputMint` | string | Destination token mint address |
+| `amount` | string | Amount in smallest unit (lamports, etc.) |
+| `slippageBps` | number | Optional. Default: 50 |
+| `crossChain` | boolean | Optional. If true, uses Rango for cross-chain routing |
 
-Returns Jupiter quote + display data (USD values, exchange rate, fees).
+**Response:** Jupiter QuoteResponse with platformFee included.
 
-**Query params:** `inputMint`, `outputMint`, `amount`, `inputSymbol`, `outputSymbol`
+### `POST /api/swap`
+Build an unsigned swap transaction.
+
+| Body Param | Type | Description |
+|------------|------|-------------|
+| `quoteResponse` | object | Quote from `/api/quote` |
+| `userPublicKey` | string | User's Solana wallet address |
+
+**Response:** `{ "swapTransaction": "<base64>", "lastValidBlockHeight": 12345 }`
+
+---
+
+## Token Scanner
+
+### `GET /api/scan`
+Analyze a token for safety.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `mint` | string | Token mint address |
 
 **Response:**
 ```json
 {
-  "quote": { ... },
-  "display": {
-    "inputAmount": 1.0,
-    "outputAmount": "148.32",
-    "outputTokens": 148.32,
-    "exchangeRate": 148.32,
-    "feeAmount": "0.74",
-    "feeUsd": 0.74,
-    "inputUsd": 148.50,
-    "outputUsd": 148.32,
-    "priceImpactPct": 0.01,
-    "slippageBps": 50
+  "riskScore": 12,
+  "riskLevel": "LOW",
+  "checks": {
+    "mintAuthority": { "safe": true, "detail": "Disabled" },
+    "freezeAuthority": { "safe": true, "detail": "Disabled" },
+    "topHolders": { "safe": true, "detail": "Top 10 hold 28%" },
+    "liquidity": { "safe": true, "detail": "$2.1M" },
+    "tokenAge": { "safe": true, "detail": "2+ years" },
+    "devWallet": { "safe": false, "detail": "Holds 3.2%" }
+  },
+  "tokenInfo": {
+    "name": "BONK",
+    "symbol": "BONK",
+    "supply": "93.5T",
+    "holders": 845000,
+    "price": 0.0000182
   }
 }
 ```
 
-### POST /api/swap
+---
 
-Builds unsigned transaction for wallet-adapter signing.
+## Price
 
-**Body:** `{ quoteResponse, userPublicKey }`
+### `GET /api/price/:mint`
+Get USD price for a token.
 
-**Response:** `{ swapTransaction: "<base64>", lastValidBlockHeight: number }`
-
-### GET /api/price/:mint
-
-Returns USD price. **Response:** `{ mint, priceUsd: 148.50 }`
-
-### GET /api/tokens
-
-Returns supported tokens list with icons/decimals.
-
-### GET /api/health
-
-Health check. **Response:** `{ status: "ok", timestamp: ... }`
+**Response:** `{ "price": 148.50, "mint": "So11...112" }`
 
 ---
 
-## Token Addresses
+## Tokens
 
-| Token | Mint |
-|-------|------|
-| SOL | `So11111111111111111111111111111111111111112` |
-| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-| USDT | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` |
-| BONK | `DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263` |
-| WIF | `EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm` |
-| JUP | `JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN` |
+### `GET /api/tokens`
+List supported tokens with mint addresses and icons.
 
-## Fee Model
+---
 
-- Our fee: 0.5% (50 bps) via `platformFeeBps`
-- Jupiter's cut: 2.5% of our fee (negligible)
-- Net to us: ~48.75 bps per swap
-- Jupiter free tier: ~600 req/min
+## User
+
+### `GET /api/user`
+Get user info by Telegram initData.
+
+| Header | Description |
+|--------|-------------|
+| `x-telegram-init-data` | Telegram WebApp initData string |
+
+---
+
+## History
+
+### `GET /api/history`
+Get user's last 10 swaps.
+
+| Header | Description |
+|--------|-------------|
+| `x-telegram-init-data` | Telegram WebApp initData string |
+
+---
+
+## Webhooks
+
+### `POST /api/webhooks/helius`
+Receives Helius webhook events for tracked wallets.
+
+| Header | Description |
+|--------|-------------|
+| `authorization` | Helius webhook secret |

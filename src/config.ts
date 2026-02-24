@@ -16,7 +16,7 @@ const envSchema = z.object({
       try { new PublicKey(addr); return true; } catch { return false; }
     }, "FEE_WALLET_ADDRESS must be a valid Solana public key"),
 
-  // Jupiter
+  // Jupiter (Solana DEX)
   JUPITER_API_URL: z
     .string()
     .url()
@@ -27,6 +27,19 @@ const envSchema = z.object({
     .min(0)
     .max(200)
     .default(50),
+
+  // Privy (Embedded Wallets)
+  PRIVY_APP_ID: z.string().optional(),
+
+  // Rango (Cross-Chain)
+  RANGO_API_KEY: z.string().optional(),
+
+  // Helius (Webhooks + Enhanced RPC)
+  HELIUS_API_KEY: z.string().optional(),
+  HELIUS_WEBHOOK_SECRET: z.string().optional(),
+
+  // AI Signals
+  GEMINI_API_KEY: z.string().optional(),
 
   // App
   NODE_ENV: z

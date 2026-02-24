@@ -7,7 +7,7 @@ export const swapRouter = Router();
 /**
  * POST /api/swap
  * Builds a swap transaction from a quote. Returns base64 serialized tx
- * for the Mini App to sign via wallet-adapter.
+ * for the Mini App to sign via Privy embedded wallet.
  *
  * Body: { quoteResponse, userPublicKey }
  */

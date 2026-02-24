@@ -3,14 +3,15 @@ import { config } from "../config";
 import { loggerMiddleware } from "./middleware/logger";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { startCommand } from "./commands/start";
-import { connectCommand } from "./commands/connect";
-import { walletCommand } from "./commands/wallet";
-import { priceCommand } from "./commands/price";
-import { referralCommand } from "./commands/referral";
-import { historyCommand } from "./commands/history";
-import { swapCommand, handleSwapConfirm, handleSwapCancel, statusCommand } from "./commands/swap";
 
-/** Creates and configures the Grammy bot instance */
+/**
+ * Creates and configures the Grammy bot instance.
+ *
+ * DESIGN: The bot is a LAUNCHER only. All features live in the Mini App.
+ * The bot's only jobs are:
+ *   1. /start → show welcome + "Open SolSwap" button
+ *   2. Push notifications (whale alerts, swap confirmations, signals)
+ */
 export function createBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -18,61 +19,44 @@ export function createBot(): Bot {
   bot.use(loggerMiddleware);
   bot.use(rateLimitMiddleware);
 
-  // Register command handlers
+  // The ONLY user-facing command
   bot.command("start", startCommand);
-  bot.command("connect", connectCommand);
-  bot.command("wallet", walletCommand);
-  bot.command("price", priceCommand);
-  bot.command("referral", referralCommand);
-  bot.command("history", historyCommand);
-  bot.command("swap", swapCommand);
-  bot.command("status", statusCommand);
 
-  // Inline keyboard callback handlers for swap confirmation
-  bot.callbackQuery("swap_confirm", handleSwapConfirm);
-  bot.callbackQuery("swap_cancel", handleSwapCancel);
-
-  // Mini App trade button
-  bot.command("trade", async (ctx) => {
-    const miniAppUrl = config.MINIAPP_URL;
-    if (!miniAppUrl) {
-      await ctx.reply("⚠️ Mini App not configured yet. Use /swap for now.");
-      return;
-    }
-    await ctx.reply("🔄 *Open the trading panel below to swap tokens:*", {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "🔄 Open Trading Panel", web_app: { url: miniAppUrl } }
-        ]]
-      }
-    });
-  });
-
+  // Help just points to the Mini App
   bot.command("help", (ctx) =>
     ctx.reply(
-      `📖 *SolSwap Bot Commands*\n\n` +
-      `🚀 *Getting Started*\n` +
-      `/start — Create your account\n` +
-      `/connect \`<ADDRESS>\` — Link your Phantom wallet\n` +
-      `/wallet — View wallet & SOL balance\n\n` +
-      `💱 *Trading*\n` +
-      `/trade — Open swap panel (Mini App)\n` +
-      `/swap \`<AMOUNT> <FROM> <TO>\` — Quick swap\n` +
-      `   _Example: /swap 1 SOL USDC_\n` +
-      `/price \`<TOKEN>\` — Check token price\n` +
-      `/status \`<TX>\` — Track your transaction\n` +
-      `/history — Last 10 swaps\n\n` +
-      `🤝 *Referrals*\n` +
-      `/referral — Your link & earnings\n\n` +
-      `💡 *Supported tokens:* SOL, USDC, USDT, BONK, WIF, JUP`,
-      { parse_mode: "Markdown" }
+      `⚡ *SolSwap*\n\n` +
+      `Everything you need is in the Mini App!\n\n` +
+      `Tap the button below to open it:`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: "🚀 Open SolSwap",
+              web_app: { url: config.MINIAPP_URL ?? "https://solswap.vercel.app" }
+            }
+          ]]
+        }
+      }
     )
   );
 
-  // Catch-all for unrecognized messages
+  // Catch-all for messages — direct to Mini App
   bot.on("message:text", (ctx) =>
-    ctx.reply("Unknown command. Type /help to see available commands.")
+    ctx.reply(
+      "👋 Open the Mini App to swap, scan, and track tokens!",
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: "🚀 Open SolSwap",
+              web_app: { url: config.MINIAPP_URL ?? "https://solswap.vercel.app" }
+            }
+          ]]
+        }
+      }
+    )
   );
 
   // Error handler
