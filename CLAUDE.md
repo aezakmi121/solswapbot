@@ -21,7 +21,7 @@ npm run dev
 
 **Non-custodial.** Privy MPC handles wallets. We never hold keys.
 
-**Revenue via API params.** Jupiter `platformFeeBps` and Rango affiliate fees. Zero liability.
+**Revenue via API params.** Jupiter `platformFeeBps` and LI.FI integrator fees. Zero liability.
 
 ## Key Files
 

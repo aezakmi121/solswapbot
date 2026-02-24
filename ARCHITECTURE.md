@@ -10,7 +10,7 @@ User → Telegram Bot (/start) → Mini App (Vercel)
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
-              Jupiter API     Rango API       Helius RPC
+              Jupiter API     LI.FI API       Helius RPC
               (Solana swaps)  (cross-chain)   (webhooks)
 ```
 
@@ -54,9 +54,9 @@ API polls for confirmation → updates DB
 
 ### Cross-Chain (SOL → ETH)
 ```
-Mini App → API /api/quote?crossChain=true → Rango API
+Mini App → API /api/cross-chain/quote → LI.FI API
 Mini App ← route (SOL→USDC→bridge→ETH) with affiliate fee
-User confirms → Rango builds TX
+User confirms → LI.FI builds TX
 Privy signs Solana TX → bridge handles cross-chain delivery
 ETH arrives in user's Privy EVM wallet
 ```

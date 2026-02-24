@@ -1,7 +1,7 @@
 {
   "name": "solswap-bot",
   "version": "0.1.0",
-  "description": "Non-custodial Telegram Mini App for cross-chain token swaps, scanning, and trading via Jupiter + Rango APIs",
+  "description": "Non-custodial Telegram Mini App for cross-chain token swaps, scanning, and trading via Jupiter + LI.FI APIs",
   "main": "dist/app.js",
   "scripts": {
     "dev": "tsx watch src/app.ts",

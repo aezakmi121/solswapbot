@@ -22,7 +22,7 @@ Get a swap quote with platform fee.
 | `outputMint` | string | Destination token mint address |
 | `amount` | string | Amount in smallest unit (lamports, etc.) |
 | `slippageBps` | number | Optional. Default: 50 |
-| `crossChain` | boolean | Optional. If true, uses Rango for cross-chain routing |
+| `crossChain` | boolean | Optional. If true, uses LI.FI for cross-chain routing |
 
 **Response:** Jupiter QuoteResponse with platformFee included.
 

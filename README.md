@@ -4,7 +4,7 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 
 ## Features
 
-- **🔄 Cross-Chain Swaps** — Swap SOL ↔ ETH, USDC ↔ BNB, and more via Jupiter + Rango
+- **🔄 Cross-Chain Swaps** — Swap SOL ↔ ETH, USDC ↔ BNB, and more via Jupiter + LI.FI
 - **🔍 Token Scanner** — Paste any contract address, get an instant safety score and rug-pull analysis
 - **🐋 Whale Tracker** — Follow smart money wallets and get instant trade alerts
 - **🤖 AI Signals** — Daily market analysis and trade signals powered by AI
@@ -27,7 +27,7 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 | Frontend | Vite + React |
 | Wallets | Privy (MPC, non-custodial) |
 | Solana DEX | Jupiter API |
-| Cross-Chain | Rango API |
+| Cross-Chain | LI.FI API (no key required) |
 | AI | Google Gemini |
 
 ## Quick Start

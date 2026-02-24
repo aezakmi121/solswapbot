@@ -56,7 +56,7 @@ Users get wallets created automatically via Privy's MPC infrastructure when they
 
 ### 3. Revenue Through API Fees (Zero Custodial Liability)
 - **Solana swaps**: Jupiter `platformFeeBps` parameter (currently 50 bps = 0.5%)
-- **Cross-chain swaps**: Rango affiliate fee share
+- **Cross-chain swaps**: LI.FI integrator fee via partner portal
 - **Subscriptions**: Scanner Pro, Whale Tracker, AI Signals via Telegram Stars
 - **Exchange affiliates**: Binance/Bybit/OKX referral links (up to 50% lifetime commission)
 
@@ -106,7 +106,7 @@ solswapbot/
 │   │   ├── analyze.ts      # Main analysis orchestrator (risk score 0-100)
 │   │   └── checks.ts       # Safety checks (mint auth, freeze, holders, age)
 │   ├── aggregator/
-│   │   ├── router.ts       # Smart router: Jupiter (same-chain) vs Rango (cross-chain)
+│   │   ├── router.ts       # Smart router: Jupiter (same-chain) vs LI.FI (cross-chain)
 │   │   ├── lifi.ts         # LI.FI API client (no key required for basic use)
 │   │   └── chains.ts       # Chain + token registry (6 chains, 15 tokens)
 │   ├── tracker/            # [NEW] Whale wallet tracking
@@ -233,7 +233,7 @@ NODE_ENV=development
 1. **All external API data is validated with Zod** — see `src/jupiter/quote.ts` for pattern
 2. **Config is type-safe** — `src/config.ts` uses Zod to validate all env vars at startup
 3. **User input is sanitized** — `src/utils/validation.ts` used in all command handlers
-4. **HTTP calls use retry logic** — `src/utils/retry.ts` wraps all Jupiter/Rango calls
+4. **HTTP calls use retry logic** — `src/utils/retry.ts` wraps all Jupiter/LI.FI calls
 5. **Prisma queries are in `src/db/queries/`** — one file per domain (users, fees, referrals)
 6. **The bot has exactly ONE user-facing command: `/start`** — everything else is in the Mini App
 
