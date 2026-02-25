@@ -28,6 +28,20 @@ const POPULAR_MINTS = new Set([
   "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",  // RENDER
 ]);
 
+/** Hardcoded fallback so the app works even if Jupiter token API is down */
+const FALLBACK_TOKENS: JupiterToken[] = [
+  { address: "So11111111111111111111111111111111111111112",   symbol: "SOL",    name: "Wrapped SOL",   decimals: 9,  logoURI: null },
+  { address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", symbol: "USDC",   name: "USD Coin",      decimals: 6,  logoURI: null },
+  { address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  symbol: "USDT",   name: "USDT",          decimals: 6,  logoURI: null },
+  { address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", symbol: "BONK",   name: "Bonk",          decimals: 5,  logoURI: null },
+  { address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", symbol: "WIF",    name: "dogwifhat",     decimals: 6,  logoURI: null },
+  { address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",  symbol: "JUP",    name: "Jupiter",       decimals: 6,  logoURI: null },
+  { address: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", symbol: "ETH",    name: "Ether (Wormhole)", decimals: 8, logoURI: null },
+  { address: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",  symbol: "mSOL",   name: "Marinade SOL",  decimals: 9,  logoURI: null },
+  { address: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", symbol: "jitoSOL",name: "Jito SOL",      decimals: 9,  logoURI: null },
+  { address: "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",  symbol: "RENDER", name: "Render Token",  decimals: 8,  logoURI: null },
+];
+
 /** Jupiter Tokens API V2 (V1 was deprecated August 2025) */
 const JUPITER_TOKEN_LIST_URL = "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
 
@@ -47,26 +61,33 @@ async function loadTokenList(): Promise<JupiterToken[]> {
     return cachedTokens;
   }
 
-  const raw = await withRetry(async () => {
-    const res = await fetch(JUPITER_TOKEN_LIST_URL);
-    if (!res.ok) {
-      throw new Error(`Jupiter token list failed (${res.status})`);
-    }
-    return res.json() as Promise<JupiterTokenV2[]>;
-  }, { label: "Jupiter token list" });
+  try {
+    const raw = await withRetry(async () => {
+      const res = await fetch(JUPITER_TOKEN_LIST_URL);
+      if (!res.ok) {
+        throw new Error(`Jupiter token list failed (${res.status})`);
+      }
+      return res.json() as Promise<JupiterTokenV2[]>;
+    }, { label: "Jupiter token list" });
 
-  // Normalize V2 fields (id→address, icon→logoURI) to keep consumers unchanged
-  const tokens: JupiterToken[] = raw.map((t) => ({
-    address: t.id,
-    symbol: t.symbol,
-    name: t.name,
-    decimals: t.decimals,
-    logoURI: t.icon,
-  }));
+    // Normalize V2 fields (id→address, icon→logoURI) to keep consumers unchanged
+    const tokens: JupiterToken[] = raw.map((t) => ({
+      address: t.id,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+      logoURI: t.icon,
+    }));
 
-  cachedTokens = tokens;
-  cacheTimestamp = Date.now();
-  return tokens;
+    cachedTokens = tokens;
+    cacheTimestamp = Date.now();
+    return tokens;
+  } catch (err) {
+    console.error("Jupiter token list unavailable, using fallback:", (err as Error).message);
+    // Return fallback tokens so the app is still usable
+    if (cachedTokens.length > 0) return cachedTokens;
+    return FALLBACK_TOKENS;
+  }
 }
 
 /** Get the popular/default tokens list */
