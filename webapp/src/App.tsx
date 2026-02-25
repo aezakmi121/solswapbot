@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import {
     TOKENS,
@@ -44,13 +44,23 @@ function uint8ToBase58(bytes: Uint8Array): string {
 }
 
 export function App() {
-    const { ready, authenticated, login, logout } = usePrivy();
+    const { ready, authenticated, logout } = usePrivy();
+    const { login: loginWithTelegram } = useLoginWithTelegram();
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
 
     // Wallet state
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletSaved, setWalletSaved] = useState(false);
+
+    // Auto-login with Telegram when inside the Telegram WebApp
+    useEffect(() => {
+        if (ready && !authenticated && tg?.initData) {
+            loginWithTelegram().catch((err: unknown) =>
+                console.error("Telegram auto-login failed:", err)
+            );
+        }
+    }, [ready, authenticated]);
 
     // Swap form
     const [inputToken, setInputToken] = useState<TokenInfo>(TOKENS[0]); // SOL
@@ -230,7 +240,7 @@ export function App() {
                     <p className="onboard-text">
                         Swap tokens across Solana, Ethereum, and more — right inside Telegram.
                     </p>
-                    <button className="swap-btn" onClick={() => login()}>
+                    <button className="swap-btn" onClick={() => loginWithTelegram()}>
                         Log In with Telegram
                     </button>
                     <p className="onboard-hint">
