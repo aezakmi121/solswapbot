@@ -84,7 +84,7 @@ It also provides **token safety scanning**, **whale tracking**, and **AI market 
 | Database | SQLite via Prisma ORM |
 | Mini App Frontend | Vite + React + TypeScript |
 | Wallet Infrastructure | Privy (MPC embedded wallets) |
-| Solana DEX | Jupiter API (swap + quote + price) |
+| Solana DEX | Jupiter API — Swap V1, Token V2, Price V3 (lite-api.jup.ag) |
 | Cross-Chain | LI.FI API (routing + bridging) |
 | Blockchain RPC | Helius (Solana) |
 | AI | Google Gemini API |
@@ -180,16 +180,11 @@ Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED`
 
 ## Revenue Flow
 
-> **WARNING (Audit C1):** Fee collection is likely broken. The `feeAccount` in `jupiter/swap.ts`
-> passes a raw wallet address instead of the required Associated Token Account (ATA).
-> Jupiter silently ignores invalid fee accounts. Fees are deducted from quotes but may not
-> be routed to the fee wallet. **Verify on-chain before assuming revenue works.**
-
 ```
 User swaps SOL → USDC via Mini App
   └→ Jupiter API receives platformFeeBps=50
-     └→ 0.5% fee SHOULD auto-collect into FEE_WALLET_ADDRESS
-        └→ ⚠️ Requires feeAccount to be ATA, not wallet address (see audit C1)
+     └→ 0.5% fee auto-collects into FEE_WALLET_ADDRESS
+        └→ ✅ feeAccount correctly derived as ATA via getAssociatedTokenAddressSync (fixed 2026-02-25)
 
 User swaps SOL → ETH (cross-chain)
   └→ LI.FI API routes through best bridge
@@ -304,6 +299,7 @@ REFERRAL_FEE_SHARE_PERCENT=25
 
 # Optional — needed for specific features
 PRIVY_APP_ID=               # Phase 1: Privy embedded wallets
+JUPITER_API_KEY=            # Soon required: free key from portal.jup.ag (lite-api being sunset)
 LIFI_API_KEY=               # Cross-chain: enables higher limits + integrator fees
 HELIUS_API_KEY=             # Phase 3: Webhook RPC
 HELIUS_WEBHOOK_SECRET=      # Phase 3: Webhook auth
@@ -356,28 +352,25 @@ pm2 restart ecosystem.config.js
 | Category | Rating | Summary |
 |----------|--------|---------|
 | **Security** | 2/10 | No authentication, CORS wildcard, wallet hijacking, fee bypass |
-| **Financial Logic** | 3/10 | Fee collection likely broken, SOL address mismatch, precision loss |
+| **Financial Logic** | 3/10 | ~~Fee collection likely broken~~ (FIXED), SOL address mismatch, precision loss |
 | **Error Handling** | 4/10 | Inconsistent try/catch, silent failures, fake confirmation |
 | **Code Quality** | 6/10 | Good patterns (Zod, Prisma, retry), but inconsistently applied |
 | **Frontend (React)** | 4/10 | No error boundary, stale quotes, no real tx confirmation |
 | **Infrastructure** | 5/10 | PM2 + Prisma work, but no graceful shutdown, HTTP proxy |
 
 **Verdict:** The architecture and patterns are solid. The codebase is well-structured and
-TypeScript-strict. However, it has **zero authentication**, **likely broken fee collection**,
+TypeScript-strict. Fee collection is now fixed (C1). However, it has **zero authentication**
 and several financial logic bugs that must be fixed before handling real funds.
 
 ---
 
 ### CRITICAL Issues (Must Fix Before Production)
 
-#### C1. Fee Collection Likely Broken — `feeAccount` is wallet address, not ATA
+#### ~~C1. Fee Collection Likely Broken~~ — FIXED (2026-02-25)
 - **File:** `src/jupiter/swap.ts:29`
-- **Impact:** The entire 0.5% revenue model may not work. Jupiter's swap API requires the
-  fee account to be a **token account (ATA)** for the output mint, not a raw wallet address.
-  Passing `feeAccount: config.FEE_WALLET_ADDRESS` is silently ignored — fees are deducted
-  from the quote but never routed to the fee wallet.
-- **Fix:** Derive the ATA using `getAssociatedTokenAddress(outputMint, feeWallet)` from
-  `@solana/spl-token` and pass that as the fee account.
+- **Status:** ✅ FIXED. `feeAccount` now correctly derived as ATA via
+  `getAssociatedTokenAddressSync(outputMint, feeWallet, true)` from `@solana/spl-token`.
+  Jupiter no longer requires Referral Program setup (simplified Jan 2025).
 
 #### C2. Zero Authentication on All API Endpoints
 - **Files:** All routes in `src/api/routes/`
@@ -477,7 +470,7 @@ and several financial logic bugs that must be fixed before handling real funds.
 ### Priority Fix Order
 
 **Before ANY real money flows:**
-1. C1 — Fix fee collection (ATA derivation)
+1. ~~C1 — Fix fee collection (ATA derivation)~~ ✅ DONE
 2. C2 + C3 + C5 — Add Telegram `initData` auth middleware
 3. C4 — Lock CORS to production origin
 4. C6 — Fix SOL address in chains.ts
@@ -496,6 +489,16 @@ and several financial logic bugs that must be fixed before handling real funds.
 ---
 
 ## Changelog
+
+### 2026-02-25 — Jupiter API Migration (V1→V2 Tokens, V2→V3 Price)
+- Migrated Token List API from deprecated V1 (`/tokens/v1/strict`, dead since Aug 2025) to V2 (`/tokens/v2/tag?query=verified`)
+- V2 uses different field names: `id` (not `address`), `icon` (not `logoURI`) — normalized in `loadTokenList()`
+- Migrated Price API from deprecated V2 (`/price/v2`) to V3 (`/price/v3/price`)
+- V3 response is flat `{ MINT: { usdPrice } }` instead of nested `{ data: { MINT: { price } } }`
+- Added hardcoded `FALLBACK_TOKENS` (10 popular tokens) so app works even if Jupiter API is down
+- Swap/Quote API (`/swap/v1/`) unchanged — still current
+- **Note:** `lite-api.jup.ag` (free, no key) is being sunset. Future migration needed to `api.jup.ag` with API key from portal.jup.ag (free tier = 60 req/min)
+- Confirmed C1 (fee collection) was already fixed — ATA derivation is correct, updated audit accordingly
 
 ### 2026-02-25 — Full Codebase Audit
 - Comprehensive deep-dive audit of every file (6 parallel audits)
