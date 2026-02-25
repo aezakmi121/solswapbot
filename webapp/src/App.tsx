@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import {
@@ -9,6 +9,9 @@ import {
     fetchPopularTokens,
     saveWalletAddress,
     fetchHistory,
+    fetchUser,
+    confirmSwap,
+    fetchSwapStatus,
     SwapRecord,
 } from "./lib/api";
 import { TokenSelector } from "./TokenSelector";
@@ -53,6 +56,10 @@ export function App() {
     // Wallet state
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletSaved, setWalletSaved] = useState(false);
+    const [solBalance, setSolBalance] = useState<number | null>(null);
+
+    // Polling ref for swap confirmation
+    const confirmPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
     // Auto-login with Telegram when inside the Telegram WebApp
     useEffect(() => {
@@ -126,6 +133,20 @@ export function App() {
             .catch((err: unknown) => console.error("Failed to save wallet:", err));
     }, [walletAddress, walletSaved]);
 
+    // Fetch SOL balance when wallet is ready
+    const refreshBalance = useCallback(() => {
+        const telegramId = getTelegramUserId();
+        if (!telegramId) return;
+        fetchUser(telegramId)
+            .then((data) => setSolBalance(data.solBalance))
+            .catch(() => {}); // silently fail — balance is informational
+    }, []);
+
+    useEffect(() => {
+        if (!walletAddress) return;
+        refreshBalance();
+    }, [walletAddress, refreshBalance]);
+
     // Fetch quote when inputs change (debounced)
     const getQuote = useCallback(async () => {
         if (!inputToken || !outputToken || !amount || Number(amount) <= 0) {
@@ -172,9 +193,16 @@ export function App() {
         setQuote(null);
     };
 
+    // Clean up polling on unmount
+    useEffect(() => {
+        return () => {
+            if (confirmPollRef.current) clearInterval(confirmPollRef.current);
+        };
+    }, []);
+
     // Execute swap
     const handleSwap = async () => {
-        if (!walletAddress || !quote || !embeddedWallet) return;
+        if (!walletAddress || !quote || !embeddedWallet || !inputToken || !outputToken) return;
 
         try {
             setSwapStatus("building");
@@ -200,7 +228,58 @@ export function App() {
             setTxSignature(sigString);
             setSwapStatus("confirming");
 
-            setTimeout(() => setSwapStatus("done"), 2000);
+            // Record swap in DB and start backend confirmation polling
+            const telegramId = getTelegramUserId();
+            if (telegramId) {
+                try {
+                    const { swapId } = await confirmSwap({
+                        telegramId,
+                        txSignature: sigString,
+                        inputMint: inputToken.mint,
+                        outputMint: outputToken.mint,
+                        inputAmount: quote.raw.inAmount,
+                        outputAmount: quote.raw.outAmount,
+                        feeAmountUsd: quote.display.feeUsd,
+                    });
+
+                    // Poll for on-chain confirmation from the backend
+                    if (confirmPollRef.current) clearInterval(confirmPollRef.current);
+                    let pollCount = 0;
+                    confirmPollRef.current = setInterval(async () => {
+                        pollCount++;
+                        try {
+                            const result = await fetchSwapStatus(swapId);
+                            if (result.status === "CONFIRMED") {
+                                clearInterval(confirmPollRef.current);
+                                setSwapStatus("done");
+                                refreshBalance();
+                            } else if (result.status === "FAILED") {
+                                clearInterval(confirmPollRef.current);
+                                setSwapError("Transaction failed on-chain");
+                                setSwapStatus("error");
+                            }
+                        } catch {
+                            // Polling error — keep trying
+                        }
+                        // Stop polling after ~2 minutes (40 attempts x 3s)
+                        if (pollCount >= 40) {
+                            clearInterval(confirmPollRef.current);
+                            // Don't mark as error — backend will keep polling
+                            setSwapStatus("done");
+                            refreshBalance();
+                        }
+                    }, 3000);
+                } catch (confirmErr) {
+                    console.error("Failed to record swap:", confirmErr);
+                    // Swap was already sent on-chain — show as done even if DB save fails
+                    setSwapStatus("done");
+                    refreshBalance();
+                }
+            } else {
+                // No telegram ID — can't record, just show done
+                setSwapStatus("done");
+                refreshBalance();
+            }
         } catch (err) {
             console.error("Swap error:", err);
             setSwapError(err instanceof Error ? err.message : "Transaction failed");
@@ -310,6 +389,11 @@ export function App() {
                 <div className="wallet-badge" onClick={loadHistory}>
                     <span className="wallet-dot" />
                     {shortAddr(walletAddress)}
+                    {solBalance !== null && (
+                        <span className="wallet-bal">
+                            {solBalance < 0.001 ? "<0.001" : solBalance.toFixed(3)} SOL
+                        </span>
+                    )}
                 </div>
             </header>
 
@@ -448,6 +532,7 @@ export function App() {
                                 setAmount("");
                                 setQuote(null);
                                 setTxSignature(null);
+                                refreshBalance();
                             }}
                         >
                             New Swap
