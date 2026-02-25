@@ -28,22 +28,41 @@ const POPULAR_MINTS = new Set([
   "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",  // RENDER
 ]);
 
-const JUPITER_TOKEN_LIST_URL = "https://lite-api.jup.ag/tokens/v1/strict";
+/** Jupiter Tokens API V2 (V1 was deprecated August 2025) */
+const JUPITER_TOKEN_LIST_URL = "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
 
-/** Fetch and cache the Jupiter strict token list */
+/** Raw shape returned by Jupiter Tokens API V2 */
+interface JupiterTokenV2 {
+  id: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  icon: string | null;
+}
+
+/** Fetch and cache the Jupiter verified token list (V2) */
 async function loadTokenList(): Promise<JupiterToken[]> {
   const now = Date.now();
   if (cachedTokens.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
     return cachedTokens;
   }
 
-  const tokens = await withRetry(async () => {
+  const raw = await withRetry(async () => {
     const res = await fetch(JUPITER_TOKEN_LIST_URL);
     if (!res.ok) {
       throw new Error(`Jupiter token list failed (${res.status})`);
     }
-    return res.json() as Promise<JupiterToken[]>;
+    return res.json() as Promise<JupiterTokenV2[]>;
   }, { label: "Jupiter token list" });
+
+  // Normalize V2 fields (id→address, icon→logoURI) to keep consumers unchanged
+  const tokens: JupiterToken[] = raw.map((t) => ({
+    address: t.id,
+    symbol: t.symbol,
+    name: t.name,
+    decimals: t.decimals,
+    logoURI: t.icon,
+  }));
 
   cachedTokens = tokens;
   cacheTimestamp = Date.now();
