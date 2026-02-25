@@ -1,13 +1,14 @@
 import { Router, Request, Response } from "express";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
-import { MINT_TO_SYMBOL } from "../../utils/constants";
+import { getTokenByMint } from "../../jupiter/tokens";
 
 export const historyRouter = Router();
 
-/** Resolve a mint address to a token symbol */
-function mintToSymbol(mint: string): string {
-    return MINT_TO_SYMBOL[mint] ?? mint.slice(0, 6) + "...";
+/** Resolve a mint address to a token symbol via Jupiter token list */
+async function mintToSymbol(mint: string): Promise<string> {
+    const token = await getTokenByMint(mint);
+    return token?.symbol ?? mint.slice(0, 6) + "...";
 }
 
 /**
@@ -35,19 +36,21 @@ historyRouter.get("/history", async (req: Request, res: Response) => {
             take: 20,
         });
 
-        const formatted = swaps.map((swap) => ({
-            id: swap.id,
-            inputMint: swap.inputMint,
-            outputMint: swap.outputMint,
-            inputSymbol: mintToSymbol(swap.inputMint),
-            outputSymbol: mintToSymbol(swap.outputMint),
-            inputAmount: swap.inputAmount.toString(),
-            outputAmount: swap.outputAmount.toString(),
-            feeAmountUsd: swap.feeAmountUsd,
-            txSignature: swap.txSignature,
-            status: swap.status,
-            createdAt: swap.createdAt.toISOString(),
-        }));
+        const formatted = await Promise.all(
+            swaps.map(async (swap) => ({
+                id: swap.id,
+                inputMint: swap.inputMint,
+                outputMint: swap.outputMint,
+                inputSymbol: await mintToSymbol(swap.inputMint),
+                outputSymbol: await mintToSymbol(swap.outputMint),
+                inputAmount: swap.inputAmount.toString(),
+                outputAmount: swap.outputAmount.toString(),
+                feeAmountUsd: swap.feeAmountUsd,
+                txSignature: swap.txSignature,
+                status: swap.status,
+                createdAt: swap.createdAt.toISOString(),
+            }))
+        );
 
         res.json({ swaps: formatted });
     } catch (err) {
