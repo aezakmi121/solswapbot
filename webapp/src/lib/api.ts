@@ -34,6 +34,12 @@ export interface UserData {
     message?: string;
 }
 
+export interface TokenBalance {
+    mint: string;
+    amount: number;
+    decimals: number;
+}
+
 export interface SwapRecord {
     id: string;
     inputMint: string;
@@ -82,16 +88,12 @@ export async function fetchUser(telegramId: string): Promise<UserData> {
 export async function fetchQuote(params: {
     inputMint: string;
     outputMint: string;
-    amount: string;
-    inputDecimals: number;
-    outputDecimals: number;
+    humanAmount: string;
 }): Promise<QuoteResponse> {
     const searchParams = new URLSearchParams({
         inputMint: params.inputMint,
         outputMint: params.outputMint,
-        amount: params.amount,
-        inputDecimals: String(params.inputDecimals),
-        outputDecimals: String(params.outputDecimals),
+        humanAmount: params.humanAmount,
     });
     const res = await fetch(`${API_BASE}/api/quote?${searchParams}`);
     if (!res.ok) {
@@ -176,4 +178,14 @@ export async function fetchSwapStatus(
         throw new Error(body.error || "Failed to fetch swap status");
     }
     return res.json();
+}
+
+/** Fetch SOL + SPL token balances for a wallet */
+export async function fetchBalances(walletAddress: string): Promise<TokenBalance[]> {
+    const res = await fetch(
+        `${API_BASE}/api/user/balances?walletAddress=${encodeURIComponent(walletAddress)}`
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.balances ?? [];
 }

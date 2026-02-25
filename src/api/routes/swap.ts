@@ -3,7 +3,7 @@ import { buildSwapTransaction } from "../../jupiter/swap";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
 import { pollTransactionInBackground } from "../../solana/transaction";
-import { isValidSolanaAddress } from "../../utils/validation";
+import { config } from "../../config";
 
 export const swapRouter = Router();
 
@@ -20,6 +20,14 @@ swapRouter.post("/swap", async (req: Request, res: Response) => {
 
         if (!quoteResponse || !userPublicKey) {
             res.status(400).json({ error: "Missing quoteResponse or userPublicKey" });
+            return;
+        }
+
+        // H1: Validate that platformFeeBps hasn't been stripped from the quote.
+        // An attacker could submit a modified quoteResponse with feeBps=0.
+        const feeBps = quoteResponse.platformFee?.feeBps;
+        if (feeBps !== undefined && feeBps !== config.PLATFORM_FEE_BPS) {
+            res.status(400).json({ error: "Invalid platform fee in quote" });
             return;
         }
 

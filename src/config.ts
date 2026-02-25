@@ -52,7 +52,10 @@ const envSchema = z.object({
 
   // API Server (for Mini App)
   API_PORT: z.coerce.number().int().default(3001),
-  CORS_ORIGIN: z.string().default("*"),
+  CORS_ORIGIN: z.string().default("*").refine(
+    (val) => !(process.env.NODE_ENV === "production" && val === "*"),
+    "CORS_ORIGIN must not be '*' in production — set it to your Vercel deployment URL"
+  ),
   MINIAPP_URL: z.string().url().optional(),
 
   // Referral

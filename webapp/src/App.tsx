@@ -3,6 +3,7 @@ import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import {
     TokenInfo,
+    TokenBalance,
     QuoteDisplay,
     fetchQuote,
     fetchSwapTransaction,
@@ -10,6 +11,7 @@ import {
     saveWalletAddress,
     fetchHistory,
     fetchUser,
+    fetchBalances,
     confirmSwap,
     fetchSwapStatus,
     SwapRecord,
@@ -57,6 +59,7 @@ export function App() {
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletSaved, setWalletSaved] = useState(false);
     const [solBalance, setSolBalance] = useState<number | null>(null);
+    const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
 
     // Polling ref for swap confirmation
     const confirmPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -133,19 +136,30 @@ export function App() {
             .catch((err: unknown) => console.error("Failed to save wallet:", err));
     }, [walletAddress, walletSaved]);
 
-    // Fetch SOL balance when wallet is ready
+    // Fetch SOL balance + all token balances when wallet is ready
     const refreshBalance = useCallback(() => {
+        if (!walletAddress) return;
         const telegramId = getTelegramUserId();
-        if (!telegramId) return;
-        fetchUser(telegramId)
-            .then((data) => setSolBalance(data.solBalance))
-            .catch(() => {}); // silently fail — balance is informational
-    }, []);
+        if (telegramId) {
+            fetchUser(telegramId)
+                .then((data) => setSolBalance(data.solBalance))
+                .catch(() => {});
+        }
+        fetchBalances(walletAddress)
+            .then(setTokenBalances)
+            .catch(() => {});
+    }, [walletAddress]);
 
     useEffect(() => {
         if (!walletAddress) return;
         refreshBalance();
     }, [walletAddress, refreshBalance]);
+
+    /** Get the user's balance for a specific token mint */
+    const getTokenBalance = (mint: string): number | null => {
+        const entry = tokenBalances.find((b) => b.mint === mint);
+        return entry?.amount ?? null;
+    };
 
     // Fetch quote when inputs change (debounced)
     const getQuote = useCallback(async () => {
@@ -158,16 +172,10 @@ export function App() {
         setQuoteError("");
 
         try {
-            const amountSmallest = Math.round(
-                Number(amount) * 10 ** inputToken.decimals
-            ).toString();
-
             const result = await fetchQuote({
                 inputMint: inputToken.mint,
                 outputMint: outputToken.mint,
-                amount: amountSmallest,
-                inputDecimals: inputToken.decimals,
-                outputDecimals: outputToken.decimals,
+                humanAmount: amount,
             });
 
             setQuote({ raw: result.quote, display: result.display });
@@ -417,11 +425,36 @@ export function App() {
                             inputMode="decimal"
                         />
                     </div>
-                    {quote?.display.inputUsd != null && (
-                        <span className="usd-value">
-                            ~{formatUsd(quote.display.inputUsd)}
-                        </span>
-                    )}
+                    <div className="token-balance-row">
+                        {inputToken && (() => {
+                            const bal = getTokenBalance(inputToken.mint);
+                            if (bal === null) return null;
+                            const isSOL = inputToken.mint === "So11111111111111111111111111111111111111112";
+                            return (
+                                <>
+                                    <span className="usd-value">
+                                        Balance: {bal < 0.001 ? "<0.001" : bal.toFixed(bal < 1 ? 6 : 4)} {inputToken.symbol}
+                                    </span>
+                                    <button
+                                        className="max-btn"
+                                        onClick={() => {
+                                            // Reserve 0.01 SOL for tx fees
+                                            const maxAmount = isSOL ? Math.max(0, bal - 0.01) : bal;
+                                            setAmount(maxAmount > 0 ? String(maxAmount) : "");
+                                            setSwapStatus("idle");
+                                        }}
+                                    >
+                                        MAX
+                                    </button>
+                                </>
+                            );
+                        })()}
+                        {quote?.display.inputUsd != null && (
+                            <span className="usd-value" style={{ marginLeft: "auto" }}>
+                                ~{formatUsd(quote.display.inputUsd)}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── Flip ── */}

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { App } from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles/index.css";
@@ -16,6 +17,8 @@ if (tg) {
 }
 
 const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
+const solanaRpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const solanaWsUrl = solanaRpcUrl.replace("https://", "wss://").replace("http://", "ws://");
 
 if (!privyAppId) {
     console.error("VITE_PRIVY_APP_ID is not set");
@@ -34,6 +37,14 @@ createRoot(document.getElementById("root")!).render(
                         accentColor: "#7c5cfc",
                     },
                     loginMethods: ["telegram"],
+                    solana: {
+                        rpcs: {
+                            "solana:mainnet": {
+                                rpc: createSolanaRpc(solanaRpcUrl) as any,
+                                rpcSubscriptions: createSolanaRpcSubscriptions(solanaWsUrl) as any,
+                            },
+                        },
+                    },
                     externalWallets: {
                         solana: { connectors: solanaConnectors },
                     },

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { findUserByTelegramId, updateUserWallet } from "../../db/queries/users";
 import { connection } from "../../solana/connection";
 import { PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isValidSolanaAddress } from "../../utils/validation";
 
 export const userRouter = Router();
@@ -94,5 +95,61 @@ userRouter.post("/user/wallet", async (req: Request, res: Response) => {
     } catch (err) {
         console.error("Wallet save error:", err);
         res.status(500).json({ error: "Failed to save wallet address" });
+    }
+});
+
+/**
+ * GET /api/user/balances?walletAddress=<ADDR>
+ * Returns SOL balance + all SPL token balances for a wallet.
+ */
+userRouter.get("/user/balances", async (req: Request, res: Response) => {
+    try {
+        const walletAddress = req.query.walletAddress as string;
+
+        if (!walletAddress || !isValidSolanaAddress(walletAddress)) {
+            res.status(400).json({ error: "Invalid or missing walletAddress" });
+            return;
+        }
+
+        const pubkey = new PublicKey(walletAddress);
+
+        // Fetch SOL balance and SPL token accounts in parallel
+        const [lamports, tokenAccounts] = await Promise.all([
+            connection.getBalance(pubkey),
+            connection.getParsedTokenAccountsByOwner(pubkey, {
+                programId: TOKEN_PROGRAM_ID,
+            }),
+        ]);
+
+        const solBalance = lamports / 1e9;
+
+        // Wrapped SOL mint for consistency with the token list
+        const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+        const balances: Array<{
+            mint: string;
+            amount: number;
+            decimals: number;
+        }> = [
+            { mint: WSOL_MINT, amount: solBalance, decimals: 9 },
+        ];
+
+        for (const account of tokenAccounts.value) {
+            const parsed = account.account.data.parsed;
+            const info = parsed.info;
+            const uiAmount = info.tokenAmount.uiAmount;
+            if (uiAmount > 0) {
+                balances.push({
+                    mint: info.mint,
+                    amount: uiAmount,
+                    decimals: info.tokenAmount.decimals,
+                });
+            }
+        }
+
+        res.json({ balances });
+    } catch (err) {
+        console.error("Balances API error:", err);
+        res.status(500).json({ error: "Failed to fetch balances" });
     }
 });
