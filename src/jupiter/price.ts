@@ -1,14 +1,12 @@
-const JUPITER_PRICE_URL = "https://lite-api.jup.ag/price/v3";
+const JUPITER_PRICE_URL = "https://api.jup.ag/price/v2";
 
-interface JupiterPriceV3Entry {
-  usdPrice: number;
-  decimals: number;
+interface JupiterPriceV2Response {
+  data: Record<string, { id: string; type: string; price: string } | undefined>;
+  timeTaken?: number;
 }
 
-type JupiterPriceV3Response = Record<string, JupiterPriceV3Entry>;
-
 /**
- * Fetches the current USD price of a token via Jupiter Price API v3.
+ * Fetches the current USD price of a token via Jupiter Price API v2.
  * Returns null if price is unavailable.
  */
 export async function getTokenPriceUsd(mintAddress: string): Promise<number | null> {
@@ -16,9 +14,12 @@ export async function getTokenPriceUsd(mintAddress: string): Promise<number | nu
     const response = await fetch(`${JUPITER_PRICE_URL}?ids=${mintAddress}`);
     if (!response.ok) return null;
 
-    const json = (await response.json()) as JupiterPriceV3Response;
-    const priceInfo = json[mintAddress];
-    return priceInfo?.usdPrice ?? null;
+    const json = (await response.json()) as JupiterPriceV2Response;
+    const entry = json.data?.[mintAddress];
+    if (!entry?.price) return null;
+
+    const price = parseFloat(entry.price);
+    return Number.isFinite(price) ? price : null;
   } catch {
     return null;
   }
