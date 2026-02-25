@@ -213,15 +213,22 @@ When tokens haven't loaded yet, the user shouldn't be able to type an amount. Ad
 ### 1. Privy React Auth SDK
 
 **Current version in project:** `@privy-io/react-auth@3.14.1`
-**Current latest:** Check npm for exact, but 3.x is current major
+**Latest:** v3.14.x (February 2026). Requires React 18+ and TypeScript 5+.
+
+**Major breaking changes in v2.0.0 (January 2025):**
+- `useSendSolanaTransaction` removed from `@privy-io/react-auth` → now `useSignAndSendTransaction` from `@privy-io/react-auth/solana`
+- `createPrivyWalletOnLogin` removed → use `config.embeddedWallets.createOnLogin`
+- Callback signatures changed to named (destructured) arguments
+- `setActiveWallet` removed — interact with wallets array directly
+- `rpcUrl` removed from `fundWallet` → use `solanaClusters` or `solana.rpcs` config
 
 **Key APIs used:**
 - `usePrivy()` → `{ ready, authenticated, logout }`
-- `useLoginWithTelegram()` → `{ login: loginWithTelegram }`
+- `useLoginWithTelegram()` → `{ login: loginWithTelegram }` (from `@privy-io/react-auth`)
 - `useWallets()` → `{ wallets }` (from `@privy-io/react-auth/solana`)
 - `useSignAndSendTransaction()` → `{ signAndSendTransaction }` (from `@privy-io/react-auth/solana`)
 
-**Config pattern:**
+**Config pattern (current):**
 ```typescript
 <PrivyProvider
   appId={PRIVY_APP_ID}
@@ -243,28 +250,57 @@ When tokens haven't loaded yet, the user shouldn't be able to type an amount. Ad
 ```
 
 **Important notes:**
-- `solanaClusters` is DEPRECATED — use `config.solana.rpcs` with `@solana/kit`
+- `solanaClusters` is DEPRECATED — use `config.solana.rpcs` with `@solana/kit` (already done in our code)
 - Privy handles all key management via MPC — we never see private keys
 - `useSignAndSendTransaction` returns `{ signature: Uint8Array }` — must convert to base58
+- Only email, SMS, and Telegram login work in Telegram's in-app browser — external wallets (MetaMask, Phantom) won't work
+- Privy supports **seamless auto-login** in Telegram Mini Apps — calling `loginWithTelegram()` when `tg.initData` exists triggers it
 
 **Logout in Telegram Mini App:**
-- `logout()` may trigger redirects that break the Mini App context
+- `logout()` may trigger OAuth-style redirects that break the Mini App context
 - Always call `tg.close()` after logout to avoid "bot domain invalid"
 
+**Server-side auth option (`@privy-io/server-auth` v1.32.x):**
+```typescript
+import { PrivyClient } from "@privy-io/server-auth";
+const privy = new PrivyClient(PRIVY_APP_ID, PRIVY_APP_SECRET);
+
+// Verify access token from Authorization: Bearer <token>
+const claims = await privy.verifyAuthToken(token);
+const user = await privy.getUserById(claims.userId);
+const telegramId = user.telegram?.telegramUserId;
+```
+
+**Docs:**
+- https://docs.privy.io/authentication/user-authentication/login-methods/telegram
+- https://docs.privy.io/recipes/react/seamless-telegram
+- https://docs.privy.io/guide/server/authorization/verification
+
 ### 2. Jupiter Swap API
+
+Jupiter now offers **two APIs**:
+
+| | Ultra API (new) | Metis Swap API (current, still supported) |
+|---|---|---|
+| Flow | 2 steps: quote + execute (Jupiter sends) | 3 steps: quote + build TX + you send |
+| TX Sending | Handled by Jupiter | Developer-managed |
+| Slippage | Auto-optimized (RTSE) | Manual |
+| Custom Instructions | Not supported | Fully supported |
+
+**SolSwap uses Metis** because we need the raw unsigned TX for Privy's `signAndSendTransaction`.
 
 **Current API:** `https://lite-api.jup.ag/swap/v1` (free tier, rate-limited)
 **Paid API:** `https://api.jup.ag` (requires API key from jup.ag/portal)
 
 **Quote endpoint:**
 ```
-GET /quote?inputMint=So11...&outputMint=EPjF...&amount=1000000000
+GET /swap/v1/quote?inputMint=So11...&outputMint=EPjF...&amount=1000000000
     &platformFeeBps=50&slippageBps=50
 ```
 
 **Swap endpoint:**
 ```
-POST /swap
+POST /swap/v1/swap
 {
   "quoteResponse": { /* from /quote */ },
   "userPublicKey": "...",
@@ -275,8 +311,27 @@ POST /swap
 **Fee collection (CRITICAL — C1):**
 - `platformFeeBps=50` in quote request (0.5% fee)
 - `feeAccount` in swap request MUST be an Associated Token Account (ATA) for the output mint
-- Derive ATA: `getAssociatedTokenAddress(outputMintPubkey, feeWalletPubkey)`
+- As of January 2025, Jupiter no longer requires the Referral Program — just pass a valid token account
+- Derive ATA: `getAssociatedTokenAddress(outputMintPubkey, feeWalletPubkey)` from `@solana/spl-token`
 - If you pass a raw wallet address, Jupiter **silently ignores** it — fees are deducted from the quote but never routed to you
+- For **ExactIn** swaps: feeAccount mint can be input or output mint
+- For **ExactOut** swaps: feeAccount mint can ONLY be input mint
+
+**Fix code:**
+```typescript
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
+
+const feeAccount = await getAssociatedTokenAddress(
+  new PublicKey(outputMint),       // Token mint
+  new PublicKey(FEE_WALLET_ADDRESS) // Fee wallet
+);
+// Pre-create ATAs for common output mints (SOL, USDC, USDT)
+```
+
+**Docs:**
+- https://dev.jup.ag/docs/swap/add-fees-to-swap
+- https://dev.jup.ag/docs/swap
 
 ### 3. Telegram Mini App (WebApp) API
 
@@ -291,17 +346,59 @@ tg.close();          // Close Mini App → back to chat
 tg.setHeaderColor("#1a1b2e");
 tg.setBackgroundColor("#1a1b2e");
 
-// User identity (UNSAFE — client-side only)
+// User identity (UNSAFE — client-side only, can be forged)
 tg.initDataUnsafe.user.id;     // Telegram user ID
 tg.initDataUnsafe.user.username;
 
 // Signed data (SAFE — for server-side verification)
-tg.initData;  // HMAC-signed query string
+tg.initData;  // HMAC-signed query string containing user, auth_date, hash
 ```
 
-**initData verification (C2/C5):**
-```javascript
-// Server-side (Node.js):
+**initData format:** URL-encoded query string containing:
+- `user` — JSON with `id`, `first_name`, `last_name`, `username`, `language_code`
+- `auth_date` — Unix timestamp
+- `hash` — HMAC-SHA-256 signature
+- `signature` — Ed25519 signature (newer method)
+- `query_id`, `chat_instance`, `chat_type`, `start_param`
+
+**Server-side verification with `@telegram-apps/init-data-node`:**
+```bash
+npm install @telegram-apps/init-data-node
+```
+
+```typescript
+import { validate, parse } from "@telegram-apps/init-data-node";
+
+function telegramAuthMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization || "";
+    const [type, initDataRaw] = authHeader.split(" ");
+
+    if (type !== "tma" || !initDataRaw) {
+        return res.status(401).json({ error: "Missing Telegram init data" });
+    }
+
+    try {
+        validate(initDataRaw, process.env.TELEGRAM_BOT_TOKEN!);
+        const initData = parse(initDataRaw);
+        req.telegramUser = initData.user;
+        req.telegramId = initData.user?.id;
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: "Invalid init data" });
+    }
+}
+```
+
+**Client-side — sending initData with every request:**
+```typescript
+const initDataRaw = window.Telegram.WebApp.initData;
+fetch("/api/quote", {
+    headers: { "Authorization": `tma ${initDataRaw}` },
+});
+```
+
+**Manual HMAC verification (alternative to library):**
+```typescript
 import crypto from "crypto";
 
 function verifyTelegramInitData(initData: string, botToken: string): boolean {
@@ -309,13 +406,11 @@ function verifyTelegramInitData(initData: string, botToken: string): boolean {
     const hash = params.get("hash");
     params.delete("hash");
 
-    // Sort and join params
     const dataCheckString = [...params.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => `${k}=${v}`)
         .join("\n");
 
-    // HMAC with bot token
     const secretKey = crypto.createHmac("sha256", "WebAppData")
         .update(botToken).digest();
     const calculatedHash = crypto.createHmac("sha256", secretKey)
@@ -325,37 +420,95 @@ function verifyTelegramInitData(initData: string, botToken: string): boolean {
 }
 ```
 
-### 4. Grammy Bot Framework
+**Pitfalls:**
+- Do NOT parse/restructure `initData` before sending — raw query string must be preserved exactly for HMAC
+- Default validation window is 24 hours — set custom `expiresIn` for tighter security
+- `photo_url` may contain backslashes that break if processed through `JSON.stringify`
 
-**Current version:** Grammy 1.x (TypeScript-first Telegram bot framework)
+**Two auth strategies for SolSwap (pick one):**
+1. **Privy server-auth** — verify Privy access token, get telegramId from Privy user object
+2. **Telegram initData** — verify HMAC signature, extract user from signed payload (Privy-independent)
 
-**Usage in project:** Minimal — only `/start` and `/help` commands.
+**Docs:**
+- https://docs.telegram-mini-apps.com/platform/init-data
+- https://docs.telegram-mini-apps.com/platform/authorizing-user
+- https://docs.telegram-mini-apps.com/packages/telegram-apps-init-data-node
+- https://core.telegram.org/bots/webapps
 
-**Key pattern:**
+### 4. grammY Bot Framework
+
+**Current version:** v1.40.0 (February 2026). TypeScript-first.
+
+**Usage in project:** Minimal — only `/start` and `/help` commands + Mini App launcher.
+
+**Key patterns:**
 ```typescript
 import { Bot, InlineKeyboard } from "grammy";
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
-// Mini App launcher button
+// InlineKeyboard with WebApp button
 const keyboard = new InlineKeyboard().webApp("Open SolSwap", MINIAPP_URL);
+
+// Persistent Menu Button (one-tap access)
+await bot.api.setChatMenuButton({
+    menu_button: {
+        type: "web_app",
+        text: "SolSwap",
+        web_app: { url: MINIAPP_URL },
+    },
+});
 ```
+
+**Error handling fix (M12):**
+```typescript
+bot.catch((err) => {
+    console.error(`Error handling update ${err.ctx.update.update_id}:`);
+    console.error("Error:", err.error);  // Full object, not just .message
+    console.error("Stack:", err.error instanceof Error ? err.error.stack : "N/A");
+});
+```
+
+**Docs:** https://grammy.dev/
 
 ### 5. LI.FI Cross-Chain API
 
-**Current API:** `https://li.quest/v1`
-**SDK:** `@lifi/sdk` (optional — project uses REST API directly)
+**Current SDK:** `@lifi/sdk v3.40.x` — v3 introduced providers architecture + Solana support
+**REST API:** `https://li.quest/v1` (project uses REST, not SDK)
 
-**Quote endpoint:**
+**v3 SDK config (if upgrading from REST):**
+```typescript
+import { createConfig, EVM, Solana } from "@lifi/sdk";
+createConfig({
+    integrator: "SolSwap",
+    providers: [
+        EVM({ getWalletClient: async () => walletClient }),
+        Solana({ getWalletAdapter: async () => walletAdapter }),
+    ],
+});
 ```
-GET /quote?fromChain=SOL&toChain=ETH&fromToken=SOL&toToken=ETH
+
+**REST Quote endpoint:**
+```
+GET /quote?fromChain=SOL&toChain=ETH&fromToken=So11...112&toToken=0xA0b8...
     &fromAmount=1000000000&fromAddress=...&toAddress=...
 ```
 
+**Solana support notes:**
+- LI.FI uses Jupiter for on-chain Solana swaps
+- Cross-chain bridges: Mayan (Wormhole), Allbridge, Circle CCTP
+- Solana `transactionRequest.data` is base64-encoded (not hex like EVM)
+- Integrator fees require API key from LI.FI partner portal
+
 **Known issues in project:**
-- M9: Response not Zod-validated
-- M10: No retry wrapper
+- C6: SOL address uses System Program (`111...111`) instead of Wrapped SOL (`So111...112`)
+- M9: Response not Zod-validated (violates project pattern)
+- M10: No retry wrapper on API calls
 - M14: Dummy addresses produce unusable `transactionRequest`
-- C6: SOL address mismatch in chains registry
+- M15: Arbitrum + Base have zero tokens registered
+
+**Docs:**
+- https://docs.li.fi/sdk/overview
+- https://docs.li.fi/li.fi-api/solana
 
 ### 6. Express.js + Prisma
 
@@ -363,6 +516,20 @@ GET /quote?fromChain=SOL&toChain=ETH&fromToken=SOL&toToken=ETH
 **Prisma:** v6.x with SQLite
 
 **Models:** User, Swap, TokenScan, WatchedWallet, Subscription
+
+### Authentication Strategy Decision
+
+Two viable options for fixing C2+C3+C5:
+
+| | Privy Server Auth | Telegram initData |
+|---|---|---|
+| **Package** | `@privy-io/server-auth` | `@telegram-apps/init-data-node` |
+| **How it works** | Verify Privy JWT access token | Verify HMAC-signed Telegram payload |
+| **Pros** | Already using Privy; get full user object | No Privy dependency; standard Telegram approach |
+| **Cons** | Requires PRIVY_APP_SECRET env var | Only works in Telegram context |
+| **Header** | `Authorization: Bearer <privy-token>` | `Authorization: tma <initData>` |
+
+**Recommendation:** Use **Privy server-auth** since SolSwap is already Privy-based. Add Telegram `initData` as a fallback for endpoints that don't require Privy auth.
 
 ---
 
