@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import {
-    TOKENS,
     TokenInfo,
     QuoteDisplay,
     fetchQuote,
     fetchSwapTransaction,
+    fetchPopularTokens,
     saveWalletAddress,
     fetchHistory,
     SwapRecord,
 } from "./lib/api";
+import { TokenSelector } from "./TokenSelector";
 
 // Telegram WebApp SDK type
 const tg = (window as any).Telegram?.WebApp;
@@ -44,7 +45,8 @@ function uint8ToBase58(bytes: Uint8Array): string {
 }
 
 export function App() {
-    const { ready, authenticated, login, logout } = usePrivy();
+    const { ready, authenticated, logout } = usePrivy();
+    const { login: loginWithTelegram } = useLoginWithTelegram();
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
 
@@ -52,9 +54,39 @@ export function App() {
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletSaved, setWalletSaved] = useState(false);
 
-    // Swap form
-    const [inputToken, setInputToken] = useState<TokenInfo>(TOKENS[0]); // SOL
-    const [outputToken, setOutputToken] = useState<TokenInfo>(TOKENS[1]); // USDC
+    // Auto-login with Telegram when inside the Telegram WebApp
+    useEffect(() => {
+        if (ready && !authenticated && tg?.initData) {
+            loginWithTelegram().catch((err: unknown) =>
+                console.error("Telegram auto-login failed:", err)
+            );
+        }
+    }, [ready, authenticated]);
+
+    // Token loading from Jupiter API
+    const [tokensLoaded, setTokensLoaded] = useState(false);
+    const [inputToken, setInputToken] = useState<TokenInfo | null>(null);
+    const [outputToken, setOutputToken] = useState<TokenInfo | null>(null);
+
+    // Load popular tokens on mount to set defaults
+    useEffect(() => {
+        fetchPopularTokens()
+            .then((tokens) => {
+                if (tokens.length >= 2) {
+                    setInputToken(tokens[0]);  // SOL
+                    setOutputToken(tokens[1]); // USDC
+                }
+                setTokensLoaded(true);
+            })
+            .catch((err) => {
+                console.error("Failed to load tokens:", err);
+                setTokensLoaded(true);
+            });
+    }, []);
+
+    // Token selector modal state
+    const [selectorOpen, setSelectorOpen] = useState<"input" | "output" | null>(null);
+
     const [amount, setAmount] = useState("");
 
     // Quote state
@@ -73,7 +105,7 @@ export function App() {
     const [history, setHistory] = useState<SwapRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
 
-    // Get the embedded Solana wallet from Privy (first wallet is typically the embedded one)
+    // Get the embedded Solana wallet from Privy
     const embeddedWallet = wallets.length > 0 ? wallets[0] : null;
 
     // Set wallet address when embedded wallet is available
@@ -113,8 +145,8 @@ export function App() {
                 inputMint: inputToken.mint,
                 outputMint: outputToken.mint,
                 amount: amountSmallest,
-                inputSymbol: inputToken.symbol,
-                outputSymbol: outputToken.symbol,
+                inputDecimals: inputToken.decimals,
+                outputDecimals: outputToken.decimals,
             });
 
             setQuote({ raw: result.quote, display: result.display });
@@ -140,7 +172,7 @@ export function App() {
         setQuote(null);
     };
 
-    // Execute swap — builds tx then signs via Privy embedded wallet
+    // Execute swap
     const handleSwap = async () => {
         if (!walletAddress || !quote || !embeddedWallet) return;
 
@@ -149,7 +181,6 @@ export function App() {
             setSwapError("");
             setTxSignature(null);
 
-            // 1. Build the unsigned transaction via our API
             const { swapTransaction } = await fetchSwapTransaction({
                 quoteResponse: quote.raw,
                 userPublicKey: walletAddress,
@@ -157,22 +188,18 @@ export function App() {
 
             setSwapStatus("signing");
 
-            // 2. Deserialize the base64 transaction to Uint8Array
             const txBytes = Uint8Array.from(atob(swapTransaction), (c) => c.charCodeAt(0));
 
-            // 3. Sign and send via Privy SDK
             const { signature } = await signAndSendTransaction({
                 transaction: txBytes,
                 wallet: embeddedWallet,
                 chain: "solana:mainnet",
             });
 
-            // Convert signature bytes to base58 string for Solscan link
             const sigString = uint8ToBase58(signature);
             setTxSignature(sigString);
             setSwapStatus("confirming");
 
-            // 4. Wait briefly then mark done
             setTimeout(() => setSwapStatus("done"), 2000);
         } catch (err) {
             console.error("Swap error:", err);
@@ -230,7 +257,7 @@ export function App() {
                     <p className="onboard-text">
                         Swap tokens across Solana, Ethereum, and more — right inside Telegram.
                     </p>
-                    <button className="swap-btn" onClick={() => login()}>
+                    <button className="swap-btn" onClick={() => loginWithTelegram()}>
                         Log In with Telegram
                     </button>
                     <p className="onboard-hint">
@@ -241,19 +268,41 @@ export function App() {
         );
     }
 
-    // Authenticated but wallet not ready yet
-    if (!walletAddress) {
+    // Authenticated but wallet or tokens not ready yet
+    if (!walletAddress || !tokensLoaded) {
         return (
             <div className="app">
                 <div className="loading-screen">
                     <div className="spinner" />
-                    <p>Setting up your wallet...</p>
+                    <p>{!walletAddress ? "Setting up your wallet..." : "Loading tokens..."}</p>
                 </div>
             </div>
         );
     }
 
     // ────────── MAIN SWAP UI ──────────
+
+    /** Renders a token button that opens the selector */
+    const renderTokenButton = (token: TokenInfo | null, side: "input" | "output") => (
+        <button
+            className="token-btn"
+            onClick={() => setSelectorOpen(side)}
+        >
+            {token?.icon && (
+                <img
+                    className="token-btn-icon"
+                    src={token.icon}
+                    alt=""
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+            )}
+            <span className="token-btn-symbol">
+                {token?.symbol ?? "Select"}
+            </span>
+            <span className="token-btn-arrow">▼</span>
+        </button>
+    );
+
     return (
         <div className="app">
             <header className="header">
@@ -269,20 +318,7 @@ export function App() {
                 <div className="token-section">
                     <label className="token-label">You sell</label>
                     <div className="token-row">
-                        <select
-                            className="token-select"
-                            value={inputToken.symbol}
-                            onChange={(e) => {
-                                const t = TOKENS.find((x) => x.symbol === e.target.value);
-                                if (t) setInputToken(t);
-                            }}
-                        >
-                            {TOKENS.map((t) => (
-                                <option key={t.symbol} value={t.symbol}>
-                                    {t.symbol}
-                                </option>
-                            ))}
-                        </select>
+                        {renderTokenButton(inputToken, "input")}
                         <input
                             type="number"
                             className="amount-input"
@@ -317,20 +353,7 @@ export function App() {
                 <div className="token-section">
                     <label className="token-label">You receive</label>
                     <div className="token-row">
-                        <select
-                            className="token-select"
-                            value={outputToken.symbol}
-                            onChange={(e) => {
-                                const t = TOKENS.find((x) => x.symbol === e.target.value);
-                                if (t) setOutputToken(t);
-                            }}
-                        >
-                            {TOKENS.map((t) => (
-                                <option key={t.symbol} value={t.symbol}>
-                                    {t.symbol}
-                                </option>
-                            ))}
-                        </select>
+                        {renderTokenButton(outputToken, "output")}
                         <div className="output-amount">
                             {quoteLoading ? (
                                 <span className="pulse">Fetching...</span>
@@ -349,7 +372,7 @@ export function App() {
                 </div>
 
                 {/* ── Quote breakdown ── */}
-                {quote && (
+                {quote && inputToken && outputToken && (
                     <div className="breakdown">
                         <div className="breakdown-row">
                             <span>Rate</span>
@@ -402,8 +425,8 @@ export function App() {
                                     ? "Swap complete!"
                                     : swapStatus === "error"
                                         ? "Failed — Try Again"
-                                        : quote
-                                            ? `Swap ${amount} ${inputToken.symbol} → ${outputToken.symbol}`
+                                        : quote && inputToken
+                                            ? `Swap ${amount} ${inputToken.symbol} → ${outputToken?.symbol}`
                                             : "Enter an amount"}
                 </button>
 
@@ -447,6 +470,32 @@ export function App() {
                     </div>
                 )}
             </main>
+
+            {/* ── Token Selector Modal ── */}
+            <TokenSelector
+                open={selectorOpen !== null}
+                onClose={() => setSelectorOpen(null)}
+                onSelect={(token) => {
+                    if (selectorOpen === "input") {
+                        // If picking the same token as output, swap them
+                        if (outputToken && token.mint === outputToken.mint) {
+                            setOutputToken(inputToken);
+                        }
+                        setInputToken(token);
+                    } else {
+                        if (inputToken && token.mint === inputToken.mint) {
+                            setInputToken(outputToken);
+                        }
+                        setOutputToken(token);
+                    }
+                    setQuote(null);
+                }}
+                excludeMint={
+                    selectorOpen === "input"
+                        ? outputToken?.mint
+                        : inputToken?.mint
+                }
+            />
 
             {/* ── History Panel ── */}
             {showHistory && (

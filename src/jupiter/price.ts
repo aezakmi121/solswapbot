@@ -1,6 +1,3 @@
-import { config } from "../config";
-import { MINT_TO_SYMBOL, TOKEN_DECIMALS } from "../utils/constants";
-
 const JUPITER_PRICE_URL = "https://lite-api.jup.ag/price/v3";
 
 interface JupiterPriceV3Entry {
@@ -29,17 +26,17 @@ export async function getTokenPriceUsd(mintAddress: string): Promise<number | nu
 
 /**
  * Estimates the USD value of a platform fee for a given swap.
- * Uses the output token's price since the fee is taken from the output.
+ * Accepts outputDecimals directly so we don't need hardcoded lookups.
  */
 export async function estimateFeeUsd(params: {
   outputMint: string;
   feeAmount: string;
+  outputDecimals?: number;
 }): Promise<number | null> {
   const price = await getTokenPriceUsd(params.outputMint);
   if (price === null) return null;
 
-  const symbol = MINT_TO_SYMBOL[params.outputMint];
-  const decimals = symbol ? (TOKEN_DECIMALS[symbol] ?? 9) : 9;
+  const decimals = params.outputDecimals ?? 9;
   const feeTokens = Number(params.feeAmount) / 10 ** decimals;
 
   return feeTokens * price;

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { getQuote } from "../../jupiter/quote";
 import { getTokenPriceUsd, estimateFeeUsd } from "../../jupiter/price";
-import { TOKEN_DECIMALS } from "../../utils/constants";
+import { getTokenDecimals } from "../../jupiter/tokens";
 import { formatTokenAmount } from "../../utils/formatting";
 
 export const quoteRouter = Router();
@@ -10,11 +10,13 @@ export const quoteRouter = Router();
  * GET /api/quote
  * Fetches a swap quote from Jupiter with full USD breakdown.
  *
- * Query params: inputMint, outputMint, amount (smallest unit), inputSymbol, outputSymbol
+ * Query params:
+ *   inputMint, outputMint, amount (smallest unit),
+ *   inputDecimals?, outputDecimals? (from token selector — avoids hardcoded lookup)
  */
 quoteRouter.get("/quote", async (req: Request, res: Response) => {
     try {
-        const { inputMint, outputMint, amount, inputSymbol, outputSymbol } =
+        const { inputMint, outputMint, amount, inputDecimals: inDec, outputDecimals: outDec } =
             req.query as Record<string, string>;
 
         if (!inputMint || !outputMint || !amount) {
@@ -25,11 +27,9 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
         // Get quote from Jupiter
         const quote = await getQuote({ inputMint, outputMint, amount });
 
-        // Calculate display values
-        const inSymbol = (inputSymbol ?? "").toUpperCase();
-        const outSymbol = (outputSymbol ?? "").toUpperCase();
-        const inputDecimals = TOKEN_DECIMALS[inSymbol] ?? 9;
-        const outputDecimals = TOKEN_DECIMALS[outSymbol] ?? 9;
+        // Use decimals from query params, or look up from Jupiter token list
+        const inputDecimals = inDec ? parseInt(inDec, 10) : await getTokenDecimals(inputMint);
+        const outputDecimals = outDec ? parseInt(outDec, 10) : await getTokenDecimals(outputMint);
 
         const outFormatted = formatTokenAmount(quote.outAmount, outputDecimals);
         const feeAmount = quote.platformFee?.amount ?? "0";
@@ -47,7 +47,7 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
         const inputUsdValue = inputPriceUsd !== null ? inputAmount * inputPriceUsd : null;
         const outputUsdValue = outputPriceUsd !== null ? outputTokens * outputPriceUsd : null;
         const exchangeRate = outputTokens / inputAmount;
-        const estimatedFee = await estimateFeeUsd({ outputMint, feeAmount });
+        const estimatedFee = await estimateFeeUsd({ outputMint, feeAmount, outputDecimals });
 
         res.json({
             quote, // Raw quote for swap building
