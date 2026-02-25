@@ -208,9 +208,27 @@ export function App() {
         };
     }, []);
 
+    // Check if the user has enough balance for the swap
+    const insufficientBalance = (() => {
+        if (!inputToken || !amount || Number(amount) <= 0) return false;
+        const bal = getTokenBalance(inputToken.mint);
+        if (bal === null) return false; // Balance unknown — don't block
+        return Number(amount) > bal;
+    })();
+
     // Execute swap
     const handleSwap = async () => {
         if (!walletAddress || !quote || !embeddedWallet || !inputToken || !outputToken) return;
+
+        // Pre-flight balance check — show clear error instead of Privy's generic simulation failure
+        const bal = getTokenBalance(inputToken.mint);
+        if (bal !== null && Number(amount) > bal) {
+            setSwapError(
+                `Insufficient ${inputToken.symbol} balance. You have ${bal < 0.001 ? "<0.001" : bal.toFixed(bal < 1 ? 6 : 4)} ${inputToken.symbol} but tried to swap ${amount}.`
+            );
+            setSwapStatus("error");
+            return;
+        }
 
         try {
             setSwapStatus("building");
@@ -529,7 +547,7 @@ export function App() {
                 {/* ── Swap button ── */}
                 <button
                     className="swap-btn"
-                    disabled={!quote || swapStatus === "building" || swapStatus === "signing" || swapStatus === "confirming"}
+                    disabled={!quote || insufficientBalance || swapStatus === "building" || swapStatus === "signing" || swapStatus === "confirming"}
                     onClick={handleSwap}
                 >
                     {swapStatus === "building"
@@ -542,9 +560,11 @@ export function App() {
                                     ? "Swap complete!"
                                     : swapStatus === "error"
                                         ? "Failed — Try Again"
-                                        : quote && inputToken
-                                            ? `Swap ${amount} ${inputToken.symbol} → ${outputToken?.symbol}`
-                                            : "Enter an amount"}
+                                        : insufficientBalance
+                                            ? `Insufficient ${inputToken?.symbol ?? ""} balance`
+                                            : quote && inputToken
+                                                ? `Swap ${amount} ${inputToken.symbol} → ${outputToken?.symbol}`
+                                                : "Enter an amount"}
                 </button>
 
                 {swapStatus === "done" && txSignature && (
