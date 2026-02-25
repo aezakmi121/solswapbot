@@ -88,10 +88,10 @@ export const CHAINS: Record<string, ChainInfo> = {
 // ─── Token Registry ───────────────────────────────────────────────────
 // Common tokens across chains. Used for ticker-to-address lookups.
 // LI.FI native token address = 0x0000000000000000000000000000000000000000
-// Solana native (SOL) address = 11111111111111111111111111111111 (system program)
+// Solana native (SOL) address = Wrapped SOL (So111...112) — required for Jupiter and LI.FI
 export const CROSS_CHAIN_TOKENS: TokenInfo[] = [
     // Solana tokens
-    { symbol: "SOL", name: "Solana", chainId: "solana", address: "11111111111111111111111111111111", decimals: 9, icon: "🟣" },
+    { symbol: "SOL", name: "Solana", chainId: "solana", address: "So11111111111111111111111111111111111111112", decimals: 9, icon: "🟣" },
     { symbol: "USDC", name: "USD Coin", chainId: "solana", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, icon: "💵" },
     { symbol: "USDT", name: "Tether", chainId: "solana", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6, icon: "💵" },
     { symbol: "BONK", name: "Bonk", chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5, icon: "🐕" },

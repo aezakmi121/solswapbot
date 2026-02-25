@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { App } from "./App";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles/index.css";
 
 // Telegram WebApp initialization
@@ -24,23 +25,25 @@ const solanaConnectors = toSolanaWalletConnectors();
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        <PrivyProvider
-            appId={privyAppId || ""}
-            config={{
-                appearance: {
-                    theme: "#1a1b2e",
-                    accentColor: "#7c5cfc",
-                },
-                loginMethods: ["telegram"],
-                externalWallets: {
-                    solana: { connectors: solanaConnectors },
-                },
-                embeddedWallets: {
-                    solana: { createOnLogin: "all-users" },
-                },
-            }}
-        >
-            <App />
-        </PrivyProvider>
+        <ErrorBoundary>
+            <PrivyProvider
+                appId={privyAppId || ""}
+                config={{
+                    appearance: {
+                        theme: "#1a1b2e",
+                        accentColor: "#7c5cfc",
+                    },
+                    loginMethods: ["telegram"],
+                    externalWallets: {
+                        solana: { connectors: solanaConnectors },
+                    },
+                    embeddedWallets: {
+                        solana: { createOnLogin: "all-users" },
+                    },
+                }}
+            >
+                <App />
+            </PrivyProvider>
+        </ErrorBoundary>
     </StrictMode>
 );

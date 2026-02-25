@@ -143,3 +143,37 @@ export async function fetchHistory(telegramId: string): Promise<SwapRecord[]> {
     const data = await res.json();
     return data.swaps;
 }
+
+/** Confirm a swap after the user signs — records in DB and starts on-chain polling */
+export async function confirmSwap(params: {
+    telegramId: string;
+    txSignature: string;
+    inputMint: string;
+    outputMint: string;
+    inputAmount: string;
+    outputAmount: string;
+    feeAmountUsd?: number | null;
+}): Promise<{ swapId: string; status: string }> {
+    const res = await fetch(`${API_BASE}/api/swap/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to confirm swap");
+    }
+    return res.json();
+}
+
+/** Poll swap confirmation status */
+export async function fetchSwapStatus(
+    swapId: string
+): Promise<{ swapId: string; status: string; txSignature: string | null }> {
+    const res = await fetch(`${API_BASE}/api/swap/status?swapId=${encodeURIComponent(swapId)}`);
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch swap status");
+    }
+    return res.json();
+}

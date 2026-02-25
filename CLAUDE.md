@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-24 | Version: 0.1.0
+> Updated: 2026-02-25 | Version: 0.1.0
 > Read this file FIRST before making any changes.
 
 ---
@@ -180,11 +180,16 @@ Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED`
 
 ## Revenue Flow
 
+> **WARNING (Audit C1):** Fee collection is likely broken. The `feeAccount` in `jupiter/swap.ts`
+> passes a raw wallet address instead of the required Associated Token Account (ATA).
+> Jupiter silently ignores invalid fee accounts. Fees are deducted from quotes but may not
+> be routed to the fee wallet. **Verify on-chain before assuming revenue works.**
+
 ```
 User swaps SOL → USDC via Mini App
   └→ Jupiter API receives platformFeeBps=50
-     └→ 0.5% fee auto-collected into FEE_WALLET_ADDRESS
-        └→ On-chain, trustless — we just pass the param
+     └→ 0.5% fee SHOULD auto-collect into FEE_WALLET_ADDRESS
+        └→ ⚠️ Requires feeAccount to be ATA, not wallet address (see audit C1)
 
 User swaps SOL → ETH (cross-chain)
   └→ LI.FI API routes through best bridge
@@ -201,12 +206,13 @@ User clicks exchange link (future)
 
 ## Coding Patterns
 
-1. **Zod validation** on all external API responses
+1. **Zod validation** on Jupiter API responses (NOT yet on LI.FI — see audit M9)
 2. **Prisma queries** in `src/db/queries/` — one file per domain
-3. **Retry wrapper** via `src/utils/retry.ts` for all HTTP calls
-4. **Input sanitization** via `src/utils/validation.ts`
+3. **Retry wrapper** via `src/utils/retry.ts` — used for Jupiter, NOT for LI.FI or price API (see audit M10)
+4. **Input sanitization** via `src/utils/validation.ts` — inconsistently applied across routes (see audit H8, H9)
 5. **Config validated at startup** — crash early on missing env vars
 6. **Smart routing** — `src/aggregator/router.ts` auto-selects Jupiter (same-chain) vs LI.FI (cross-chain)
+7. **No authentication** — API endpoints have zero auth (see audit C2). Must add `initData` verification
 
 ---
 
@@ -339,7 +345,167 @@ pm2 restart ecosystem.config.js
 
 ---
 
+## Code Audit Report (2026-02-25)
+
+> Full deep-dive audit of every file in the codebase. 6 parallel audits covering:
+> backend routes, bot/middleware, Jupiter/aggregator financial core, scanner/DB/utils,
+> webapp frontend, and config/infrastructure.
+
+### Overall Code Rating: 4.0 / 10
+
+| Category | Rating | Summary |
+|----------|--------|---------|
+| **Security** | 2/10 | No authentication, CORS wildcard, wallet hijacking, fee bypass |
+| **Financial Logic** | 3/10 | Fee collection likely broken, SOL address mismatch, precision loss |
+| **Error Handling** | 4/10 | Inconsistent try/catch, silent failures, fake confirmation |
+| **Code Quality** | 6/10 | Good patterns (Zod, Prisma, retry), but inconsistently applied |
+| **Frontend (React)** | 4/10 | No error boundary, stale quotes, no real tx confirmation |
+| **Infrastructure** | 5/10 | PM2 + Prisma work, but no graceful shutdown, HTTP proxy |
+
+**Verdict:** The architecture and patterns are solid. The codebase is well-structured and
+TypeScript-strict. However, it has **zero authentication**, **likely broken fee collection**,
+and several financial logic bugs that must be fixed before handling real funds.
+
+---
+
+### CRITICAL Issues (Must Fix Before Production)
+
+#### C1. Fee Collection Likely Broken — `feeAccount` is wallet address, not ATA
+- **File:** `src/jupiter/swap.ts:29`
+- **Impact:** The entire 0.5% revenue model may not work. Jupiter's swap API requires the
+  fee account to be a **token account (ATA)** for the output mint, not a raw wallet address.
+  Passing `feeAccount: config.FEE_WALLET_ADDRESS` is silently ignored — fees are deducted
+  from the quote but never routed to the fee wallet.
+- **Fix:** Derive the ATA using `getAssociatedTokenAddress(outputMint, feeWallet)` from
+  `@solana/spl-token` and pass that as the fee account.
+
+#### C2. Zero Authentication on All API Endpoints
+- **Files:** All routes in `src/api/routes/`
+- **Impact:** Anyone on the internet can: read any user's wallet + balance, view any user's
+  swap history, overwrite any user's wallet address, build swap transactions, run unlimited
+  scans. Telegram IDs are sequential integers — trivially enumerable.
+- **Fix:** Implement Telegram `initData` HMAC validation middleware. Extract `telegramId`
+  from the verified payload instead of accepting it as a query/body parameter.
+
+#### C3. Wallet Address Hijacking via POST /api/user/wallet
+- **File:** `src/api/routes/user.ts:68-98`
+- **Impact:** `POST { telegramId: "VICTIM", walletAddress: "ATTACKER" }` overwrites any
+  user's wallet. Combined with C2, this is a direct path to fund misdirection.
+- **Fix:** Auth middleware (C2) + verify wallet ownership via Privy server-side API.
+
+#### C4. CORS Wildcard Allows Any Origin
+- **File:** `src/config.ts:55` — `CORS_ORIGIN` defaults to `"*"`
+- **Impact:** Any website can make authenticated requests to the API from a user's browser.
+- **Fix:** Set `CORS_ORIGIN` to the exact Vercel deployment URL. Reject `"*"` when
+  `NODE_ENV=production`.
+
+#### C5. Telegram `initDataUnsafe` Used Without Server-Side Verification
+- **File:** `webapp/src/App.tsx:20-26`
+- **Impact:** The client reads `tg.initDataUnsafe.user.id` and sends it to the backend, which
+  trusts it blindly. An attacker can forge any Telegram user ID.
+- **Fix:** Send `tg.initData` (the signed string) to the backend. Validate the HMAC signature
+  using the bot token before extracting the user identity.
+
+#### C6. SOL Address Mismatch Between Constants and Chains Registry
+- **Files:** `src/utils/constants.ts:3` vs `src/aggregator/chains.ts:94`
+- **Impact:** `constants.ts` uses Wrapped SOL (`So111...112`, correct for Jupiter).
+  `chains.ts` uses System Program (`111...111`, wrong). Any SOL swap through the cross-chain
+  router endpoint fails or produces incorrect quotes.
+- **Fix:** Change the SOL address in `chains.ts` to Wrapped SOL
+  (`So11111111111111111111111111111111111111112`).
+
+#### C7. Hardcoded VPS IP in vercel.json (Now HTTPS — Update URL)
+- **File:** `webapp/vercel.json:4`
+- **Impact:** IP `76.13.212.116` is hardcoded. SSL is now configured on the VPS domain
+  (`srv1418768.hstgr.cloud`). The vercel.json should be updated to use
+  `https://srv1418768.hstgr.cloud` instead of the raw HTTP IP.
+- **Fix:** Update to `"destination": "https://srv1418768.hstgr.cloud/api/:path*"`.
+
+---
+
+### HIGH Issues (Fix Before Beta Users)
+
+| # | Issue | File(s) | Impact |
+|---|-------|---------|--------|
+| H1 | Unvalidated `quoteResponse` forwarded to Jupiter — fee bypass | `src/api/routes/swap.ts:16` | Attacker can strip `platformFeeBps` from quote and get zero-fee swaps |
+| H2 | Fake 2-second "confirmation" — no on-chain check | `webapp/src/App.tsx:203` | Shows "confirmed" after 2s timeout, tx may still be pending/failed |
+| H3 | Stale quote race condition | `webapp/src/App.tsx:176-208` | User changes amount between quote and swap, executes at wrong price |
+| H4 | `lastValidBlockHeight` ignored | `webapp/src/App.tsx:184` | Transaction submitted after block height expires = guaranteed failure |
+| H5 | Floating-point precision loss on amounts | `webapp/App.tsx:140`, `router.ts:68`, `quote.ts:45` | `0.1 * 10**18` loses precision for EVM tokens. Use BigInt or string math |
+| H6 | Race condition in user creation (TOCTOU) | `src/bot/commands/start.ts:18-57` | Double `/start` = unique constraint violation, unhandled. Use `upsert` |
+| H7 | No try/catch in `startCommand` | `src/bot/commands/start.ts` | DB failure = silent error, user gets no response |
+| H8 | Division by zero in quote route | `src/api/routes/quote.ts:49` | `amount=0` → `exchangeRate = Infinity` → broken JSON response |
+| H9 | `parseInt` without NaN check | `src/api/routes/quote.ts:31-32` | `inDec=abc` → `NaN` cascades through all calculations |
+| H10 | Transaction timeout marked as FAILED | `src/solana/transaction.ts:59-65` | Slow-confirming tx marked FAILED in DB but succeeds on-chain |
+| H11 | Express server not in shutdown handler | `src/app.ts:14` | Open HTTP connections severed on shutdown, in-flight requests lost |
+| H12 | `Swap.txSignature` not indexed | `prisma/schema.prisma:40` | Full table scan on every signature lookup. Add `@@index([txSignature])` |
+
+---
+
+### MEDIUM Issues (Fix During Phase 2)
+
+| # | Issue | File(s) |
+|---|-------|---------|
+| M1 | No API rate limiting (only bot has limits) | `src/api/server.ts` |
+| M2 | No security headers — add `helmet` | `src/api/server.ts` |
+| M3 | N+1 query in history (40 linear scans per request) | `src/api/routes/history.ts:39-53` |
+| M4 | Token list cache thundering herd | `src/jupiter/tokens.ts:34-51` |
+| M5 | Redundant RPC calls in scanner (2x getAccountInfo, 2x getTokenSupply) | `src/scanner/checks.ts` |
+| M6 | Scanner errors counted as "unsafe" (false positive risk scores) | `src/scanner/checks.ts:47,83,126,208` |
+| M7 | No React Error Boundary — white screen on crash | `webapp/src/` |
+| M8 | Swap not recorded in DB after execution | `webapp/src/App.tsx:176-208` |
+| M9 | LI.FI response not Zod-validated (violates project pattern) | `src/aggregator/lifi.ts:116` |
+| M10 | No retry wrapper on LI.FI API calls | `src/aggregator/lifi.ts:88` |
+| M11 | Token-2022 incompatible (hardcoded SPL Token byte offsets) | `src/scanner/checks.ts:30-31,67-68` |
+| M12 | `bot.catch()` swallows errors — only logs `.message`, loses stack/context | `src/bot/index.ts:63-65` |
+| M13 | LI.FI gas cost only takes first entry (understates multi-hop fees) | `src/aggregator/lifi.ts:126` |
+| M14 | Dummy addresses in LI.FI produce unusable `transactionRequest` | `src/aggregator/lifi.ts:65-70` |
+| M15 | Arbirtum + Base chains have zero tokens registered | `src/aggregator/chains.ts:70-115` |
+| M16 | No AbortController on quote fetch — out-of-order responses | `webapp/src/App.tsx:161` |
+| M17 | Missing useEffect dependency: `loginWithTelegram` | `webapp/src/App.tsx:58-64` |
+| M18 | Privy App ID can be empty string — silent SDK failure | `webapp/src/main.tsx:28` |
+| M19 | `User.walletAddress` not indexed in Prisma schema | `prisma/schema.prisma:15` |
+| M20 | `Swap.feeAmountUsd` is Float — precision loss for financial aggregation | `prisma/schema.prisma:39` |
+| M21 | Async Express handlers bypass global error handler | `src/api/server.ts:45-55` |
+| M22 | `@solana/web3.js` still in webapp despite changelog saying removed | `webapp/package.json` |
+| M23 | Unused webapp deps: `@solana-program/compute-budget`, `@solana-program/memo` | `webapp/package.json` |
+| M24 | `@types/express@^5` used with Express 4 runtime | `package.json` |
+| M25 | Retry logic uses fragile string matching (`"429"`, `"503"`) | `src/utils/retry.ts:19-24` |
+
+---
+
+### Priority Fix Order
+
+**Before ANY real money flows:**
+1. C1 — Fix fee collection (ATA derivation)
+2. C2 + C3 + C5 — Add Telegram `initData` auth middleware
+3. C4 — Lock CORS to production origin
+4. C6 — Fix SOL address in chains.ts
+5. C7 — Update vercel.json to HTTPS domain
+6. H1 — Validate quoteResponse server-side (prevent fee bypass)
+
+**Before beta users:**
+7. H2 + H4 — Real on-chain confirmation (use backend polling or RPC check)
+8. H5 — BigInt arithmetic for token amounts
+9. H6 + H7 — Upsert + try/catch in startCommand
+10. H8 + H9 — Input validation on quote parameters
+11. M1 + M2 — Rate limiting + helmet
+12. M7 — React Error Boundary
+13. M8 — Record swaps in DB after execution
+
+---
+
 ## Changelog
+
+### 2026-02-25 — Full Codebase Audit
+- Comprehensive deep-dive audit of every file (6 parallel audits)
+- Identified 7 CRITICAL, 12 HIGH, 25 MEDIUM issues
+- Overall rating: 4.0/10 — solid architecture, critical security gaps
+- Key findings: fee collection likely broken (C1), zero API auth (C2), wallet hijacking (C3)
+- SOL address mismatch between constants.ts and chains.ts (C6)
+- Added priority fix order and detailed findings to CLAUDE.md
+- Updated Revenue Flow with fee collection warning
+- Corrected Coding Patterns to reflect actual (not aspirational) state
 
 ### 2026-02-24 — Phase 1: Privy Wallet Integration
 - Integrated @privy-io/react-auth SDK in webapp (v3.14.1)
