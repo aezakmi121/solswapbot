@@ -1,5 +1,22 @@
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+// Telegram WebApp SDK — used for authenticated API calls
+const tg = (window as any).Telegram?.WebApp;
+
+/**
+ * Get auth headers for authenticated API calls.
+ * Sends the signed initData string (not initDataUnsafe) so the backend
+ * can verify the HMAC signature and extract the telegramId securely (C2/C5).
+ */
+function getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    const initData = tg?.initData;
+    if (initData) {
+        headers["Authorization"] = `tma ${initData}`;
+    }
+    return headers;
+}
+
 /** Token info returned by the backend (sourced from Jupiter) */
 export interface TokenInfo {
     symbol: string;
@@ -76,8 +93,10 @@ export async function searchTokens(query: string): Promise<TokenInfo[]> {
     return data.tokens;
 }
 
-export async function fetchUser(telegramId: string): Promise<UserData> {
-    const res = await fetch(`${API_BASE}/api/user?telegramId=${telegramId}`);
+export async function fetchUser(): Promise<UserData> {
+    const res = await fetch(`${API_BASE}/api/user`, {
+        headers: getAuthHeaders(),
+    });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Failed to fetch user");
@@ -95,7 +114,9 @@ export async function fetchQuote(params: {
         outputMint: params.outputMint,
         humanAmount: params.humanAmount,
     });
-    const res = await fetch(`${API_BASE}/api/quote?${searchParams}`);
+    const res = await fetch(`${API_BASE}/api/quote?${searchParams}`, {
+        headers: getAuthHeaders(),
+    });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
         throw new Error(body.error || "Failed to get quote");
@@ -109,7 +130,7 @@ export async function fetchSwapTransaction(params: {
 }): Promise<{ swapTransaction: string; lastValidBlockHeight: number }> {
     const res = await fetch(`${API_BASE}/api/swap`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(params),
     });
     if (!res.ok) {
@@ -121,13 +142,12 @@ export async function fetchSwapTransaction(params: {
 
 /** Save a Privy-managed wallet address to the user's account */
 export async function saveWalletAddress(
-    telegramId: string,
     walletAddress: string
 ): Promise<void> {
     const res = await fetch(`${API_BASE}/api/user/wallet`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, walletAddress }),
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ walletAddress }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
@@ -136,8 +156,10 @@ export async function saveWalletAddress(
 }
 
 /** Fetch swap history for a user */
-export async function fetchHistory(telegramId: string): Promise<SwapRecord[]> {
-    const res = await fetch(`${API_BASE}/api/history?telegramId=${telegramId}`);
+export async function fetchHistory(): Promise<SwapRecord[]> {
+    const res = await fetch(`${API_BASE}/api/history`, {
+        headers: getAuthHeaders(),
+    });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
         throw new Error(body.error || "Failed to fetch history");
@@ -148,7 +170,6 @@ export async function fetchHistory(telegramId: string): Promise<SwapRecord[]> {
 
 /** Confirm a swap after the user signs — records in DB and starts on-chain polling */
 export async function confirmSwap(params: {
-    telegramId: string;
     txSignature: string;
     inputMint: string;
     outputMint: string;
@@ -158,7 +179,7 @@ export async function confirmSwap(params: {
 }): Promise<{ swapId: string; status: string }> {
     const res = await fetch(`${API_BASE}/api/swap/confirm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(params),
     });
     if (!res.ok) {
@@ -172,7 +193,9 @@ export async function confirmSwap(params: {
 export async function fetchSwapStatus(
     swapId: string
 ): Promise<{ swapId: string; status: string; txSignature: string | null }> {
-    const res = await fetch(`${API_BASE}/api/swap/status?swapId=${encodeURIComponent(swapId)}`);
+    const res = await fetch(`${API_BASE}/api/swap/status?swapId=${encodeURIComponent(swapId)}`, {
+        headers: getAuthHeaders(),
+    });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
         throw new Error(body.error || "Failed to fetch swap status");
@@ -183,7 +206,8 @@ export async function fetchSwapStatus(
 /** Fetch SOL + SPL token balances for a wallet */
 export async function fetchBalances(walletAddress: string): Promise<TokenBalance[]> {
     const res = await fetch(
-        `${API_BASE}/api/user/balances?walletAddress=${encodeURIComponent(walletAddress)}`
+        `${API_BASE}/api/user/balances?walletAddress=${encodeURIComponent(walletAddress)}`,
+        { headers: getAuthHeaders() }
     );
     if (!res.ok) return [];
     const data = await res.json();

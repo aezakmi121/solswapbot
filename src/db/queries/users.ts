@@ -25,6 +25,33 @@ export function createUser(params: {
   });
 }
 
+/**
+ * Upsert user: create if new, update username if existing.
+ * Returns { user, isNew } — avoids TOCTOU race condition (H6).
+ */
+export async function upsertUser(params: {
+  telegramId: string;
+  telegramUsername?: string;
+  referredById?: string;
+}): Promise<{ user: Awaited<ReturnType<typeof prisma.user.upsert>>; isNew: boolean }> {
+  // Check if user exists first to determine isNew status
+  const existing = await prisma.user.findUnique({ where: { telegramId: params.telegramId } });
+
+  const user = await prisma.user.upsert({
+    where: { telegramId: params.telegramId },
+    update: {
+      telegramUsername: params.telegramUsername ?? undefined,
+    },
+    create: {
+      telegramId: params.telegramId,
+      telegramUsername: params.telegramUsername ?? null,
+      referredById: params.referredById ?? null,
+    },
+  });
+
+  return { user, isNew: !existing };
+}
+
 /** Update a user's connected wallet address */
 export function updateUserWallet(telegramId: string, walletAddress: string) {
   return prisma.user.update({

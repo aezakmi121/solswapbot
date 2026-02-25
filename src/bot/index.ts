@@ -59,9 +59,9 @@ export function createBot(): Bot {
     )
   );
 
-  // Error handler
+  // Error handler — log full error object for debugging
   bot.catch((err) => {
-    console.error("Bot error:", err.message);
+    console.error("Bot error:", err);
   });
 
   return bot;

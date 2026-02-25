@@ -8,18 +8,13 @@ import { isValidSolanaAddress } from "../../utils/validation";
 export const userRouter = Router();
 
 /**
- * GET /api/user?telegramId=<ID>
+ * GET /api/user
  * Returns the user's wallet address and SOL balance.
- * Used by the Mini App to identify the user and show their wallet.
+ * telegramId is extracted from verified initData by auth middleware (C2/C5).
  */
-userRouter.get("/user", async (req: Request, res: Response) => {
+userRouter.get("/user", async (_req: Request, res: Response) => {
     try {
-        const telegramId = req.query.telegramId as string;
-
-        if (!telegramId) {
-            res.status(400).json({ error: "Missing telegramId" });
-            return;
-        }
+        const telegramId = res.locals.telegramId as string;
 
         const user = await findUserByTelegramId(telegramId);
 
@@ -62,16 +57,17 @@ userRouter.get("/user", async (req: Request, res: Response) => {
 /**
  * POST /api/user/wallet
  * Saves a Privy-managed wallet address to the user's account.
- * Called automatically when the Mini App detects a new embedded wallet.
+ * telegramId from verified initData — prevents wallet hijacking (C3).
  *
- * Body: { telegramId, walletAddress }
+ * Body: { walletAddress }
  */
 userRouter.post("/user/wallet", async (req: Request, res: Response) => {
     try {
-        const { telegramId, walletAddress } = req.body;
+        const telegramId = res.locals.telegramId as string;
+        const { walletAddress } = req.body;
 
-        if (!telegramId || !walletAddress) {
-            res.status(400).json({ error: "Missing telegramId or walletAddress" });
+        if (!walletAddress) {
+            res.status(400).json({ error: "Missing walletAddress" });
             return;
         }
 
