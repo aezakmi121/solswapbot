@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { config } from "../config";
+import { telegramAuthMiddleware } from "./middleware/telegramAuth";
 import { quoteRouter } from "./routes/quote";
 import { swapRouter } from "./routes/swap";
 import { priceRouter } from "./routes/price";
@@ -17,8 +20,13 @@ import { historyRouter } from "./routes/history";
 export function createApiServer(): express.Express {
     const app = express();
 
-    // Middleware
+    // Security headers (M2)
+    app.use(helmet());
+
+    // Body parsing
     app.use(express.json());
+
+    // CORS — locked to specific origin in production (C4)
     app.use(
         cors({
             origin: config.CORS_ORIGIN,
@@ -26,22 +34,34 @@ export function createApiServer(): express.Express {
         })
     );
 
-    // Health check
+    // Global rate limiting — 100 requests per minute per IP (M1)
+    const apiLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 100,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: "Too many requests, please try again later" },
+    });
+    app.use("/api", apiLimiter);
+
+    // Health check — no auth required
     app.get("/api/health", (_req, res) => {
         res.json({ status: "ok", timestamp: Date.now() });
     });
 
-    // API routes
-    app.use("/api", quoteRouter);
-    app.use("/api", swapRouter);
+    // Public routes — no auth needed (read-only token/price data)
     app.use("/api", priceRouter);
     app.use("/api", tokensRouter);
-    app.use("/api", userRouter);
-    app.use("/api", scanRouter);
-    app.use("/api", crossChainRouter);
-    app.use("/api", historyRouter);
 
-    // Error handler
+    // Protected routes — require valid Telegram initData (C2/C3/C5)
+    app.use("/api", telegramAuthMiddleware, quoteRouter);
+    app.use("/api", telegramAuthMiddleware, swapRouter);
+    app.use("/api", telegramAuthMiddleware, userRouter);
+    app.use("/api", telegramAuthMiddleware, scanRouter);
+    app.use("/api", telegramAuthMiddleware, crossChainRouter);
+    app.use("/api", telegramAuthMiddleware, historyRouter);
+
+    // Global error handler (improved: logs full error object)
     app.use(
         (
             err: Error,
@@ -49,7 +69,7 @@ export function createApiServer(): express.Express {
             res: express.Response,
             _next: express.NextFunction
         ) => {
-            console.error("API error:", err.message);
+            console.error("API error:", err);
             res.status(500).json({ error: "Internal server error" });
         }
     );
@@ -58,11 +78,15 @@ export function createApiServer(): express.Express {
 }
 
 /** Start the API server on the configured port */
-export function startApiServer(): void {
+export function startApiServer(): express.Express {
     const app = createApiServer();
     const port = config.API_PORT;
 
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
         console.log(`API server running on port ${port}`);
     });
+
+    // Expose server for graceful shutdown (H11)
+    (app as any)._server = server;
+    return app;
 }

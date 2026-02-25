@@ -12,17 +12,13 @@ async function mintToSymbol(mint: string): Promise<string> {
 }
 
 /**
- * GET /api/history?telegramId=<ID>
+ * GET /api/history
  * Returns the user's last 20 swaps.
+ * telegramId extracted from verified initData by auth middleware.
  */
-historyRouter.get("/history", async (req: Request, res: Response) => {
+historyRouter.get("/history", async (_req: Request, res: Response) => {
     try {
-        const telegramId = req.query.telegramId as string;
-
-        if (!telegramId) {
-            res.status(400).json({ error: "Missing telegramId" });
-            return;
-        }
+        const telegramId = res.locals.telegramId as string;
 
         const user = await findUserByTelegramId(telegramId);
         if (!user) {

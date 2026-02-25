@@ -56,7 +56,32 @@ export async function pollTransactionStatus(
     await sleep(POLL_INTERVAL_MS);
   }
 
-  // Timed out — mark as failed
+  // Timed out — search transaction history as a final check before giving up (H10)
+  try {
+    const finalCheck = await connection.getSignatureStatus(txSignature, {
+      searchTransactionHistory: true,
+    });
+    if (finalCheck.value?.confirmationStatus === "confirmed" || finalCheck.value?.confirmationStatus === "finalized") {
+      await prisma.swap.update({
+        where: { id: swapId },
+        data: { status: "CONFIRMED" },
+      });
+      console.log(`Swap ${swapId} tx ${txSignature} CONFIRMED (found in history after timeout)`);
+      return "CONFIRMED";
+    }
+    if (finalCheck.value?.err) {
+      await prisma.swap.update({
+        where: { id: swapId },
+        data: { status: "FAILED" },
+      });
+      console.log(`Swap ${swapId} tx ${txSignature} FAILED on-chain (found in history)`);
+      return "FAILED";
+    }
+  } catch {
+    // Final check failed — fall through to mark as failed
+  }
+
+  // Truly timed out with no on-chain result
   await prisma.swap.update({
     where: { id: swapId },
     data: { status: "FAILED" },

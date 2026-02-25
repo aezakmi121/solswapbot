@@ -21,15 +21,6 @@ import { TokenSelector } from "./TokenSelector";
 // Telegram WebApp SDK type
 const tg = (window as any).Telegram?.WebApp;
 
-/** Get the Telegram user ID from the WebApp SDK */
-function getTelegramUserId(): string | null {
-    try {
-        return tg?.initDataUnsafe?.user?.id?.toString() ?? null;
-    } catch {
-        return null;
-    }
-}
-
 /** Convert a Uint8Array signature to base58 string for Solscan links */
 function uint8ToBase58(bytes: Uint8Array): string {
     const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -125,13 +116,12 @@ export function App() {
         }
     }, [embeddedWallet?.address]);
 
-    // Save wallet to backend when we have both telegramId and wallet
+    // Save wallet to backend (auth header carries telegramId securely)
     useEffect(() => {
         if (!walletAddress || walletSaved) return;
-        const telegramId = getTelegramUserId();
-        if (!telegramId) return;
+        if (!tg?.initData) return;
 
-        saveWalletAddress(telegramId, walletAddress)
+        saveWalletAddress(walletAddress)
             .then(() => setWalletSaved(true))
             .catch((err: unknown) => console.error("Failed to save wallet:", err));
     }, [walletAddress, walletSaved]);
@@ -139,9 +129,8 @@ export function App() {
     // Fetch SOL balance + all token balances when wallet is ready
     const refreshBalance = useCallback(() => {
         if (!walletAddress) return;
-        const telegramId = getTelegramUserId();
-        if (telegramId) {
-            fetchUser(telegramId)
+        if (tg?.initData) {
+            fetchUser()
                 .then((data) => setSolBalance(data.solBalance))
                 .catch(() => {});
         }
@@ -255,54 +244,46 @@ export function App() {
             setSwapStatus("confirming");
 
             // Record swap in DB and start backend confirmation polling
-            const telegramId = getTelegramUserId();
-            if (telegramId) {
-                try {
-                    const { swapId } = await confirmSwap({
-                        telegramId,
-                        txSignature: sigString,
-                        inputMint: inputToken.mint,
-                        outputMint: outputToken.mint,
-                        inputAmount: quote.raw.inAmount,
-                        outputAmount: quote.raw.outAmount,
-                        feeAmountUsd: quote.display.feeUsd,
-                    });
+            try {
+                const { swapId } = await confirmSwap({
+                    txSignature: sigString,
+                    inputMint: inputToken.mint,
+                    outputMint: outputToken.mint,
+                    inputAmount: quote.raw.inAmount,
+                    outputAmount: quote.raw.outAmount,
+                    feeAmountUsd: quote.display.feeUsd,
+                });
 
-                    // Poll for on-chain confirmation from the backend
-                    if (confirmPollRef.current) clearInterval(confirmPollRef.current);
-                    let pollCount = 0;
-                    confirmPollRef.current = setInterval(async () => {
-                        pollCount++;
-                        try {
-                            const result = await fetchSwapStatus(swapId);
-                            if (result.status === "CONFIRMED") {
-                                clearInterval(confirmPollRef.current);
-                                setSwapStatus("done");
-                                refreshBalance();
-                            } else if (result.status === "FAILED") {
-                                clearInterval(confirmPollRef.current);
-                                setSwapError("Transaction failed on-chain");
-                                setSwapStatus("error");
-                            }
-                        } catch {
-                            // Polling error — keep trying
-                        }
-                        // Stop polling after ~2 minutes (40 attempts x 3s)
-                        if (pollCount >= 40) {
+                // Poll for on-chain confirmation from the backend
+                if (confirmPollRef.current) clearInterval(confirmPollRef.current);
+                let pollCount = 0;
+                confirmPollRef.current = setInterval(async () => {
+                    pollCount++;
+                    try {
+                        const result = await fetchSwapStatus(swapId);
+                        if (result.status === "CONFIRMED") {
                             clearInterval(confirmPollRef.current);
-                            // Don't mark as error — backend will keep polling
                             setSwapStatus("done");
                             refreshBalance();
+                        } else if (result.status === "FAILED") {
+                            clearInterval(confirmPollRef.current);
+                            setSwapError("Transaction failed on-chain");
+                            setSwapStatus("error");
                         }
-                    }, 3000);
-                } catch (confirmErr) {
-                    console.error("Failed to record swap:", confirmErr);
-                    // Swap was already sent on-chain — show as done even if DB save fails
-                    setSwapStatus("done");
-                    refreshBalance();
-                }
-            } else {
-                // No telegram ID — can't record, just show done
+                    } catch {
+                        // Polling error — keep trying
+                    }
+                    // Stop polling after ~2 minutes (40 attempts x 3s)
+                    if (pollCount >= 40) {
+                        clearInterval(confirmPollRef.current);
+                        // Don't mark as error — backend will keep polling
+                        setSwapStatus("done");
+                        refreshBalance();
+                    }
+                }, 3000);
+            } catch (confirmErr) {
+                console.error("Failed to record swap:", confirmErr);
+                // Swap was already sent on-chain — show as done even if DB save fails
                 setSwapStatus("done");
                 refreshBalance();
             }
@@ -315,10 +296,8 @@ export function App() {
 
     // Load swap history
     const loadHistory = async () => {
-        const telegramId = getTelegramUserId();
-        if (!telegramId) return;
         try {
-            const data = await fetchHistory(telegramId);
+            const data = await fetchHistory();
             setHistory(data);
             setShowHistory(true);
         } catch (err) {

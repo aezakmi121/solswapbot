@@ -3,6 +3,7 @@ import { getQuote } from "../../jupiter/quote";
 import { getTokenPriceUsd, estimateFeeUsd } from "../../jupiter/price";
 import { getTokenDecimals } from "../../jupiter/tokens";
 import { formatTokenAmount } from "../../utils/formatting";
+import { isValidPublicKey } from "../../utils/validation";
 
 export const quoteRouter = Router();
 
@@ -25,6 +26,12 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
             return;
         }
 
+        // H8/H9: Validate mint addresses are valid Solana public keys
+        if (!isValidPublicKey(inputMint) || !isValidPublicKey(outputMint)) {
+            res.status(400).json({ error: "Invalid mint address" });
+            return;
+        }
+
         // Look up decimals from the authoritative Jupiter token list
         const inputDecimals = await getTokenDecimals(inputMint);
         const outputDecimals = await getTokenDecimals(outputMint);
@@ -41,6 +48,11 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
             }
             amountSmallest = BigInt(Math.round(humanAmountNum * 10 ** inputDecimals)).toString();
         } else {
+            // H9: Validate rawAmount is a valid integer string before using it
+            if (!/^\d+$/.test(rawAmount)) {
+                res.status(400).json({ error: "Invalid amount: must be a positive integer (smallest units)" });
+                return;
+            }
             // Legacy path: amount already in smallest units
             amountSmallest = rawAmount;
             humanAmountNum = Number(rawAmount) / 10 ** inputDecimals;

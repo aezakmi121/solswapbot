@@ -23,11 +23,10 @@ swapRouter.post("/swap", async (req: Request, res: Response) => {
             return;
         }
 
-        // H1: Validate that platformFeeBps hasn't been stripped from the quote.
-        // An attacker could submit a modified quoteResponse with feeBps=0.
-        const feeBps = quoteResponse.platformFee?.feeBps;
-        if (feeBps !== undefined && feeBps !== config.PLATFORM_FEE_BPS) {
-            res.status(400).json({ error: "Invalid platform fee in quote" });
+        // H1: Validate that platformFeeBps is PRESENT and correct.
+        // An attacker could strip platformFee entirely to get zero-fee swaps.
+        if (!quoteResponse.platformFee || quoteResponse.platformFee.feeBps !== config.PLATFORM_FEE_BPS) {
+            res.status(400).json({ error: "Invalid or missing platform fee in quote" });
             return;
         }
 
@@ -51,14 +50,16 @@ swapRouter.post("/swap", async (req: Request, res: Response) => {
  * POST /api/swap/confirm
  * Called by the frontend after the user signs and sends the transaction.
  * Creates a swap record in the DB and starts background confirmation polling.
+ * telegramId from verified initData — no spoofing possible (C2).
  *
- * Body: { telegramId, txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }
+ * Body: { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }
  */
 swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
     try {
-        const { telegramId, txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd } = req.body;
+        const telegramId = res.locals.telegramId as string;
+        const { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd } = req.body;
 
-        if (!telegramId || !txSignature || !inputMint || !outputMint || !inputAmount || !outputAmount) {
+        if (!txSignature || !inputMint || !outputMint || !inputAmount || !outputAmount) {
             res.status(400).json({ error: "Missing required fields" });
             return;
         }
