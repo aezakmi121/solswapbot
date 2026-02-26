@@ -20,6 +20,10 @@ import { historyRouter } from "./routes/history";
 export function createApiServer(): express.Express {
     const app = express();
 
+    // Trust the first proxy (Vercel/Nginx) so express-rate-limit reads the real client IP
+    // from X-Forwarded-For instead of seeing every request as the same proxy IP.
+    app.set("trust proxy", 1);
+
     // Security headers (M2)
     app.use(helmet());
 

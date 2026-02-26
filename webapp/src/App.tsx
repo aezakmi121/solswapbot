@@ -144,10 +144,17 @@ export function App() {
         refreshBalance();
     }, [walletAddress, refreshBalance]);
 
-    /** Get the user's balance for a specific token mint */
+    /** Get the user's balance for a specific token mint.
+     *  Returns 0 (not null) when balances have loaded but the token isn't held,
+     *  so the UI correctly blocks swaps for tokens the user doesn't own. */
+    const balancesLoaded = tokenBalances.length > 0;
     const getTokenBalance = (mint: string): number | null => {
         const entry = tokenBalances.find((b) => b.mint === mint);
-        return entry?.amount ?? null;
+        if (entry) return entry.amount;
+        // If we've loaded balances but this token isn't in the list, the user holds 0
+        if (balancesLoaded) return 0;
+        // Balances haven't loaded yet — truly unknown
+        return null;
     };
 
     // Fetch quote when inputs change (debounced)
