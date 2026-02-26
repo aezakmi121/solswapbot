@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
-import { PortfolioToken, fetchSendTransaction } from "../lib/api";
+import { PortfolioToken, fetchSendTransaction, confirmTransfer } from "../lib/api";
 import { toast } from "../lib/toast";
 
 interface SendFlowProps {
@@ -80,7 +80,18 @@ export function SendFlow({ portfolioTokens, walletAddress, onClose, onSent }: Se
                 chain: "solana:mainnet",
             });
 
-            setTxSig(uint8ToBase58(signature));
+            const sig = uint8ToBase58(signature);
+            setTxSig(sig);
+
+            // Fire-and-forget: record the send in the DB for activity history
+            confirmTransfer({
+                txSignature: sig,
+                tokenMint: selectedToken.mint,
+                tokenSymbol: selectedToken.symbol,
+                humanAmount: amount,
+                recipientAddress: recipient.trim(),
+            }).catch((err) => console.error("Failed to record transfer:", err));
+
             setStep("done");
             toast("Transaction sent!", "success");
             onSent?.();

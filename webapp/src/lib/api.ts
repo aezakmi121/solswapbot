@@ -282,6 +282,60 @@ export async function fetchTokenScan(mint: string): Promise<ScanResult> {
     return res.json();
 }
 
+export type ActivityItem =
+    | {
+          id: string;
+          type: "swap";
+          inputSymbol: string;
+          outputSymbol: string;
+          txSignature: string | null;
+          status: string;
+          createdAt: string;
+      }
+    | {
+          id: string;
+          type: "send";
+          tokenSymbol: string;
+          humanAmount: string;
+          recipientAddress: string;
+          txSignature: string | null;
+          status: string;
+          createdAt: string;
+      };
+
+/** Record a completed outbound send in the database */
+export async function confirmTransfer(params: {
+    txSignature: string;
+    tokenMint: string;
+    tokenSymbol?: string;
+    humanAmount: string;
+    recipientAddress: string;
+}): Promise<{ transferId: string; status: string }> {
+    const res = await fetch(`${API_BASE}/api/transfer/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to record transfer");
+    }
+    return res.json();
+}
+
+/** Fetch unified activity (swaps + sends), sorted newest first */
+export async function fetchActivity(): Promise<ActivityItem[]> {
+    const res = await fetch(`${API_BASE}/api/activity`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch activity");
+    }
+    const data = await res.json();
+    return data.activity;
+}
+
 /** Build an unsigned transfer transaction for SOL or SPL tokens */
 export async function fetchSendTransaction(params: {
     tokenMint: string;
