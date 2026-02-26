@@ -38,6 +38,8 @@ interface SwapPanelProps {
     tokenBalances: TokenBalance[];
     balancesLoaded: boolean;
     refreshBalance: () => void;
+    slippageBps: number;
+    onOpenSettings: () => void;
 }
 
 /** Max age for a quote before we force a re-fetch (H3/H4) */
@@ -48,6 +50,8 @@ export function SwapPanel({
     tokenBalances,
     balancesLoaded,
     refreshBalance,
+    slippageBps,
+    onOpenSettings,
 }: SwapPanelProps) {
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -135,6 +139,7 @@ export function SwapPanel({
                 inputMint: snapshotInputMint,
                 outputMint: snapshotOutputMint,
                 humanAmount: snapshotAmount,
+                slippageBps,
             });
 
             if (controller.signal.aborted) return;
@@ -156,7 +161,7 @@ export function SwapPanel({
                 setQuoteLoading(false);
             }
         }
-    }, [inputToken, outputToken, amount]);
+    }, [inputToken, outputToken, amount, slippageBps]);
 
     useEffect(() => {
         const timer = setTimeout(getQuote, 600);
@@ -357,9 +362,14 @@ export function SwapPanel({
         <div className="swap-panel">
             <div className="panel-header">
                 <h2 className="panel-title">Swap</h2>
-                <button className="history-link-btn" onClick={loadHistory}>
-                    History
-                </button>
+                <div className="panel-header-right">
+                    <button className="slippage-indicator" onClick={onOpenSettings} title="Adjust slippage in Settings">
+                        ⚙️ {(slippageBps / 100).toFixed(1)}%
+                    </button>
+                    <button className="history-link-btn" onClick={loadHistory}>
+                        History
+                    </button>
+                </div>
             </div>
 
             <div className="swap-card">

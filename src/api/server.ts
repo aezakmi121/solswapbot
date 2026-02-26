@@ -12,6 +12,7 @@ import { userRouter } from "./routes/user";
 import { scanRouter } from "./routes/scan";
 import { crossChainRouter } from "./routes/crossChain";
 import { historyRouter } from "./routes/history";
+import { sendRouter } from "./routes/send";
 
 /**
  * Creates and configures the Express API server.
@@ -64,6 +65,7 @@ export function createApiServer(): express.Express {
     app.use("/api", telegramAuthMiddleware, scanRouter);
     app.use("/api", telegramAuthMiddleware, crossChainRouter);
     app.use("/api", telegramAuthMiddleware, historyRouter);
+    app.use("/api", telegramAuthMiddleware, sendRouter);
 
     // Global error handler (improved: logs full error object)
     app.use(

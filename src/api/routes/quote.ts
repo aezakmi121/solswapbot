@@ -18,7 +18,7 @@ export const quoteRouter = Router();
  */
 quoteRouter.get("/quote", async (req: Request, res: Response) => {
     try {
-        const { inputMint, outputMint, humanAmount, amount: rawAmount } =
+        const { inputMint, outputMint, humanAmount, amount: rawAmount, slippageBps: slippageBpsParam } =
             req.query as Record<string, string>;
 
         if (!inputMint || !outputMint || (!humanAmount && !rawAmount)) {
@@ -62,8 +62,18 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
             }
         }
 
+        // Parse optional slippageBps (user-defined, validated 0-5000)
+        let slippageBps: number | undefined;
+        if (slippageBpsParam) {
+            slippageBps = parseInt(slippageBpsParam, 10);
+            if (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps > 5000) {
+                res.status(400).json({ error: "Invalid slippageBps: must be 0–5000" });
+                return;
+            }
+        }
+
         // Get quote from Jupiter
-        const quote = await getQuote({ inputMint, outputMint, amount: amountSmallest });
+        const quote = await getQuote({ inputMint, outputMint, amount: amountSmallest, slippageBps });
 
         const outFormatted = formatTokenAmount(quote.outAmount, outputDecimals);
         const feeAmount = quote.platformFee?.amount ?? "0";
