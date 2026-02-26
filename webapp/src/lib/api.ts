@@ -48,6 +48,8 @@ export interface UserData {
     telegramId: string;
     walletAddress: string | null;
     solBalance: number | null;
+    referralCode?: string;
+    referralCount?: number;
     message?: string;
 }
 
@@ -108,12 +110,16 @@ export async function fetchQuote(params: {
     inputMint: string;
     outputMint: string;
     humanAmount: string;
+    slippageBps?: number;
 }): Promise<QuoteResponse> {
     const searchParams = new URLSearchParams({
         inputMint: params.inputMint,
         outputMint: params.outputMint,
         humanAmount: params.humanAmount,
     });
+    if (params.slippageBps !== undefined) {
+        searchParams.set("slippageBps", String(params.slippageBps));
+    }
     const res = await fetch(`${API_BASE}/api/quote?${searchParams}`, {
         headers: getAuthHeaders(),
     });
@@ -241,4 +247,56 @@ export async function fetchBalances(walletAddress: string): Promise<TokenBalance
     if (!res.ok) return [];
     const data = await res.json();
     return data.balances ?? [];
+}
+
+export interface ScanCheckResult {
+    name: string;
+    safe: boolean;
+    detail: string;
+    weight: number;
+}
+
+export interface ScanResult {
+    mintAddress: string;
+    riskScore: number;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    checks: ScanCheckResult[];
+    tokenInfo: {
+        supply: string | null;
+        decimals: number | null;
+        price: number | null;
+    };
+    scannedAt: string;
+}
+
+/** Scan a token for safety risks */
+export async function fetchTokenScan(mint: string): Promise<ScanResult> {
+    const res = await fetch(
+        `${API_BASE}/api/scan?mint=${encodeURIComponent(mint)}`,
+        { headers: getAuthHeaders() }
+    );
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to scan token");
+    }
+    return res.json();
+}
+
+/** Build an unsigned transfer transaction for SOL or SPL tokens */
+export async function fetchSendTransaction(params: {
+    tokenMint: string;
+    recipientAddress: string;
+    amount: number;
+    senderAddress: string;
+}): Promise<{ transaction: string; lastValidBlockHeight: number }> {
+    const res = await fetch(`${API_BASE}/api/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to build transfer transaction");
+    }
+    return res.json();
 }

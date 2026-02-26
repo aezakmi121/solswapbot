@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { findUserByTelegramId, updateUserWallet } from "../../db/queries/users";
+import { findUserByTelegramId, updateUserWallet, getUserWithReferralCount } from "../../db/queries/users";
 import { connection } from "../../solana/connection";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
@@ -18,18 +18,22 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
     try {
         const telegramId = res.locals.telegramId as string;
 
-        const user = await findUserByTelegramId(telegramId);
+        const user = await getUserWithReferralCount(telegramId);
 
         if (!user) {
             res.status(404).json({ error: "User not found. Start the bot with /start first." });
             return;
         }
 
+        const referralCount = user._count.referrals;
+
         if (!user.walletAddress) {
             res.json({
                 telegramId: user.telegramId,
                 walletAddress: null,
                 solBalance: null,
+                referralCode: user.referralCode,
+                referralCount,
                 message: "No wallet connected. Open the Mini App to set up your wallet.",
             });
             return;
@@ -49,6 +53,8 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
             telegramId: user.telegramId,
             walletAddress: user.walletAddress,
             solBalance,
+            referralCode: user.referralCode,
+            referralCount,
         });
     } catch (err) {
         console.error("User API error:", err);

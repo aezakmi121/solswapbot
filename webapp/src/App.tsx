@@ -10,12 +10,22 @@ import {
 import { TabBar, TabId } from "./components/TabBar";
 import { SwapPanel } from "./components/SwapPanel";
 import { WalletTab } from "./components/WalletTab";
+import { ScanPanel } from "./components/ScanPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
+
+const SLIPPAGE_KEY = "solswap_slippage_bps";
+
+function loadSlippage(): number {
+    const stored = localStorage.getItem(SLIPPAGE_KEY);
+    const parsed = stored ? parseInt(stored, 10) : NaN;
+    return !isNaN(parsed) && parsed > 0 && parsed <= 5000 ? parsed : 50;
+}
 
 // Telegram WebApp SDK
 const tg = (window as any).Telegram?.WebApp;
 
 export function App() {
-    const { ready, authenticated, logout } = usePrivy();
+    const { ready, authenticated } = usePrivy();
     const { login: loginWithTelegram } = useLoginWithTelegram();
     const { wallets } = useWallets();
 
@@ -27,6 +37,13 @@ export function App() {
 
     // ── Tab navigation ──
     const [activeTab, setActiveTab] = useState<TabId>("wallet");
+
+    // ── Slippage (persisted in localStorage) ──
+    const [slippageBps, setSlippageBps] = useState<number>(loadSlippage);
+    const handleSlippageChange = (bps: number) => {
+        setSlippageBps(bps);
+        localStorage.setItem(SLIPPAGE_KEY, String(bps));
+    };
 
     // ── Auto-login with Telegram ──
     useEffect(() => {
@@ -155,24 +172,19 @@ export function App() {
                         tokenBalances={tokenBalances}
                         balancesLoaded={balancesLoaded}
                         refreshBalance={refreshBalance}
+                        slippageBps={slippageBps}
+                        onOpenSettings={() => setActiveTab("settings")}
                     />
                 )}
                 {activeTab === "scan" && (
-                    <div className="placeholder-tab">
-                        <div className="placeholder-icon">🔍</div>
-                        <h3>Token Scanner</h3>
-                        <p>Coming in Sprint 2B — scan any token for rug risks, mint authority, top holder concentration, and more.</p>
-                    </div>
+                    <ScanPanel onNavigateToSwap={() => setActiveTab("swap")} />
                 )}
                 {activeTab === "settings" && (
-                    <div className="placeholder-tab">
-                        <div className="placeholder-icon">⚙️</div>
-                        <h3>Settings</h3>
-                        <p>Coming in Sprint 2B — slippage tolerance, referral code, wallet QR, and logout.</p>
-                        <button className="logout-btn logout-btn--settings" onClick={logout}>
-                            Log Out
-                        </button>
-                    </div>
+                    <SettingsPanel
+                        walletAddress={walletAddress}
+                        slippageBps={slippageBps}
+                        onSlippageChange={handleSlippageChange}
+                    />
                 )}
             </main>
 

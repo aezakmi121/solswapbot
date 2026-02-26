@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchPortfolio, Portfolio, PortfolioToken } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
+import { SendFlow } from "./SendFlow";
 
 interface WalletTabProps {
     walletAddress: string;
@@ -62,6 +63,7 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [showReceive, setShowReceive] = useState(false);
+    const [showSend, setShowSend] = useState(false);
 
     const loadPortfolio = async () => {
         setLoading(true);
@@ -122,7 +124,7 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
                     <span className="wallet-action-icon">📥</span>
                     <span>Receive</span>
                 </button>
-                <button className="wallet-action-btn wallet-action-btn--disabled" disabled title="Coming soon">
+                <button className="wallet-action-btn" onClick={() => setShowSend(true)}>
                     <span className="wallet-action-icon">📤</span>
                     <span>Send</span>
                 </button>
@@ -181,6 +183,16 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
                 <ReceiveModal
                     walletAddress={walletAddress}
                     onClose={() => setShowReceive(false)}
+                />
+            )}
+
+            {/* ── Send Flow ── */}
+            {showSend && (
+                <SendFlow
+                    portfolioTokens={portfolio?.tokens ?? []}
+                    walletAddress={walletAddress}
+                    onClose={() => setShowSend(false)}
+                    onSent={loadPortfolio}
                 />
             )}
         </div>
