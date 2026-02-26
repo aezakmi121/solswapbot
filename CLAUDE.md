@@ -98,34 +98,37 @@ It also provides **token safety scanning**, **whale tracking**, and **AI market 
 ```
 solswapbot/
 ├── src/
-│   ├── app.ts                 # Entry point — starts bot + API server
+│   ├── app.ts                 # Entry point — starts bot + API server + graceful shutdown
 │   ├── config.ts              # Zod-validated env config (crash-early)
 │   ├── api/
-│   │   ├── server.ts          # Express setup, CORS, error handler
+│   │   ├── server.ts          # Express setup, trust proxy, helmet, CORS, rate limiter
+│   │   ├── middleware/
+│   │   │   └── telegramAuth.ts # Telegram initData HMAC-SHA256 verification (C2/C5)
 │   │   └── routes/
 │   │       ├── quote.ts       # GET /api/quote (Jupiter + USD breakdown)
-│   │       ├── swap.ts        # POST /api/swap (unsigned TX builder)
+│   │       ├── swap.ts        # POST /api/swap, POST /api/swap/confirm, GET /api/swap/status
 │   │       ├── price.ts       # GET /api/price/:mint
-│   │       ├── tokens.ts      # GET /api/tokens
-│   │       ├── user.ts        # GET /api/user
+│   │       ├── tokens.ts      # GET /api/tokens, GET /api/tokens/search
+│   │       ├── user.ts        # GET /api/user, POST /api/user/wallet, GET /api/user/balances
 │   │       ├── scan.ts        # GET /api/scan (token safety)
 │   │       ├── crossChain.ts  # GET /api/cross-chain/quote|chains|tokens
-│   │       └── history.ts    # GET /api/history (last 20 swaps)
+│   │       └── history.ts     # GET /api/history (last 20 swaps)
 │   ├── bot/
 │   │   ├── index.ts           # Bot setup — /start + /help only, catch-all → Mini App
 │   │   ├── commands/
-│   │   │   └── start.ts       # /start — creates user + shows Mini App button
+│   │   │   └── start.ts       # /start — upserts user + shows Mini App button
 │   │   └── middleware/
 │   │       ├── logger.ts      # Audit trail (swap, connect, start, status)
 │   │       └── rateLimit.ts   # Per-user per-command limits
 │   ├── jupiter/
 │   │   ├── quote.ts           # Jupiter quote with platformFeeBps + Zod validation
-│   │   ├── swap.ts            # Jupiter swap TX builder (passes feeAccount)
-│   │   └── price.ts           # Jupiter price API v3
+│   │   ├── swap.ts            # Jupiter swap TX builder (passes feeAccount as ATA)
+│   │   ├── price.ts           # Jupiter price API v3
+│   │   └── tokens.ts          # Jupiter token list API v2 + fallback tokens
 │   ├── aggregator/
 │   │   ├── router.ts          # Smart router: Jupiter (same-chain) vs LI.FI (cross-chain)
 │   │   ├── lifi.ts            # LI.FI API client (works without key)
-│   │   └── chains.ts          # Chain + token registry (6 chains, 15 tokens)
+│   │   └── chains.ts          # Chain + token registry (6 chains, 20+ tokens)
 │   ├── scanner/
 │   │   ├── analyze.ts         # Token risk scoring (0-100, 4 checks in parallel)
 │   │   └── checks.ts          # Safety checks: mint auth, freeze, top holders, age
@@ -135,7 +138,7 @@ solswapbot/
 │   ├── db/
 │   │   ├── client.ts          # Prisma singleton
 │   │   └── queries/
-│   │       ├── users.ts       # User CRUD + referral count
+│   │       ├── users.ts       # User CRUD (upsert) + referral count
 │   │       ├── fees.ts        # Fee aggregation queries
 │   │       └── referrals.ts   # Referral earnings queries
 │   └── utils/
@@ -145,20 +148,22 @@ solswapbot/
 │       └── constants.ts       # Token registry (6 tokens)
 ├── webapp/                    # Telegram Mini App (deployed to Vercel)
 │   ├── src/
-│   │   ├── App.tsx            # Main app — swap interface (single page currently)
-│   │   ├── main.tsx           # React entry point
+│   │   ├── App.tsx            # Main swap interface — balance check, quote, swap flow
+│   │   ├── main.tsx           # React entry + PrivyProvider + ErrorBoundary
+│   │   ├── ErrorBoundary.tsx  # React error boundary — catches crashes, shows reload button
+│   │   ├── TokenSelector.tsx  # Token search + selection modal (Jupiter-powered)
 │   │   ├── lib/
-│   │   │   └── api.ts         # API client + hardcoded token list
+│   │   │   └── api.ts         # API client — auth headers, all fetch functions
 │   │   └── styles/
 │   │       └── index.css      # Dark theme styles
 │   ├── index.html
 │   ├── vite.config.ts
-│   └── vercel.json
+│   └── vercel.json            # Rewrites /api/* → VPS backend (HTTPS)
 ├── prisma/
-│   └── schema.prisma          # User, Swap, TokenScan, WatchedWallet, Subscription
+│   └── schema.prisma          # User, Swap, TokenScan, WatchedWallet, Subscription + indexes
 ├── package.json
 ├── tsconfig.json
-├── ecosystem.config.js        # PM2 config for VPS (single instance, SQLite)
+├── ecosystem.config.js        # PM2 config for VPS (single instance, SQLite, 256MB limit)
 └── .env.example
 ```
 
@@ -196,6 +201,44 @@ User subscribes to Whale Tracker (future)
 User clicks exchange link (future)
   └→ Affiliate commission (up to 50% lifetime)
 ```
+
+---
+
+## API Routes Reference
+
+All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the VPS backend.
+
+### Public Routes (no auth)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check — returns `{ status: "ok" }` |
+| GET | `/api/price/:mint` | Get USD price for a token mint (Jupiter Price API v3) |
+| GET | `/api/tokens` | Get popular token list (Jupiter-sourced, cached) |
+| GET | `/api/tokens/search?query=<q>` | Search tokens by symbol, name, or mint address |
+
+### Protected Routes (require `Authorization: tma <initData>`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/user` | Get user profile + SOL balance |
+| POST | `/api/user/wallet` | Save Privy wallet address `{ walletAddress }` |
+| GET | `/api/user/balances?walletAddress=<addr>` | Get SOL + all SPL token balances |
+| GET | `/api/quote?inputMint=&outputMint=&humanAmount=` | Get swap quote with USD breakdown |
+| POST | `/api/swap` | Build unsigned swap TX `{ quoteResponse, userPublicKey }` |
+| POST | `/api/swap/confirm` | Record swap + start on-chain polling `{ txSignature, inputMint, ... }` |
+| GET | `/api/swap/status?swapId=<id>` | Poll swap confirmation status |
+| GET | `/api/scan?mint=<addr>` | Token safety scan (risk score 0-100) |
+| GET | `/api/cross-chain/quote` | LI.FI cross-chain quote |
+| GET | `/api/cross-chain/chains` | Supported chains list |
+| GET | `/api/cross-chain/tokens` | Cross-chain token registry |
+| GET | `/api/history` | Last 20 swaps for the authenticated user |
+
+### Auth Flow
+1. Frontend sends `Authorization: tma <tg.initData>` header
+2. `telegramAuth.ts` middleware validates HMAC-SHA256 signature using bot token
+3. Extracts `telegramId` from verified payload → `res.locals.telegramId`
+4. Rejects if hash invalid, auth_date expired (>1hr), or user field missing
 
 ---
 
@@ -254,8 +297,9 @@ User clicks exchange link (future)
 | SwapPanel component (extract from App.tsx) | NOT STARTED | P1 |
 | ScanPanel component (token scanner UI) | NOT STARTED | P1 |
 | WalletHeader component (balance + address) | NOT STARTED | P1 |
-| TokenSelector component (search + select) | NOT STARTED | P1 |
+| TokenSelector component (search + select) | DONE | P1 |
 | History section in swap tab | DONE (via slide-up panel) | P2 |
+| React Error Boundary | DONE | P1 |
 
 ### Phase 3 — PREMIUM FEATURES
 
@@ -282,6 +326,8 @@ User clicks exchange link (future)
 
 ## Environment Variables
 
+### Backend (`solswapbot/.env`)
+
 ```env
 # Required
 TELEGRAM_BOT_TOKEN=         # From @BotFather
@@ -292,7 +338,7 @@ FEE_WALLET_ADDRESS=         # Solana address for fee collection
 JUPITER_API_URL=https://lite-api.jup.ag/swap/v1
 PLATFORM_FEE_BPS=50         # 0.5% platform fee
 API_PORT=3001
-CORS_ORIGIN=*
+CORS_ORIGIN=*               # ⚠️ MUST be set to Vercel URL in production (crash-early if "*" + production)
 DATABASE_URL=file:./dev.db
 NODE_ENV=development
 LOG_LEVEL=info
@@ -305,25 +351,63 @@ LIFI_API_KEY=               # Cross-chain: enables higher limits + integrator fe
 HELIUS_API_KEY=             # Phase 3: Webhook RPC
 HELIUS_WEBHOOK_SECRET=      # Phase 3: Webhook auth
 GEMINI_API_KEY=             # Phase 4: AI signals
-MINIAPP_URL=                # Vercel deployment URL (for bot button)
+MINIAPP_URL=                # Vercel deployment URL (for bot /start button)
 ```
+
+### Frontend (Vercel env vars for `webapp/`)
+
+```env
+VITE_API_URL=               # Backend URL (e.g. https://srv1418768.hstgr.cloud) — empty if using vercel.json rewrites
+VITE_PRIVY_APP_ID=          # Same as PRIVY_APP_ID above
+VITE_SOLANA_RPC_URL=        # Helius RPC URL (for Privy SDK's Solana RPC provider). Falls back to public mainnet-beta
+```
+
+---
+
+## Git Workflow
+
+All development happens on **feature branches**, which are **merged to `main`** before deployment.
+The VPS and Vercel always deploy from `main`.
+
+```
+Feature branch (claude/*, fix/*, feat/*)
+  └→ PR → merge to main
+       └→ VPS: git pull origin main → build → restart
+       └→ Vercel: auto-deploys on push to main (if git integration is set up)
+```
+
+**Rules:**
+- Never push directly to `main` — always use feature branches + merge
+- Feature branches are prefixed: `claude/`, `fix/`, `feat/`
+- After merging, the VPS must be manually redeployed (see below)
 
 ---
 
 ## Deployment
 
-### Backend (Hostinger VPS)
+### Backend (Hostinger VPS — `srv1418768.hstgr.cloud`)
+
+After merging a feature branch to `main`, SSH into the VPS and run:
+
 ```bash
+cd ~/solswapbot
 git pull origin main
-npm install && npm run build
-npx prisma db push
+npm install            # picks up new/updated deps
+npx prisma db push     # applies schema changes (indexes, new models)
+npm run build          # compiles TypeScript → dist/
 pm2 restart ecosystem.config.js
 ```
 
-### Frontend (Vercel)
+**Verify:** `pm2 logs --lines 20` — should see "API server running on port 3001" and "Bot is running!"
+
+**PM2 config:** `ecosystem.config.js` — runs `dist/app.js`, single instance (SQLite), 256MB memory limit, logs in `./logs/`.
+
+### Frontend (Vercel — webapp)
 1. Import repo → Root Directory: `webapp`
 2. Framework: Vite
-3. Env vars: `VITE_API_URL`, `VITE_PRIVY_APP_ID`
+3. Env vars: `VITE_API_URL`, `VITE_PRIVY_APP_ID`, `VITE_SOLANA_RPC_URL`
+4. Auto-deploys on push to `main` if Vercel git integration is connected
+5. If not auto-deploying, trigger manual deploy from Vercel dashboard after merge
 
 ### BotFather Setup
 1. `/mybots` → Select bot → Bot Settings → Menu Button
@@ -333,12 +417,15 @@ pm2 restart ecosystem.config.js
 
 ## What NOT To Do
 
+- **Do NOT push directly to `main`** — always use feature branches and merge
 - **Do NOT add more bot commands** — all features go in the Mini App
 - **Do NOT generate or store private keys** — Privy handles all key management
 - **Do NOT build custodial wallet features** — we are non-custodial
 - **Do NOT redirect to external wallets** — Privy signs inside the Mini App
 - **Do NOT use PostgreSQL** — SQLite is sufficient for this scale
 - **Do NOT allow unsanitized user input** — use `src/utils/validation.ts`
+- **Do NOT accept `telegramId` from client** — always extract from verified `initData` via auth middleware
+- **Do NOT set `CORS_ORIGIN=*` in production** — config will crash on startup if you do
 
 ---
 
@@ -348,20 +435,21 @@ pm2 restart ecosystem.config.js
 > backend routes, bot/middleware, Jupiter/aggregator financial core, scanner/DB/utils,
 > webapp frontend, and config/infrastructure.
 
-### Overall Code Rating: 6.5 / 10 (up from 4.0 — all CRITICAL issues fixed)
+### Overall Code Rating: 7.0 / 10 (up from 4.0 — all CRITICAL issues fixed)
 
 | Category | Rating | Summary |
 |----------|--------|---------|
-| **Security** | 6/10 | ✅ Telegram initData auth (C2/C3/C5), CORS locked in prod (C4). Still needs error boundary (M7) |
+| **Security** | 7/10 | ✅ Telegram initData auth (C2/C3/C5), CORS locked in prod (C4), Error Boundary (M7) |
 | **Financial Logic** | 6/10 | ✅ Fee collection (C1), fee bypass prevention (H1), SOL address fixed (C6). Precision (H5) partially done |
 | **Error Handling** | 6/10 | ✅ try/catch + upsert in /start (H6/H7), input validation (H8/H9). Some gaps remain |
 | **Code Quality** | 7/10 | Good patterns (Zod, Prisma, retry) now consistently applied. Auth middleware, rate limiting, helmet |
-| **Frontend (React)** | 6/10 | ✅ Real on-chain confirmation polling (H2), dynamic balance checks. No error boundary yet (M7) |
+| **Frontend (React)** | 7/10 | ✅ Real on-chain confirmation polling (H2), dynamic balance checks, Error Boundary (M7), Token Selector |
 | **Infrastructure** | 6/10 | ✅ trust proxy, graceful shutdown (H11), HTTPS vercel.json (C7), DB indexes (H12/M19) |
 
-**Verdict:** All 7 CRITICAL issues are now resolved. Authentication, fee validation, and on-chain
-confirmation are in place. The codebase is production-ready for controlled beta testing.
-Remaining work: React error boundary (M7), stale quote prevention (H3), and Zod on LI.FI (M9).
+**Verdict:** All 7 CRITICAL issues are now resolved. Authentication, fee validation, on-chain
+confirmation, and error boundary are all in place. The codebase is production-ready for
+controlled beta testing. Remaining work: stale quote prevention (H3), block height check (H4),
+and Zod on LI.FI (M9).
 
 ---
 
@@ -429,7 +517,7 @@ Remaining work: React error boundary (M7), stale quote prevention (H3), and Zod 
 | M4 | Token list cache thundering herd | `src/jupiter/tokens.ts` | OPEN |
 | M5 | Redundant RPC calls in scanner | `src/scanner/checks.ts` | OPEN |
 | M6 | Scanner errors counted as "unsafe" | `src/scanner/checks.ts` | OPEN |
-| M7 | No React Error Boundary | `webapp/src/` | OPEN |
+| ~~M7~~ | ~~No React Error Boundary~~ | `webapp/src/ErrorBoundary.tsx` | ✅ FIXED — wraps `<App />` in `main.tsx` |
 | ~~M8~~ | ~~Swap not recorded in DB after execution~~ | `webapp/src/App.tsx` | ✅ FIXED — `confirmSwap` records + polls backend |
 | M9 | LI.FI response not Zod-validated | `src/aggregator/lifi.ts` | OPEN |
 | M10 | No retry wrapper on LI.FI API calls | `src/aggregator/lifi.ts` | OPEN |
@@ -467,14 +555,13 @@ Remaining work: React error boundary (M7), stale quote prevention (H3), and Zod 
 9. ~~H6 + H7 — Upsert + try/catch in startCommand~~ ✅ DONE
 10. ~~H8 + H9 — Input validation on quote parameters~~ ✅ DONE
 11. ~~M1 + M2 — Rate limiting + helmet~~ ✅ DONE
-12. M7 — React Error Boundary (OPEN)
+12. ~~M7 — React Error Boundary~~ ✅ DONE
 13. ~~M8 — Record swaps in DB after execution~~ ✅ DONE
 
 **Remaining before beta:**
 - H3 — Prevent stale quote race condition (AbortController + quote snapshot)
 - H4 — Check `lastValidBlockHeight` before submitting
 - H10 — Don't mark timed-out txs as FAILED
-- M7 — Add React Error Boundary
 
 ---
 
