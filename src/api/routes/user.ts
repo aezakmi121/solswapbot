@@ -4,6 +4,8 @@ import { connection } from "../../solana/connection";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isValidSolanaAddress } from "../../utils/validation";
+import { getTokenPricesBatch } from "../../jupiter/price";
+import { getTokensMetadata } from "../../jupiter/tokens";
 
 export const userRouter = Router();
 
@@ -147,5 +149,93 @@ userRouter.get("/user/balances", async (req: Request, res: Response) => {
     } catch (err) {
         console.error("Balances API error:", err);
         res.status(500).json({ error: "Failed to fetch balances" });
+    }
+});
+
+/**
+ * GET /api/user/portfolio
+ * Returns all held tokens with USD prices in one batched call.
+ * Avoids N+1 price fetches by using Jupiter batch price endpoint.
+ * Response: { totalValueUsd, tokens: [{ mint, symbol, name, icon, amount, decimals, priceUsd, valueUsd }], walletAddress }
+ */
+userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        const user = await findUserByTelegramId(telegramId);
+
+        if (!user?.walletAddress) {
+            res.json({ totalValueUsd: 0, tokens: [], walletAddress: null });
+            return;
+        }
+
+        const pubkey = new PublicKey(user.walletAddress);
+        const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+        // Fetch SOL balance + SPL token accounts in parallel
+        const [lamports, tokenAccounts] = await Promise.all([
+            connection.getBalance(pubkey),
+            connection.getParsedTokenAccountsByOwner(pubkey, { programId: TOKEN_PROGRAM_ID }),
+        ]);
+
+        const solBalance = lamports / 1e9;
+
+        // Build mint → { amount, decimals } map (non-zero balances only)
+        const balanceMap = new Map<string, { amount: number; decimals: number }>();
+        balanceMap.set(WSOL_MINT, { amount: solBalance, decimals: 9 });
+
+        for (const account of tokenAccounts.value) {
+            const info = account.account.data.parsed.info;
+            const uiAmount = info.tokenAmount.uiAmount;
+            if (uiAmount > 0) {
+                balanceMap.set(info.mint, {
+                    amount: uiAmount,
+                    decimals: info.tokenAmount.decimals,
+                });
+            }
+        }
+
+        const mints = [...balanceMap.keys()];
+
+        // Batch fetch prices + token metadata in parallel
+        const [prices, metadata] = await Promise.all([
+            getTokenPricesBatch(mints),
+            getTokensMetadata(mints),
+        ]);
+
+        // Build portfolio token list
+        const tokens = mints.map((mint) => {
+            const bal = balanceMap.get(mint)!;
+            const priceUsd = prices[mint] ?? null;
+            const info = metadata[mint];
+            const valueUsd = priceUsd !== null ? bal.amount * priceUsd : null;
+            return {
+                mint,
+                symbol: info?.symbol ?? mint.slice(0, 6),
+                name: info?.name ?? "Unknown Token",
+                icon: info?.logoURI ?? null,
+                amount: bal.amount,
+                decimals: bal.decimals,
+                priceUsd,
+                valueUsd,
+            };
+        });
+
+        // Sort by USD value desc, unknowns at end sorted alphabetically
+        tokens.sort((a, b) => {
+            if (a.valueUsd !== null && b.valueUsd !== null) return b.valueUsd - a.valueUsd;
+            if (a.valueUsd !== null) return -1;
+            if (b.valueUsd !== null) return 1;
+            return a.symbol.localeCompare(b.symbol);
+        });
+
+        const totalValueUsd = tokens.reduce(
+            (sum, t) => (t.valueUsd !== null ? sum + t.valueUsd : sum),
+            0
+        );
+
+        res.json({ totalValueUsd, tokens, walletAddress: user.walletAddress });
+    } catch (err) {
+        console.error("Portfolio API error:", err);
+        res.status(500).json({ error: "Failed to fetch portfolio" });
     }
 });

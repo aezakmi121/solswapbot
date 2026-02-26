@@ -30,6 +30,34 @@ export async function getTokenPriceUsd(mintAddress: string): Promise<number | nu
 }
 
 /**
+ * Batch-fetches USD prices for multiple token mints in a single API call.
+ * Returns a map of mint → price (null if unavailable).
+ */
+export async function getTokenPricesBatch(
+  mints: string[]
+): Promise<Record<string, number | null>> {
+  if (mints.length === 0) return {};
+  try {
+    const ids = mints.join(",");
+    const response = await fetch(`${JUPITER_PRICE_URL}?ids=${ids}`);
+    if (!response.ok) {
+      return Object.fromEntries(mints.map((m) => [m, null]));
+    }
+    const json = (await response.json()) as JupiterPriceV3Response;
+    return Object.fromEntries(
+      mints.map((mint) => {
+        const entry = json[mint];
+        const price =
+          entry?.usdPrice && Number.isFinite(entry.usdPrice) ? entry.usdPrice : null;
+        return [mint, price];
+      })
+    );
+  } catch {
+    return Object.fromEntries(mints.map((m) => [m, null]));
+  }
+}
+
+/**
  * Estimates the USD value of a platform fee for a given swap.
  * Accepts outputDecimals directly so we don't need hardcoded lookups.
  */
