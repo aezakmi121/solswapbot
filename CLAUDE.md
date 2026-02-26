@@ -179,7 +179,7 @@ solswapbot/
 | **WatchedWallet** | walletAddress, label, active | DONE (schema only, no API) |
 | **Subscription** | tier (FREE/SCANNER_PRO/WHALE_TRACKER/SIGNALS/ALL_ACCESS), expiresAt | DONE (schema only, no enforcement) |
 
-Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED`
+Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED / TIMEOUT`
 
 ---
 
@@ -435,7 +435,7 @@ pm2 restart ecosystem.config.js
 > backend routes, bot/middleware, Jupiter/aggregator financial core, scanner/DB/utils,
 > webapp frontend, and config/infrastructure.
 
-### Overall Code Rating: 7.0 / 10 (up from 4.0 — all CRITICAL issues fixed)
+### Overall Code Rating: 7.5 / 10 (up from 4.0 — all CRITICAL + key HIGH issues fixed)
 
 | Category | Rating | Summary |
 |----------|--------|---------|
@@ -446,10 +446,10 @@ pm2 restart ecosystem.config.js
 | **Frontend (React)** | 7/10 | ✅ Real on-chain confirmation polling (H2), dynamic balance checks, Error Boundary (M7), Token Selector |
 | **Infrastructure** | 6/10 | ✅ trust proxy, graceful shutdown (H11), HTTPS vercel.json (C7), DB indexes (H12/M19) |
 
-**Verdict:** All 7 CRITICAL issues are now resolved. Authentication, fee validation, on-chain
-confirmation, and error boundary are all in place. The codebase is production-ready for
-controlled beta testing. Remaining work: stale quote prevention (H3), block height check (H4),
-and Zod on LI.FI (M9).
+**Verdict:** All 7 CRITICAL issues and all beta-blocking HIGH issues are resolved.
+Authentication, fee validation, on-chain confirmation, quote freshness, and error boundary
+are all in place. The codebase is production-ready for beta testing.
+Remaining work: Zod on LI.FI (M9), and MEDIUM-priority cleanup items.
 
 ---
 
@@ -494,14 +494,14 @@ and Zod on LI.FI (M9).
 |---|-------|---------|--------|
 | ~~H1~~ | ~~Unvalidated quoteResponse — fee bypass~~ | `src/api/routes/swap.ts` | ✅ FIXED — validates `platformFee.feeBps` matches config |
 | ~~H2~~ | ~~Fake 2-second "confirmation"~~ | `webapp/src/App.tsx`, `src/api/routes/swap.ts` | ✅ FIXED — backend polls on-chain, frontend polls `/api/swap/status` |
-| H3 | Stale quote race condition | `webapp/src/App.tsx` | OPEN — user can change amount between quote and swap |
-| H4 | `lastValidBlockHeight` ignored | `webapp/src/App.tsx` | OPEN — tx submitted after block height expires |
+| ~~H3~~ | ~~Stale quote race condition~~ | `webapp/src/App.tsx` | ✅ FIXED — quote snapshots inputs + AbortController + input match check before swap |
+| ~~H4~~ | ~~`lastValidBlockHeight` ignored~~ | `webapp/src/App.tsx` | ✅ FIXED — quotes auto-expire after 30s, swap rejects expired quotes + auto-refreshes |
 | H5 | Floating-point precision loss on amounts | `quote.ts`, `router.ts` | PARTIAL — BigInt for amount conversion, float remains for display |
 | ~~H6~~ | ~~Race condition in user creation (TOCTOU)~~ | `src/bot/commands/start.ts` | ✅ FIXED — uses `upsert` |
 | ~~H7~~ | ~~No try/catch in startCommand~~ | `src/bot/commands/start.ts` | ✅ FIXED — full try/catch with user-facing error reply |
 | ~~H8~~ | ~~Division by zero in quote route~~ | `src/api/routes/quote.ts` | ✅ FIXED — validates amount > 0 |
 | ~~H9~~ | ~~parseInt without NaN check~~ | `src/api/routes/quote.ts` | ✅ FIXED — validates with `Number.isFinite()` and regex |
-| H10 | Transaction timeout marked as FAILED | `src/solana/transaction.ts` | OPEN |
+| ~~H10~~ | ~~Transaction timeout marked as FAILED~~ | `src/solana/transaction.ts` | ✅ FIXED — uses TIMEOUT status instead of FAILED; frontend handles gracefully |
 | ~~H11~~ | ~~Express server not in shutdown handler~~ | `src/app.ts` | ✅ FIXED — server instance exposed for graceful shutdown |
 | ~~H12~~ | ~~Swap.txSignature not indexed~~ | `prisma/schema.prisma` | ✅ FIXED — `@@index([txSignature])` added |
 
@@ -558,14 +558,17 @@ and Zod on LI.FI (M9).
 12. ~~M7 — React Error Boundary~~ ✅ DONE
 13. ~~M8 — Record swaps in DB after execution~~ ✅ DONE
 
-**Remaining before beta:**
-- H3 — Prevent stale quote race condition (AbortController + quote snapshot)
-- H4 — Check `lastValidBlockHeight` before submitting
-- H10 — Don't mark timed-out txs as FAILED
+**Remaining before beta:** All done! ✅
 
 ---
 
 ## Changelog
+
+### 2026-02-26 — Stale Quote Prevention, Quote Expiry, Timeout Handling (H3/H4/H10)
+- Fixed stale quote race condition (H3): quotes now snapshot the inputs (amount, mints) they were fetched for; `handleSwap` verifies current inputs match the quote before proceeding. Added AbortController to cancel in-flight quote fetches when inputs change.
+- Fixed lastValidBlockHeight expiry (H4): quotes auto-expire after 30 seconds and auto-refresh. Swap rejects expired quotes and triggers a fresh quote fetch.
+- Fixed timeout marked as FAILED (H10): backend now uses `TIMEOUT` status (new Prisma enum value) instead of `FAILED` when polling times out. Frontend handles TIMEOUT gracefully — shows as complete with Solscan link, not as a definitive failure.
+- All beta-blocking HIGH issues now resolved. Codebase is ready for beta testing.
 
 ### 2026-02-26 — Trust Proxy Fix + Dynamic Balance Checking
 - Fixed `express-rate-limit` `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` error on VPS by adding `app.set("trust proxy", 1)` — rate limiting now correctly identifies users by real IP behind Vercel proxy
