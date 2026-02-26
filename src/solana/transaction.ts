@@ -14,7 +14,7 @@ const MAX_POLL_ATTEMPTS = 100; // ~5 minutes total (handles mainnet congestion)
 export async function pollTransactionStatus(
   swapId: string,
   txSignature: string,
-): Promise<"CONFIRMED" | "FAILED"> {
+): Promise<"CONFIRMED" | "FAILED" | "TIMEOUT"> {
   // Save signature immediately
   await prisma.swap.update({
     where: { id: swapId },
@@ -81,13 +81,15 @@ export async function pollTransactionStatus(
     // Final check failed — fall through to mark as failed
   }
 
-  // Truly timed out with no on-chain result
+  // Truly timed out with no on-chain result — don't mark as FAILED since the
+  // tx may still confirm later. Use TIMEOUT so the frontend can show an
+  // appropriate message instead of a definitive "failed" (H10).
   await prisma.swap.update({
     where: { id: swapId },
-    data: { status: "FAILED" },
+    data: { status: "TIMEOUT" },
   });
-  console.log(`Swap ${swapId} tx ${txSignature} timed out — marked FAILED`);
-  return "FAILED";
+  console.log(`Swap ${swapId} tx ${txSignature} timed out — marked TIMEOUT (may still confirm)`);
+  return "TIMEOUT";
 }
 
 /**
@@ -97,7 +99,7 @@ export async function pollTransactionStatus(
 export function pollTransactionInBackground(
   swapId: string,
   txSignature: string,
-  onComplete?: (result: "CONFIRMED" | "FAILED") => void,
+  onComplete?: (result: "CONFIRMED" | "FAILED" | "TIMEOUT") => void,
 ): void {
   pollTransactionStatus(swapId, txSignature)
     .then((result) => onComplete?.(result))

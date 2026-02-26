@@ -90,10 +90,21 @@ export function App() {
 
     const [amount, setAmount] = useState("");
 
-    // Quote state
-    const [quote, setQuote] = useState<{ raw: any; display: QuoteDisplay } | null>(null);
+    /** Max age for a quote before we force a re-fetch (H3/H4) */
+    const QUOTE_MAX_AGE_MS = 30_000;
+
+    // Quote state — includes snapshot of the inputs the quote was fetched for (H3)
+    const [quote, setQuote] = useState<{
+        raw: any;
+        display: QuoteDisplay;
+        fetchedAt: number;       // timestamp ms — for expiry check (H4)
+        forAmount: string;       // amount this quote was fetched for (H3)
+        forInputMint: string;    // input mint this quote was fetched for (H3)
+        forOutputMint: string;   // output mint this quote was fetched for (H3)
+    } | null>(null);
     const [quoteLoading, setQuoteLoading] = useState(false);
     const [quoteError, setQuoteError] = useState("");
+    const quoteAbortRef = useRef<AbortController | null>(null);
 
     // Swap state
     const [swapStatus, setSwapStatus] = useState<
@@ -157,29 +168,53 @@ export function App() {
         return null;
     };
 
-    // Fetch quote when inputs change (debounced)
+    // Fetch quote when inputs change (debounced) — with AbortController to prevent race conditions (H3)
     const getQuote = useCallback(async () => {
+        // Cancel any in-flight quote fetch
+        quoteAbortRef.current?.abort();
+
         if (!inputToken || !outputToken || !amount || Number(amount) <= 0) {
             setQuote(null);
             return;
         }
 
+        const controller = new AbortController();
+        quoteAbortRef.current = controller;
+
         setQuoteLoading(true);
         setQuoteError("");
 
+        // Snapshot current inputs so we can verify they haven't changed
+        const snapshotAmount = amount;
+        const snapshotInputMint = inputToken.mint;
+        const snapshotOutputMint = outputToken.mint;
+
         try {
             const result = await fetchQuote({
-                inputMint: inputToken.mint,
-                outputMint: outputToken.mint,
-                humanAmount: amount,
+                inputMint: snapshotInputMint,
+                outputMint: snapshotOutputMint,
+                humanAmount: snapshotAmount,
             });
 
-            setQuote({ raw: result.quote, display: result.display });
+            // Don't apply if this request was aborted (inputs changed)
+            if (controller.signal.aborted) return;
+
+            setQuote({
+                raw: result.quote,
+                display: result.display,
+                fetchedAt: Date.now(),
+                forAmount: snapshotAmount,
+                forInputMint: snapshotInputMint,
+                forOutputMint: snapshotOutputMint,
+            });
         } catch (err) {
+            if (controller.signal.aborted) return;
             setQuoteError(err instanceof Error ? err.message : "Failed to get quote");
             setQuote(null);
         } finally {
-            setQuoteLoading(false);
+            if (!controller.signal.aborted) {
+                setQuoteLoading(false);
+            }
         }
     }, [inputToken, outputToken, amount]);
 
@@ -187,6 +222,19 @@ export function App() {
         const timer = setTimeout(getQuote, 600);
         return () => clearTimeout(timer);
     }, [getQuote]);
+
+    // Auto-refresh quotes that are about to expire (H3/H4)
+    useEffect(() => {
+        if (!quote) return;
+        const age = Date.now() - quote.fetchedAt;
+        const remaining = QUOTE_MAX_AGE_MS - age;
+        if (remaining <= 0) {
+            getQuote();
+            return;
+        }
+        const timer = setTimeout(getQuote, remaining);
+        return () => clearTimeout(timer);
+    }, [quote, getQuote]);
 
     // Flip tokens
     const flipTokens = () => {
@@ -215,6 +263,27 @@ export function App() {
     // Execute swap
     const handleSwap = async () => {
         if (!walletAddress || !quote || !embeddedWallet || !inputToken || !outputToken) return;
+
+        // H3: Verify the quote matches the current inputs — prevents using a stale quote
+        // after the user changed amount/tokens but the new quote hasn't loaded yet
+        if (
+            quote.forAmount !== amount ||
+            quote.forInputMint !== inputToken.mint ||
+            quote.forOutputMint !== outputToken.mint
+        ) {
+            setSwapError("Quote is outdated. A new quote is loading — please wait.");
+            setSwapStatus("error");
+            return;
+        }
+
+        // H4: Reject quotes older than 30s — the lastValidBlockHeight in the
+        // transaction would likely be expired, causing a guaranteed on-chain failure
+        if (Date.now() - quote.fetchedAt > QUOTE_MAX_AGE_MS) {
+            setSwapError("Quote expired. Fetching a fresh quote...");
+            setSwapStatus("error");
+            getQuote(); // auto-refresh
+            return;
+        }
 
         // Pre-flight balance check — show clear error instead of Privy's generic simulation failure
         const bal = getTokenBalance(inputToken.mint);
@@ -276,6 +345,12 @@ export function App() {
                             clearInterval(confirmPollRef.current);
                             setSwapError("Transaction failed on-chain");
                             setSwapStatus("error");
+                        } else if (result.status === "TIMEOUT") {
+                            // H10: Backend couldn't confirm within ~5 min. The tx may
+                            // still confirm later — don't show as definitively failed.
+                            clearInterval(confirmPollRef.current);
+                            setSwapStatus("done");
+                            refreshBalance();
                         }
                     } catch {
                         // Polling error — keep trying

@@ -53,6 +53,7 @@ enum SwapStatus {
   SUBMITTED
   CONFIRMED
   FAILED
+  TIMEOUT
 }
 
 // ─── Token Scanner ──────────────────────────────────────
