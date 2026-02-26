@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { PortfolioToken, fetchSendTransaction } from "../lib/api";
+import { toast } from "../lib/toast";
 
 interface SendFlowProps {
     portfolioTokens: PortfolioToken[];
@@ -81,6 +82,7 @@ export function SendFlow({ portfolioTokens, walletAddress, onClose, onSent }: Se
 
             setTxSig(uint8ToBase58(signature));
             setStep("done");
+            toast("Transaction sent!", "success");
             onSent?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Transaction failed");

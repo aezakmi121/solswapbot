@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchPortfolio, Portfolio, PortfolioToken } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { SendFlow } from "./SendFlow";
+import { toast } from "../lib/toast";
 
 interface WalletTabProps {
     walletAddress: string;
@@ -90,6 +91,7 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
         navigator.clipboard.writeText(walletAddress).then(() => {
             setAddrCopied(true);
             setTimeout(() => setAddrCopied(false), 2000);
+            toast("Address copied!");
         }).catch(() => {});
     };
 

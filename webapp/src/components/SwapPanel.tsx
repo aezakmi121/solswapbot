@@ -13,6 +13,18 @@ import {
     SwapRecord,
 } from "../lib/api";
 import { TokenSelector } from "../TokenSelector";
+import { toast } from "../lib/toast";
+
+const tg = (window as any).Telegram?.WebApp;
+
+const RECENT_TOKENS_KEY = "solswap_recent_tokens";
+function loadRecentTokens(): TokenInfo[] {
+    try { return JSON.parse(localStorage.getItem(RECENT_TOKENS_KEY) || "[]"); } catch { return []; }
+}
+function saveRecentToken(token: TokenInfo): void {
+    const existing = loadRecentTokens().filter((t) => t.mint !== token.mint);
+    localStorage.setItem(RECENT_TOKENS_KEY, JSON.stringify([token, ...existing].slice(0, 5)));
+}
 
 /** Convert a Uint8Array signature to base58 string for Solscan links */
 function uint8ToBase58(bytes: Uint8Array): string {
@@ -65,6 +77,7 @@ export function SwapPanel({
     const [tokensLoaded, setTokensLoaded] = useState(false);
     const [inputToken, setInputToken] = useState<TokenInfo | null>(null);
     const [outputToken, setOutputToken] = useState<TokenInfo | null>(null);
+    const [recentTokens, setRecentTokens] = useState<TokenInfo[]>(loadRecentTokens);
 
     // Load popular tokens on mount to set defaults
     useEffect(() => {
@@ -209,6 +222,8 @@ export function SwapPanel({
     const handleSwap = async () => {
         if (!walletAddress || !quote || !embeddedWallet || !inputToken || !outputToken) return;
 
+        tg?.HapticFeedback?.impactOccurred("medium");
+
         // H3: Verify the quote matches the current inputs
         if (
             quote.forAmount !== amount ||
@@ -283,15 +298,21 @@ export function SwapPanel({
                             clearInterval(confirmPollRef.current);
                             setSwapStatus("done");
                             refreshBalance();
+                            tg?.HapticFeedback?.notificationOccurred("success");
+                            toast("Swap confirmed!", "success");
                         } else if (result.status === "FAILED") {
                             clearInterval(confirmPollRef.current);
                             setSwapError("Transaction failed on-chain");
                             setSwapStatus("error");
+                            tg?.HapticFeedback?.notificationOccurred("error");
+                            toast("Transaction failed on-chain", "error");
                         } else if (result.status === "TIMEOUT") {
                             // H10: Backend couldn't confirm within ~5 min
                             clearInterval(confirmPollRef.current);
                             setSwapStatus("done");
                             refreshBalance();
+                            tg?.HapticFeedback?.notificationOccurred("success");
+                            toast("Swap submitted!", "success");
                         }
                     } catch {
                         // Polling error — keep trying
@@ -309,8 +330,11 @@ export function SwapPanel({
             }
         } catch (err) {
             console.error("Swap error:", err);
-            setSwapError(err instanceof Error ? err.message : "Transaction failed");
+            const errMsg = err instanceof Error ? err.message : "Transaction failed";
+            setSwapError(errMsg);
             setSwapStatus("error");
+            tg?.HapticFeedback?.notificationOccurred("error");
+            toast(errMsg, "error");
         }
     };
 
@@ -371,6 +395,36 @@ export function SwapPanel({
                     </button>
                 </div>
             </div>
+
+            {/* ── Recent Tokens ── */}
+            {recentTokens.length > 0 && (
+                <div className="recent-tokens">
+                    <span className="recent-tokens-label">Recent</span>
+                    {recentTokens.slice(0, 4).map((token) => (
+                        <button
+                            key={token.mint}
+                            className="recent-token-chip"
+                            onClick={() => {
+                                if (outputToken?.mint === token.mint) setOutputToken(inputToken);
+                                setInputToken(token);
+                                saveRecentToken(token);
+                                setRecentTokens(loadRecentTokens());
+                                setQuote(null);
+                            }}
+                        >
+                            {token.icon && (
+                                <img
+                                    className="recent-token-icon"
+                                    src={token.icon}
+                                    alt=""
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                            )}
+                            {token.symbol}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             <div className="swap-card">
                 {/* ── You sell ── */}
@@ -565,6 +619,8 @@ export function SwapPanel({
                         if (inputToken && token.mint === inputToken.mint) setInputToken(outputToken);
                         setOutputToken(token);
                     }
+                    saveRecentToken(token);
+                    setRecentTokens(loadRecentTokens());
                     setQuote(null);
                 }}
                 excludeMint={selectorOpen === "input" ? outputToken?.mint : inputToken?.mint}

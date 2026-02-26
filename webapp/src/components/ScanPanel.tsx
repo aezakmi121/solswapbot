@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { fetchTokenScan, ScanResult } from "../lib/api";
 import { RiskGauge } from "./RiskGauge";
+import { toast } from "../lib/toast";
 
 interface ScanPanelProps {
     onNavigateToSwap?: () => void;
@@ -60,7 +61,9 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
             saveRecent({ mint: data.mintAddress, score: data.riskScore, level: data.riskLevel, ts: Date.now() });
             setRecentScans(loadRecent());
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to scan token");
+            const msg = err instanceof Error ? err.message : "Failed to scan token";
+            setError(msg);
+            toast(msg, "error");
         } finally {
             setLoading(false);
         }
@@ -71,20 +74,39 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
 
             {/* ── Input ── */}
             <div className="scan-input-row">
-                <input
-                    className="scan-input"
-                    type="text"
-                    placeholder="Paste token address..."
-                    value={mint}
-                    onChange={(e) => setMint(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleScan()}
-                />
+                <div className="scan-input-wrap">
+                    <input
+                        className="scan-input"
+                        type="text"
+                        placeholder="Paste token mint address..."
+                        value={mint}
+                        onChange={(e) => setMint(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                    />
+                    {mint && (
+                        <button className="scan-clear-btn" onClick={() => setMint("")} title="Clear">✕</button>
+                    )}
+                    <button
+                        className="scan-paste-btn"
+                        title="Paste from clipboard"
+                        onClick={async () => {
+                            const text = await navigator.clipboard.readText().catch(() => "");
+                            if (text.trim()) setMint(text.trim());
+                        }}
+                    >
+                        📋
+                    </button>
+                </div>
                 <button
-                    className="scan-btn swap-btn"
+                    className="swap-btn scan-submit-btn"
                     onClick={() => handleScan()}
                     disabled={loading || !mint.trim()}
                 >
-                    {loading ? "..." : "Scan"}
+                    {loading ? (
+                        <><span className="btn-spinner" /> Scanning...</>
+                    ) : (
+                        "🔍 Scan Token"
+                    )}
                 </button>
             </div>
 

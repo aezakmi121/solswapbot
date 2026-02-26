@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { toast } from "../lib/toast";
 
 interface ReceiveModalProps {
     walletAddress: string;
@@ -13,6 +14,7 @@ export function ReceiveModal({ walletAddress, onClose }: ReceiveModalProps) {
         navigator.clipboard.writeText(walletAddress).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
+            toast("Address copied!");
         }).catch(() => {
             // Fallback for browsers that don't support clipboard API
             const el = document.createElement("textarea");
@@ -23,6 +25,7 @@ export function ReceiveModal({ walletAddress, onClose }: ReceiveModalProps) {
             document.body.removeChild(el);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
+            toast("Address copied!");
         });
     };
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { fetchUser, UserData } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
+import { toast } from "../lib/toast";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
 
@@ -34,6 +35,7 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
         navigator.clipboard.writeText(walletAddress).then(() => {
             setAddrCopied(true);
             setTimeout(() => setAddrCopied(false), 2000);
+            toast("Address copied!");
         }).catch(() => {});
     };
 
@@ -46,6 +48,7 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
         navigator.clipboard.writeText(referralLink).then(() => {
             setRefCopied(true);
             setTimeout(() => setRefCopied(false), 2000);
+            toast("Referral link copied!");
         }).catch(() => {});
     };
 
