@@ -1,6 +1,9 @@
 /**
  * Retries an async function with exponential backoff.
- * Only retries on transient errors (network, 429, 503).
+ * Only retries on transient errors (network failures, rate limits, server errors).
+ *
+ * Checks err.status (numeric HTTP code) first, then falls back to message
+ * pattern matching for errors that don't carry a status code (M25).
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -13,15 +16,25 @@ export async function withRetry<T>(
       return await fn();
     } catch (err) {
       const isLastAttempt = attempt === maxRetries;
-      const message = err instanceof Error ? err.message : String(err);
 
-      // Only retry on transient errors
-      const isRetryable =
-        message.includes("429") ||
-        message.includes("503") ||
+      // Check numeric status code first (most reliable)
+      const status = (err as any)?.status as number | undefined;
+      const isRetryableStatus =
+        status === 429 ||   // Too Many Requests
+        status === 503 ||   // Service Unavailable
+        status === 502 ||   // Bad Gateway
+        status === 504;     // Gateway Timeout
+
+      // Fallback: network-level errors that don't have HTTP status codes
+      const message = err instanceof Error ? err.message : String(err);
+      const isRetryableMessage =
         message.includes("ECONNRESET") ||
         message.includes("ETIMEDOUT") ||
-        message.includes("fetch failed");
+        message.includes("ENOTFOUND") ||
+        message.includes("fetch failed") ||
+        message.includes("network error");
+
+      const isRetryable = isRetryableStatus || isRetryableMessage;
 
       if (isLastAttempt || !isRetryable) {
         throw err;

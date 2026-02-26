@@ -14,6 +14,9 @@ let cachedTokens: JupiterToken[] = [];
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/** In-flight refresh promise — prevents thundering herd on cache expiry (M4) */
+let pendingLoad: Promise<JupiterToken[]> | null = null;
+
 /** Popular tokens shown by default (in this order) */
 const POPULAR_MINTS = new Set([
   "So11111111111111111111111111111111111111112",   // SOL
@@ -61,33 +64,41 @@ async function loadTokenList(): Promise<JupiterToken[]> {
     return cachedTokens;
   }
 
-  try {
-    const raw = await withRetry(async () => {
-      const res = await fetch(JUPITER_TOKEN_LIST_URL);
-      if (!res.ok) {
-        throw new Error(`Jupiter token list failed (${res.status})`);
-      }
-      return res.json() as Promise<JupiterTokenV2[]>;
-    }, { label: "Jupiter token list" });
+  // Return the in-flight promise if a refresh is already running (M4: thundering herd prevention)
+  if (pendingLoad) return pendingLoad;
 
-    // Normalize V2 fields (id→address, icon→logoURI) to keep consumers unchanged
-    const tokens: JupiterToken[] = raw.map((t) => ({
-      address: t.id,
-      symbol: t.symbol,
-      name: t.name,
-      decimals: t.decimals,
-      logoURI: t.icon,
-    }));
+  pendingLoad = (async () => {
+    try {
+      const raw = await withRetry(async () => {
+        const res = await fetch(JUPITER_TOKEN_LIST_URL);
+        if (!res.ok) {
+          throw new Error(`Jupiter token list failed (${res.status})`);
+        }
+        return res.json() as Promise<JupiterTokenV2[]>;
+      }, { label: "Jupiter token list" });
 
-    cachedTokens = tokens;
-    cacheTimestamp = Date.now();
-    return tokens;
-  } catch (err) {
-    console.error("Jupiter token list unavailable, using fallback:", (err as Error).message);
-    // Return fallback tokens so the app is still usable
-    if (cachedTokens.length > 0) return cachedTokens;
-    return FALLBACK_TOKENS;
-  }
+      // Normalize V2 fields (id→address, icon→logoURI) to keep consumers unchanged
+      const tokens: JupiterToken[] = raw.map((t) => ({
+        address: t.id,
+        symbol: t.symbol,
+        name: t.name,
+        decimals: t.decimals,
+        logoURI: t.icon,
+      }));
+
+      cachedTokens = tokens;
+      cacheTimestamp = Date.now();
+      return tokens;
+    } catch (err) {
+      console.error("Jupiter token list unavailable, using fallback:", (err as Error).message);
+      // Return stale cache if available, otherwise hardcoded fallback
+      return cachedTokens.length > 0 ? cachedTokens : FALLBACK_TOKENS;
+    } finally {
+      pendingLoad = null;
+    }
+  })();
+
+  return pendingLoad;
 }
 
 /** Get the popular/default tokens list */

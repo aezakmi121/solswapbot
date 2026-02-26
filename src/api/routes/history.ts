@@ -1,15 +1,9 @@
 import { Router, Request, Response } from "express";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
-import { getTokenByMint } from "../../jupiter/tokens";
+import { getTokensMetadata } from "../../jupiter/tokens";
 
 export const historyRouter = Router();
-
-/** Resolve a mint address to a token symbol via Jupiter token list */
-async function mintToSymbol(mint: string): Promise<string> {
-    const token = await getTokenByMint(mint);
-    return token?.symbol ?? mint.slice(0, 6) + "...";
-}
 
 /**
  * GET /api/history
@@ -32,21 +26,25 @@ historyRouter.get("/history", async (_req: Request, res: Response) => {
             take: 20,
         });
 
-        const formatted = await Promise.all(
-            swaps.map(async (swap) => ({
-                id: swap.id,
-                inputMint: swap.inputMint,
-                outputMint: swap.outputMint,
-                inputSymbol: await mintToSymbol(swap.inputMint),
-                outputSymbol: await mintToSymbol(swap.outputMint),
-                inputAmount: swap.inputAmount.toString(),
-                outputAmount: swap.outputAmount.toString(),
-                feeAmountUsd: swap.feeAmountUsd,
-                txSignature: swap.txSignature,
-                status: swap.status,
-                createdAt: swap.createdAt.toISOString(),
-            }))
-        );
+        // Batch-resolve all mint symbols in a single token list lookup (M3: avoid N+1)
+        const uniqueMints = [...new Set(swaps.flatMap((s) => [s.inputMint, s.outputMint]))];
+        const metadata = await getTokensMetadata(uniqueMints);
+        const mintToSymbol = (mint: string): string =>
+            metadata[mint]?.symbol ?? mint.slice(0, 6) + "...";
+
+        const formatted = swaps.map((swap) => ({
+            id: swap.id,
+            inputMint: swap.inputMint,
+            outputMint: swap.outputMint,
+            inputSymbol: mintToSymbol(swap.inputMint),
+            outputSymbol: mintToSymbol(swap.outputMint),
+            inputAmount: swap.inputAmount.toString(),
+            outputAmount: swap.outputAmount.toString(),
+            feeAmountUsd: swap.feeAmountUsd,
+            txSignature: swap.txSignature,
+            status: swap.status,
+            createdAt: swap.createdAt.toISOString(),
+        }));
 
         res.json({ swaps: formatted });
     } catch (err) {

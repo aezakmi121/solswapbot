@@ -1,37 +1,57 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey, AccountInfo } from "@solana/web3.js";
 import { connection } from "../solana/connection";
+
+/** SPL Token program ID */
+const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+/** Token-2022 (Token Extensions) program ID */
+const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /**
  * Result of a single safety check.
+ * `errored: true` means the check failed due to a network/RPC error —
+ * the result should NOT be counted toward the risk score (M6).
  */
 export interface CheckResult {
     name: string;
     safe: boolean;
     detail: string;
     weight: number; // Risk score contribution if unsafe (0-30)
+    errored?: boolean; // True when the check couldn't run (network error etc.)
 }
 
 // ─── Mint Authority ──────────────────────────────────────────────────
 /**
  * Check if the token's mint authority is disabled.
  * If enabled, the creator can mint infinite tokens → dump risk.
+ *
+ * Accepts pre-fetched accountInfo to avoid duplicate RPC calls (M5).
  */
-export async function checkMintAuthority(mintAddress: string): Promise<CheckResult> {
+export async function checkMintAuthority(
+    mintAddress: string,
+    cachedAccountInfo?: AccountInfo<Buffer> | null
+): Promise<CheckResult> {
     try {
         const mint = new PublicKey(mintAddress);
-        const accountInfo = await connection.getAccountInfo(mint);
+        const accountInfo = cachedAccountInfo !== undefined
+            ? cachedAccountInfo
+            : await connection.getAccountInfo(mint);
 
         if (!accountInfo) {
             return { name: "Mint Authority", safe: false, detail: "Token account not found", weight: 30 };
         }
 
-        // SPL Token Mint layout: mintAuthority is at offset 0, 36 bytes (4 byte option + 32 byte pubkey)
+        // Token-2022 has a different layout — flag it but don't misread bytes (M11)
+        const owner = accountInfo.owner.toBase58();
+        if (owner === TOKEN_2022_PROGRAM_ID) {
+            return { name: "Mint Authority", safe: true, detail: "Token-2022 (layout not fully parsed)", weight: 30 };
+        }
+
+        // SPL Token Mint layout: mintAuthority option byte at offset 0
         // Option byte: 0 = None (disabled), 1 = Some
         const data = accountInfo.data;
         const mintAuthorityOption = data[0];
         const hasMintAuthority = mintAuthorityOption === 1;
 
-        // Check if it's set to the zero address (also means effectively disabled)
         if (hasMintAuthority) {
             const authorityBytes = data.subarray(4, 36);
             const authority = new PublicKey(authorityBytes);
@@ -45,7 +65,8 @@ export async function checkMintAuthority(mintAddress: string): Promise<CheckResu
 
         return { name: "Mint Authority", safe: true, detail: "Disabled", weight: 30 };
     } catch (err) {
-        return { name: "Mint Authority", safe: false, detail: "Failed to check", weight: 30 };
+        // Network/RPC error — don't penalise the token (M6)
+        return { name: "Mint Authority", safe: true, detail: "Check unavailable", weight: 30, errored: true };
     }
 }
 
@@ -53,17 +74,30 @@ export async function checkMintAuthority(mintAddress: string): Promise<CheckResu
 /**
  * Check if the token's freeze authority is disabled.
  * If enabled, someone can freeze your tokens in your wallet.
+ *
+ * Accepts pre-fetched accountInfo to avoid duplicate RPC calls (M5).
  */
-export async function checkFreezeAuthority(mintAddress: string): Promise<CheckResult> {
+export async function checkFreezeAuthority(
+    mintAddress: string,
+    cachedAccountInfo?: AccountInfo<Buffer> | null
+): Promise<CheckResult> {
     try {
         const mint = new PublicKey(mintAddress);
-        const accountInfo = await connection.getAccountInfo(mint);
+        const accountInfo = cachedAccountInfo !== undefined
+            ? cachedAccountInfo
+            : await connection.getAccountInfo(mint);
 
         if (!accountInfo) {
             return { name: "Freeze Authority", safe: false, detail: "Token account not found", weight: 20 };
         }
 
-        // Freeze authority is at offset 36 in the mint layout (4 byte option + 32 byte pubkey)
+        // Token-2022 has a different layout — flag it but don't misread bytes (M11)
+        const owner = accountInfo.owner.toBase58();
+        if (owner === TOKEN_2022_PROGRAM_ID) {
+            return { name: "Freeze Authority", safe: true, detail: "Token-2022 (layout not fully parsed)", weight: 20 };
+        }
+
+        // Freeze authority is at offset 36 in the SPL mint layout (4 byte option + 32 byte pubkey)
         const data = accountInfo.data;
         const freezeAuthorityOption = data[36];
         const hasFreezeAuthority = freezeAuthorityOption === 1;
@@ -81,7 +115,8 @@ export async function checkFreezeAuthority(mintAddress: string): Promise<CheckRe
 
         return { name: "Freeze Authority", safe: true, detail: "Disabled", weight: 20 };
     } catch (err) {
-        return { name: "Freeze Authority", safe: false, detail: "Failed to check", weight: 20 };
+        // Network/RPC error — don't penalise the token (M6)
+        return { name: "Freeze Authority", safe: true, detail: "Check unavailable", weight: 20, errored: true };
     }
 }
 
@@ -89,8 +124,13 @@ export async function checkFreezeAuthority(mintAddress: string): Promise<CheckRe
 /**
  * Check if top 10 holders own more than 50% of supply.
  * High concentration = whale dump risk.
+ *
+ * Accepts pre-fetched total supply to avoid duplicate RPC calls (M5).
  */
-export async function checkTopHolders(mintAddress: string): Promise<CheckResult> {
+export async function checkTopHolders(
+    mintAddress: string,
+    cachedTotalSupply?: string
+): Promise<CheckResult> {
     try {
         const mint = new PublicKey(mintAddress);
         const largestAccounts = await connection.getTokenLargestAccounts(mint);
@@ -100,20 +140,27 @@ export async function checkTopHolders(mintAddress: string): Promise<CheckResult>
             return { name: "Top Holders", safe: false, detail: "No holders found", weight: 20 };
         }
 
-        // Get total supply
-        const supplyResponse = await connection.getTokenSupply(mint);
-        const totalSupply = Number(supplyResponse.value.amount);
+        // Use cached supply to avoid a second getTokenSupply call (M5)
+        let totalSupply: bigint;
+        if (cachedTotalSupply !== undefined) {
+            totalSupply = BigInt(cachedTotalSupply);
+        } else {
+            const supplyResponse = await connection.getTokenSupply(mint);
+            totalSupply = BigInt(supplyResponse.value.amount);
+        }
 
-        if (totalSupply === 0) {
+        if (totalSupply === 0n) {
             return { name: "Top Holders", safe: false, detail: "Zero supply", weight: 20 };
         }
 
-        // Sum top 10 holders
+        // Sum top 10 holders (use BigInt to avoid float overflow on large supplies)
         const top10Amount = accounts
             .slice(0, 10)
-            .reduce((sum, acc) => sum + Number(acc.amount), 0);
+            .reduce((sum, acc) => sum + BigInt(acc.amount), 0n);
 
-        const top10Percent = (top10Amount / totalSupply) * 100;
+        // Multiply by 1000 for one decimal place of precision without floats
+        const top10PerMilleRaw = (top10Amount * 1000n) / totalSupply;
+        const top10Percent = Number(top10PerMilleRaw) / 10;
 
         if (top10Percent > 80) {
             return { name: "Top Holders", safe: false, detail: `Top 10 hold ${top10Percent.toFixed(1)}% (extreme concentration)`, weight: 20 };
@@ -124,7 +171,8 @@ export async function checkTopHolders(mintAddress: string): Promise<CheckResult>
 
         return { name: "Top Holders", safe: true, detail: `Top 10 hold ${top10Percent.toFixed(1)}%`, weight: 20 };
     } catch (err) {
-        return { name: "Top Holders", safe: false, detail: "Failed to check", weight: 20 };
+        // Network/RPC error — don't penalise the token (M6)
+        return { name: "Top Holders", safe: true, detail: "Check unavailable", weight: 20, errored: true };
     }
 }
 
@@ -206,6 +254,7 @@ export async function checkTokenAge(mintAddress: string): Promise<CheckResult> {
         const years = ageDays / 365;
         return { name: "Token Age", safe: true, detail: `${years.toFixed(1)}+ years old`, weight: 10 };
     } catch (err) {
-        return { name: "Token Age", safe: false, detail: "Failed to check", weight: 10 };
+        // Network/RPC error — don't penalise the token (M6)
+        return { name: "Token Age", safe: true, detail: "Check unavailable", weight: 10, errored: true };
     }
 }

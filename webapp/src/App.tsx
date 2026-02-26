@@ -57,7 +57,9 @@ export function App() {
                 console.error("Telegram auto-login failed:", err)
             );
         }
-    }, [ready, authenticated]);
+    // loginWithTelegram is stable from Privy SDK and safe to include (M17)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ready, authenticated, loginWithTelegram]);
 
     // ── Sync wallet address from Privy ──
     const embeddedWallet = wallets.length > 0 ? wallets[0] : null;
@@ -73,6 +75,8 @@ export function App() {
         saveWalletAddress(walletAddress)
             .then(() => setWalletSaved(true))
             .catch((err: unknown) => console.error("Failed to save wallet:", err));
+    // saveWalletAddress is a stable module-level import (M17)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletAddress, walletSaved]);
 
     // ── Refresh SOL balance + all token balances (shared for swap balance checks) ──

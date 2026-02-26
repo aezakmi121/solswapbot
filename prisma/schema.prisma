@@ -38,7 +38,7 @@ model Swap {
   outputAmount  BigInt
   inputChain    String     @default("solana")  // "solana", "ethereum", "bsc", etc.
   outputChain   String     @default("solana")
-  feeAmountUsd  Float?
+  feeAmountUsd  Decimal?  // M20: Decimal avoids floating-point precision loss for USD fee values
   txSignature   String?
   status        SwapStatus @default(PENDING)
   createdAt     DateTime   @default(now())
