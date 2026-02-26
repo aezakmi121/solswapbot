@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-26 | Version: 0.1.0
+> Updated: 2026-02-26 | Version: 0.2.0-dev
 > Read this file FIRST before making any changes.
 
 ---
@@ -41,7 +41,7 @@ It also provides **token safety scanning**, **whale tracking**, and **AI market 
 │  ┌──────────┐    ┌────────────────────┐ │
 │  │ Grammy   │    │ Mini App (Vite)    │ │
 │  │ Bot      │    │ React + Privy SDK  │ │
-│  │ /start   │    │ Swap | Scan | Track│ │
+│  │ /start   │    │ Wallet|Swap|Scan|⚙ │ │
 │  └────┬─────┘    └────────┬───────────┘ │
 └───────┼───────────────────┼─────────────┘
         │                   │
@@ -289,17 +289,428 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | POST /api/user/wallet endpoint | DONE | P1 |
 | Swap history panel UI | DONE | P1 |
 
-### Phase 2 — MINI APP UI
+### Phase 2 — MINI APP UI & WALLET FEATURES
 
-| Task | Status | Priority |
-|------|--------|----------|
-| Tab navigation (Swap / Scan / Track / Signals) | NOT STARTED | P1 |
-| SwapPanel component (extract from App.tsx) | NOT STARTED | P1 |
-| ScanPanel component (token scanner UI) | NOT STARTED | P1 |
-| WalletHeader component (balance + address) | NOT STARTED | P1 |
-| TokenSelector component (search + select) | DONE | P1 |
-| History section in swap tab | DONE (via slide-up panel) | P2 |
-| React Error Boundary | DONE | P1 |
+> **Goal:** Transform the Mini App from a single swap screen into a full wallet experience
+> with tab navigation, portfolio view, send/receive, token scanner, and settings.
+> Modeled after Phantom, Tonkeeper, and top Telegram mini app wallet UX patterns.
+
+#### Phase 2 Summary Table
+
+| Task | Status | Priority | Sprint |
+|------|--------|----------|--------|
+| **Architecture & Navigation** | | | |
+| Tab navigation bar (Wallet / Swap / Scan / Settings) | NOT STARTED | P0 | 2A |
+| Extract SwapPanel from App.tsx | NOT STARTED | P0 | 2A |
+| App.tsx → tab router + shared state | NOT STARTED | P0 | 2A |
+| **Wallet Tab (Home)** | | | |
+| WalletHeader — total portfolio value (USD) | NOT STARTED | P0 | 2A |
+| Action buttons row (Send / Receive / Swap) | NOT STARTED | P0 | 2A |
+| Portfolio token list (all held tokens + USD values) | NOT STARTED | P0 | 2A |
+| Receive flow (address + QR code + copy + share) | NOT STARTED | P0 | 2A |
+| Send flow (token select → address → amount → confirm → send) | NOT STARTED | P1 | 2B |
+| GET /api/user/portfolio endpoint (balances + USD prices) | NOT STARTED | P0 | 2A |
+| Transaction history (all types, not just swaps) | NOT STARTED | P1 | 2B |
+| Pull-to-refresh on portfolio | NOT STARTED | P2 | 2C |
+| **Scan Tab** | | | |
+| ScanPanel — mint address input + search | NOT STARTED | P1 | 2B |
+| Risk score gauge (0-100, color-coded arc) | NOT STARTED | P1 | 2B |
+| Individual check results (pass/fail with details) | NOT STARTED | P1 | 2B |
+| Token info display (supply, price, age) | NOT STARTED | P1 | 2B |
+| "Swap this token" quick action → navigates to Swap tab | NOT STARTED | P2 | 2C |
+| Recent scans list (from DB) | NOT STARTED | P2 | 2C |
+| GET /api/scan/history endpoint | NOT STARTED | P2 | 2C |
+| Frontend `fetchScan` API function | NOT STARTED | P1 | 2B |
+| **Settings Tab** | | | |
+| View full wallet address + copy button | NOT STARTED | P1 | 2B |
+| Show wallet QR code | NOT STARTED | P1 | 2B |
+| Slippage tolerance setting (0.1% / 0.5% / 1.0% / custom) | NOT STARTED | P1 | 2B |
+| Referral code display + share | NOT STARTED | P2 | 2C |
+| About section (version, fees, non-custodial disclaimer) | NOT STARTED | P2 | 2C |
+| Log out button (moved from footer) | NOT STARTED | P1 | 2B |
+| **Swap Tab Enhancements** | | | |
+| Slippage settings gear icon (uses Settings value) | NOT STARTED | P1 | 2B |
+| Recent/favorite tokens shortcut | NOT STARTED | P2 | 2C |
+| Cross-chain swap UI (chain selector for LI.FI) | NOT STARTED | P2 | 2C |
+| **UI/UX Polish** | | | |
+| Skeleton loading states (shimmer placeholders) | NOT STARTED | P2 | 2C |
+| Toast notifications (copy, send, errors) | NOT STARTED | P2 | 2C |
+| Haptic feedback via Telegram WebApp API | NOT STARTED | P2 | 2C |
+| Smooth tab transition animations | NOT STARTED | P2 | 2C |
+| **Already Done** | | | |
+| TokenSelector component (search + select) | DONE | P1 | — |
+| History section in swap tab (slide-up panel) | DONE | P2 | — |
+| React Error Boundary | DONE | P1 | — |
+
+---
+
+### Phase 2 — Detailed Design
+
+#### 2.1 Tab Navigation
+
+```
+┌──────────────────────────────────────┐
+│  ⚡ SolSwap           [wallet badge] │  ← shared header
+├──────────────────────────────────────┤
+│                                      │
+│         [ Tab Content Area ]         │
+│                                      │
+├──────────────────────────────────────┤
+│  🏠 Wallet  │  🔄 Swap  │  🔍 Scan  │  ⚙️ Settings  │  ← bottom tab bar
+└──────────────────────────────────────┘
+```
+
+**Implementation:**
+- `App.tsx` becomes a tab router: renders `<WalletTab>`, `<SwapPanel>`, `<ScanPanel>`, or `<SettingsPanel>` based on active tab
+- State (`activeTab`) stored in App.tsx, passed as prop or via context
+- Shared state (wallet address, balances, tokens) stays in App.tsx and passes down
+- Tab bar is a fixed-bottom component, always visible
+- Default tab on launch: **Wallet**
+- Swap tab preserves all existing swap logic (extracted from current App.tsx)
+
+**Files to create:**
+```
+webapp/src/
+├── components/
+│   ├── TabBar.tsx           # Bottom navigation bar
+│   ├── WalletTab.tsx        # Portfolio + send/receive
+│   ├── SwapPanel.tsx        # Extracted from App.tsx (all swap logic)
+│   ├── ScanPanel.tsx        # Token scanner UI
+│   ├── SettingsPanel.tsx    # Wallet info + preferences
+│   ├── ReceiveModal.tsx     # QR code + address + copy + share
+│   ├── SendFlow.tsx         # Multi-step send flow
+│   └── RiskGauge.tsx        # Visual risk score component for scanner
+```
+
+#### 2.2 Wallet Tab (Home Screen)
+
+The primary screen users see when opening the app. Modeled after Phantom/Tonkeeper.
+
+```
+┌──────────────────────────────────────┐
+│          $124.56                     │  ← Total portfolio value (USD)
+│     GkXn...4f2R  📋                 │  ← Address (tap to copy)
+├──────────────────────────────────────┤
+│  [ 📥 Receive ]  [ 📤 Send ]  [ 🔄 Swap ]  │  ← Action buttons
+├──────────────────────────────────────┤
+│  Your Tokens                         │
+│  ┌──────────────────────────────────┐│
+│  │ ◎ SOL        1.234    $234.56   ││  ← Token icon, symbol, amount, USD
+│  │ 💵 USDC    50.00       $50.00   ││
+│  │ 🪐 JUP      100.0      $12.34   ││
+│  │ 🐕 BONK  1,000,000      $5.67   ││
+│  └──────────────────────────────────┘│
+├──────────────────────────────────────┤
+│  Recent Activity                     │
+│  🔄 SOL → USDC    0.5 SOL   ✅ 2h  │
+│  📤 Sent SOL      0.1 SOL   ✅ 1d  │
+│  📥 Received USDC 10 USDC   ✅ 3d  │
+└──────────────────────────────────────┘
+```
+
+**Portfolio Token List:**
+- Calls `GET /api/user/balances` (already exists) + `GET /api/price/:mint` for each held token
+- New endpoint: `GET /api/user/portfolio` — returns balances merged with USD prices in one call (avoids N+1)
+- Tokens sorted by USD value descending, then alphabetically
+- Tokens with 0 balance are hidden
+- Shows token icon (from Jupiter token list), symbol, human-readable amount, USD value
+- Pull-to-refresh: calls `refreshBalance()` on swipe-down
+
+**Backend changes needed:**
+- New route: `GET /api/user/portfolio` — combines balances + batch price lookup in one request
+  - Returns: `{ totalValueUsd, tokens: [{ mint, symbol, name, icon, amount, decimals, priceUsd, valueUsd }] }`
+  - Uses Jupiter Price API v3 batch endpoint (comma-separated mints)
+
+#### 2.3 Receive Flow
+
+Bottom-sheet modal triggered by "Receive" action button.
+
+```
+┌──────────────────────────────────────┐
+│  Receive Tokens              ✕      │
+├──────────────────────────────────────┤
+│         ┌─────────────┐             │
+│         │             │             │
+│         │  [QR CODE]  │             │  ← QR code encoding wallet address
+│         │             │             │
+│         └─────────────┘             │
+│                                      │
+│  Solana Network                      │  ← Network label
+│                                      │
+│  GkXn8f4R...2jK9p4f2R              │  ← Full address (monospace)
+│                                      │
+│  [ 📋 Copy Address ]  [ 📤 Share ] │  ← Action buttons
+│                                      │
+│  ⚠️ Only send Solana tokens to     │
+│  this address.                       │  ← Safety warning
+└──────────────────────────────────────┘
+```
+
+**Implementation:**
+- QR code generated client-side using `qrcode` npm package (lightweight, no backend needed)
+- Copy button uses `navigator.clipboard.writeText()` with haptic feedback
+- Share button uses Telegram WebApp's share API or native `navigator.share()` if available
+- Network label: "Solana Network" (hardcoded for now, future: chain selector for cross-chain)
+- Safety warning: reminds user to only send Solana SPL tokens to this address
+
+#### 2.4 Send Flow
+
+Multi-step bottom-sheet flow triggered by "Send" action button.
+
+```
+Step 1: Select Token          Step 2: Enter Details         Step 3: Confirm
+┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
+│ Send                 │     │ Send SOL             │     │ Confirm Send         │
+│                      │     │                      │     │                      │
+│ Select token to send │     │ To:                  │     │ Sending              │
+│                      │     │ [paste address    📋]│     │ 0.5 SOL (~$95.00)    │
+│ ◎ SOL     1.234     │     │                      │     │                      │
+│ 💵 USDC   50.00     │     │ Amount:              │     │ To:                  │
+│ 🪐 JUP    100.0     │     │ [0.5          ] [MAX]│     │ 7xKX...9f2R          │
+│                      │     │ Balance: 1.234 SOL   │     │                      │
+│                      │     │ ~$95.00              │     │ Network fee: ~0.000005│
+│                      │     │                      │     │ SOL                  │
+│                      │     │ [Continue →]         │     │ [Confirm & Send]     │
+└──────────────────────┘     └──────────────────────┘     └──────────────────────┘
+```
+
+**Implementation:**
+- Step 1: Show only tokens the user holds (from portfolio data), tap to select
+- Step 2: Recipient address input (paste from clipboard, validate as Solana address)
+  - Amount input with MAX button (reserves 0.01 SOL for fees if sending SOL)
+  - Real-time USD value display
+  - "Continue" validates address + amount before proceeding
+- Step 3: Confirmation screen showing summary
+  - "Confirm & Send" builds + signs + sends transfer transaction via Privy
+  - Shows confirming state → done with Solscan link
+
+**Backend changes needed:**
+- New route: `POST /api/send` — builds an unsigned SPL transfer or SOL transfer transaction
+  - Body: `{ tokenMint, recipientAddress, amount, senderAddress }`
+  - Returns: `{ transaction: base64, lastValidBlockHeight }`
+  - Validates recipient address, amount > 0, sender has balance
+- Uses `@solana/spl-token` `createTransferInstruction` for SPL tokens
+- Uses `SystemProgram.transfer` for native SOL
+
+#### 2.5 Scan Tab (Token Scanner)
+
+```
+┌──────────────────────────────────────┐
+│  Token Scanner                       │
+│                                      │
+│  [Paste token address or search... ] │  ← Input field
+│  [ Scan ]                            │  ← Submit button
+├──────────────────────────────────────┤
+│                                      │
+│         Risk Score: 25/100           │
+│      ┌──────────────────┐            │
+│      │   🟢 LOW RISK    │            │  ← Color-coded badge
+│      └──────────────────┘            │
+│                                      │
+│  Checks:                             │
+│  ✅ Mint Authority    Disabled       │
+│  ✅ Freeze Authority  Disabled       │
+│  ⚠️ Top Holders      Top 10: 45.2% │
+│  ✅ Token Age         2.3 years      │
+│                                      │
+│  Token Info:                         │
+│  Supply: 1,000,000,000              │
+│  Price: $1.23                        │
+│  Decimals: 6                         │
+│                                      │
+│  [ 🔄 Swap This Token ]             │  ← Navigate to swap tab
+├──────────────────────────────────────┤
+│  Recent Scans                        │
+│  BONK — LOW (12) — 2h ago           │
+│  BOME — HIGH (78) — 1d ago          │
+└──────────────────────────────────────┘
+```
+
+**Risk Score Visual:**
+- Score 0-20: Green badge "LOW RISK"
+- Score 21-50: Yellow badge "MEDIUM RISK"
+- Score 51-100: Red badge "HIGH RISK"
+- Optional: semicircular gauge/arc with needle (RiskGauge component)
+
+**Implementation:**
+- Input: paste mint address or search by name (reuse token search from TokenSelector)
+- On submit: calls `GET /api/scan?mint=<address>` (already exists in backend)
+- Results displayed inline (no modal)
+- Each check shows pass/fail icon + detail text
+- "Swap This Token" sets the output token and switches to Swap tab
+- Recent scans: stored in localStorage (no backend needed) or fetched from DB
+
+**Frontend API function needed:**
+```typescript
+// Add to webapp/src/lib/api.ts
+export interface ScanResult {
+    mintAddress: string;
+    riskScore: number;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    checks: Array<{ name: string; safe: boolean; detail: string; weight: number }>;
+    tokenInfo: { supply: string | null; decimals: number | null; price: number | null };
+    scannedAt: string;
+}
+export async function fetchTokenScan(mint: string): Promise<ScanResult> { ... }
+```
+
+#### 2.6 Settings Panel
+
+```
+┌──────────────────────────────────────┐
+│  Settings                            │
+├──────────────────────────────────────┤
+│  Wallet                              │
+│  ┌──────────────────────────────────┐│
+│  │ Address                          ││
+│  │ GkXn8f4R...2jK9p4f2R     📋 🔲 ││  ← Copy + QR buttons
+│  └──────────────────────────────────┘│
+│                                      │
+│  Trading                             │
+│  ┌──────────────────────────────────┐│
+│  │ Slippage Tolerance               ││
+│  │ [0.1%] [0.5%] [1.0%] [Custom]   ││  ← Radio/chip selector
+│  └──────────────────────────────────┘│
+│                                      │
+│  Referral                            │
+│  ┌──────────────────────────────────┐│
+│  │ Your Code: ABC123         📋    ││
+│  │ Referrals: 5 users               ││
+│  │ [ Share Referral Link ]          ││
+│  └──────────────────────────────────┘│
+│                                      │
+│  About                               │
+│  ┌──────────────────────────────────┐│
+│  │ SolSwap v0.2.0                   ││
+│  │ Non-custodial · Privy MPC wallet ││
+│  │ Platform fee: 0.5% per swap      ││
+│  │ Powered by Jupiter & LI.FI       ││
+│  └──────────────────────────────────┘│
+│                                      │
+│  [ 🚪 Log Out ]                     │
+└──────────────────────────────────────┘
+```
+
+**Slippage persistence:**
+- Stored in `localStorage` under key `solswap_slippage_bps`
+- Default: 50 (0.5%)
+- Passed to quote API as query param: `&slippageBps=<value>`
+- Swap tab reads from localStorage on mount
+
+**Referral:**
+- Backend already has `referralCode` on User model
+- `GET /api/user` already returns user data — needs to include `referralCode` and `referralCount`
+- Share link format: `https://t.me/<bot_username>?start=ref_<CODE>`
+
+#### 2.7 Swap Tab Enhancements
+
+Minor improvements to existing swap UI:
+
+1. **Slippage gear icon** — small ⚙️ button in swap card header, shows current slippage, taps to Settings tab
+2. **Recent tokens** — show last 3 tokens used as quick-select chips above the token selector
+3. **Cross-chain indicator** — if input/output are on different chains, show "Cross-chain via LI.FI" in route display
+
+---
+
+### Phase 2 — Implementation Sprints
+
+#### Sprint 2A — Architecture + Wallet Tab (P0)
+
+**Goal:** Tab navigation working, wallet tab shows portfolio, receive flow works.
+
+| # | Task | Files | Backend? |
+|---|------|-------|----------|
+| 1 | Create TabBar component | `webapp/src/components/TabBar.tsx`, `index.css` | No |
+| 2 | Extract SwapPanel from App.tsx | `webapp/src/components/SwapPanel.tsx` | No |
+| 3 | Refactor App.tsx as tab router | `webapp/src/App.tsx` | No |
+| 4 | Create `GET /api/user/portfolio` | `src/api/routes/user.ts` | Yes |
+| 5 | Add `fetchPortfolio` to API client | `webapp/src/lib/api.ts` | No |
+| 6 | Build WalletTab (portfolio list) | `webapp/src/components/WalletTab.tsx` | No |
+| 7 | Build ReceiveModal (QR + copy + share) | `webapp/src/components/ReceiveModal.tsx` | No |
+| 8 | Install `qrcode` package in webapp | `webapp/package.json` | No |
+| 9 | Style all new components | `webapp/src/styles/index.css` | No |
+| 10 | Test end-to-end: tabs + portfolio + receive | — | — |
+
+**Estimated new files:** 4 components + 1 backend route update
+**Deps to add:** `qrcode` (webapp)
+
+#### Sprint 2B — Scan + Send + Settings (P1)
+
+**Goal:** Scan tab works, send flow works, settings with slippage.
+
+| # | Task | Files | Backend? |
+|---|------|-------|----------|
+| 1 | Build ScanPanel | `webapp/src/components/ScanPanel.tsx` | No |
+| 2 | Add `fetchTokenScan` to API client | `webapp/src/lib/api.ts` | No |
+| 3 | Build RiskGauge component | `webapp/src/components/RiskGauge.tsx` | No |
+| 4 | Build SettingsPanel | `webapp/src/components/SettingsPanel.tsx` | No |
+| 5 | Slippage localStorage + pass to quote API | `webapp/src/lib/api.ts`, `App.tsx` | No |
+| 6 | Create `POST /api/send` (build transfer TX) | `src/api/routes/send.ts`, `server.ts` | Yes |
+| 7 | Build SendFlow component | `webapp/src/components/SendFlow.tsx` | No |
+| 8 | Add `fetchSendTransaction` to API client | `webapp/src/lib/api.ts` | No |
+| 9 | Add referralCode + count to GET /api/user | `src/api/routes/user.ts`, `src/db/queries/users.ts` | Yes |
+| 10 | Add slippage gear icon to SwapPanel | `webapp/src/components/SwapPanel.tsx` | No |
+| 11 | Style scan, send, settings components | `webapp/src/styles/index.css` | No |
+
+**Estimated new files:** 4 components + 1 backend route
+**Deps to add:** none
+
+#### Sprint 2C — Polish & Extras (P2)
+
+**Goal:** Production-quality UX polish, cross-chain swap UI, remaining features.
+
+| # | Task | Files | Backend? |
+|---|------|-------|----------|
+| 1 | Skeleton loading states (shimmer) | All components | No |
+| 2 | Toast notification system | `webapp/src/components/Toast.tsx` | No |
+| 3 | Haptic feedback (Telegram WebApp API) | Throughout | No |
+| 4 | Pull-to-refresh on WalletTab | `WalletTab.tsx` | No |
+| 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No |
+| 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No |
+| 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No |
+| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No |
+| 9 | Tab transition animations | `index.css` | No |
+| 10 | About section in Settings | `SettingsPanel.tsx` | No |
+| 11 | Referral share link | `SettingsPanel.tsx` | No |
+
+**Estimated new files:** 1 (Toast) + updates to existing
+
+---
+
+### Phase 2 — New File Structure
+
+After Phase 2, the webapp will look like:
+
+```
+webapp/src/
+├── App.tsx                    # Tab router + shared state (walletAddress, balances, activeTab)
+├── main.tsx                   # Privy + Telegram SDK setup (unchanged)
+├── ErrorBoundary.tsx          # Error boundary (unchanged)
+├── TokenSelector.tsx          # Token search modal (unchanged)
+├── components/
+│   ├── TabBar.tsx             # Bottom tab navigation (Wallet | Swap | Scan | Settings)
+│   ├── WalletTab.tsx          # Portfolio view + action buttons + token list + activity
+│   ├── SwapPanel.tsx          # Full swap UI (extracted from current App.tsx)
+│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans
+│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout
+│   ├── ReceiveModal.tsx       # QR code + address + copy + share
+│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm)
+│   ├── RiskGauge.tsx          # Visual risk score display (color-coded)
+│   └── Toast.tsx              # Toast notification system
+├── lib/
+│   └── api.ts                 # API client (add: fetchPortfolio, fetchTokenScan, fetchSendTransaction)
+└── styles/
+    └── index.css              # All styles (add: tab bar, wallet, scan, settings, send, receive)
+```
+
+### Phase 2 — New/Modified Backend Routes
+
+| Method | Path | Description | Sprint |
+|--------|------|-------------|--------|
+| GET | `/api/user/portfolio` | Balances + USD prices in one call | 2A |
+| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B |
+| GET | `/api/user` (update) | Add `referralCode` + `referralCount` to response | 2B |
+| GET | `/api/quote` (update) | Accept optional `slippageBps` query param | 2B |
 
 ### Phase 3 — PREMIUM FEATURES
 
@@ -562,7 +973,75 @@ Remaining work: Zod on LI.FI (M9), and MEDIUM-priority cleanup items.
 
 ---
 
+## Beta Test Checklist
+
+> Run through this checklist after every deploy to `main`. All items must pass before inviting external users.
+
+### Pre-Test (VPS)
+
+```bash
+cd ~/solswapbot
+git pull origin main
+npm install
+npx prisma db push
+npm run build
+pm2 restart ecosystem.config.js
+pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is running!"
+```
+
+### Core Flow
+
+- [ ] `/start` in Telegram → Mini App button appears
+- [ ] Tap Mini App → loads, Privy login via Telegram succeeds
+- [ ] Wallet auto-created, address visible in header
+- [ ] Select SOL → USDC, enter 0.001, quote appears within ~2s
+- [ ] Wait 30s → quote auto-refreshes (H4)
+- [ ] Change amount after quote loads, click swap immediately → "Quote is outdated" error (H3)
+- [ ] Execute swap → sign in Privy → "Confirming..." → "Swap complete!" with Solscan link
+- [ ] Tap wallet badge → swap appears in history panel
+- [ ] Insufficient balance → clear error message (not Privy simulation failure)
+- [ ] Token selector → search "JUP" → select → quote loads for new pair
+
+### Token Scanner
+
+- [ ] `GET /api/scan?mint=<any-mint>` with auth header → returns risk score 0-100
+
+### Edge Cases
+
+- [ ] Same token both sides → blocked or shows 0
+- [ ] Amount = 0 → swap button disabled
+- [ ] Spam-click swap → only one TX executes
+- [ ] Close Mini App mid-swap → re-open, check history for result
+
+### Security Spot-Checks
+
+- [ ] `GET /api/user` without `Authorization` header → 401
+- [ ] `POST /api/swap` with modified `platformFeeBps` → 400
+- [ ] Check fee wallet on Solscan → fee arrived from swap
+
+### Done When
+
+- [ ] End-to-end swap completes with real funds (SOL → USDC)
+- [ ] Fee visible in fee wallet on Solscan
+- [ ] History shows correct records
+- [ ] Scanner returns valid risk scores
+- [ ] No errors in `pm2 logs`
+- [ ] Auth rejects all unauthenticated requests
+
+---
+
 ## Changelog
+
+### 2026-02-26 — Phase 2 Planning + Beta Test Checklist
+- Added comprehensive Beta Test Checklist to CLAUDE.md (pre-test, core flow, edge cases, security checks)
+- Designed full Phase 2 plan: Mini App UI & Wallet Features
+- Phase 2 adds: Tab navigation (Wallet/Swap/Scan/Settings), portfolio view, send/receive flows,
+  token scanner UI, settings panel with slippage control, QR code receive, referral sharing
+- Organized into 3 sprints: 2A (architecture + wallet), 2B (scan + send + settings), 2C (polish)
+- New backend routes planned: GET /api/user/portfolio, POST /api/send
+- New webapp components: TabBar, WalletTab, SwapPanel, ScanPanel, SettingsPanel, ReceiveModal,
+  SendFlow, RiskGauge, Toast
+- UX patterns modeled after Phantom, Tonkeeper, and Telegram mini app best practices
 
 ### 2026-02-26 — Stale Quote Prevention, Quote Expiry, Timeout Handling (H3/H4/H10)
 - Fixed stale quote race condition (H3): quotes now snapshot the inputs (amount, mints) they were fetched for; `handleSwap` verifies current inputs match the quote before proceeding. Added AbortController to cancel in-flight quote fetches when inputs change.
