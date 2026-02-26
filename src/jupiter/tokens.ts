@@ -146,3 +146,12 @@ export async function getTokenDecimals(mint: string): Promise<number> {
   const token = await getTokenByMint(mint);
   return token?.decimals ?? 9;
 }
+
+/** Batch look up metadata for multiple mints. Returns a map of mint → token (undefined if not found). */
+export async function getTokensMetadata(
+  mints: string[]
+): Promise<Record<string, JupiterToken | undefined>> {
+  const all = await loadTokenList();
+  const byMint = new Map(all.map((t) => [t.address, t]));
+  return Object.fromEntries(mints.map((m) => [m, byMint.get(m)]));
+}

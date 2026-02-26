@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-26 | Version: 0.2.0-dev
+> Updated: 2026-02-26 | Version: 0.2.0 (Sprint 2A complete)
 > Read this file FIRST before making any changes.
 
 ---
@@ -179,6 +179,8 @@ solswapbot/
 | **WatchedWallet** | walletAddress, label, active | DONE (schema only, no API) |
 | **Subscription** | tier (FREE/SCANNER_PRO/WHALE_TRACKER/SIGNALS/ALL_ACCESS), expiresAt | DONE (schema only, no enforcement) |
 
+> **Note:** `src/db/queries/fees.ts` and `src/db/queries/referrals.ts` exist but contain no active logic — they are stubs reserved for Phase 3 revenue analytics.
+
 Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED / TIMEOUT`
 
 ---
@@ -221,9 +223,10 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/user` | Get user profile + SOL balance |
+| GET | `/api/user` | Get user profile + SOL balance (`telegramId`, `walletAddress`, `solBalance` — does **not** yet include `referralCode`/`referralCount`, see Sprint 2B) |
 | POST | `/api/user/wallet` | Save Privy wallet address `{ walletAddress }` |
 | GET | `/api/user/balances?walletAddress=<addr>` | Get SOL + all SPL token balances |
+| GET | `/api/user/portfolio` | Get all held tokens with USD prices in one batched call — `{ totalValueUsd, tokens[], walletAddress }` |
 | GET | `/api/quote?inputMint=&outputMint=&humanAmount=` | Get swap quote with USD breakdown |
 | POST | `/api/swap` | Build unsigned swap TX `{ quoteResponse, userPublicKey }` |
 | POST | `/api/swap/confirm` | Record swap + start on-chain polling `{ txSignature, inputMint, ... }` |
@@ -257,7 +260,7 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 
 ## Implementation Status & Phases
 
-### Current State (v0.1.0) — FOUNDATION
+### Current State (v0.2.0) — SPRINT 2A COMPLETE
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -275,7 +278,12 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | Privy SDK integration | DONE | PrivyProvider + useWallets + useSignAndSendTransaction |
 | POST /api/user/wallet | DONE | Auto-saves Privy wallet address to DB |
 | GET /api/history | DONE | Returns last 20 swaps with token symbol resolution |
-| History panel (slide-up UI) | DONE | Tap wallet badge to open |
+| History panel (slide-up UI) | DONE | Accessible from Swap tab |
+| Tab navigation (Wallet / Swap / Scan / Settings) | DONE | TabBar + App.tsx tab router |
+| SwapPanel component | DONE | Extracted from App.tsx, all swap logic self-contained |
+| WalletTab component | DONE | Portfolio view, action buttons, Receive flow |
+| ReceiveModal component | DONE | QR code (qrcode.react), copy, share |
+| GET /api/user/portfolio | DONE | Batched balance + price lookup in one request |
 
 ### Phase 1 — WALLET & CORE SWAP (COMPLETED 2026-02-24)
 
@@ -300,16 +308,16 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | Task | Status | Priority | Sprint |
 |------|--------|----------|--------|
 | **Architecture & Navigation** | | | |
-| Tab navigation bar (Wallet / Swap / Scan / Settings) | NOT STARTED | P0 | 2A |
-| Extract SwapPanel from App.tsx | NOT STARTED | P0 | 2A |
-| App.tsx → tab router + shared state | NOT STARTED | P0 | 2A |
+| Tab navigation bar (Wallet / Swap / Scan / Settings) | DONE | P0 | 2A |
+| Extract SwapPanel from App.tsx | DONE | P0 | 2A |
+| App.tsx → tab router + shared state | DONE | P0 | 2A |
 | **Wallet Tab (Home)** | | | |
-| WalletHeader — total portfolio value (USD) | NOT STARTED | P0 | 2A |
-| Action buttons row (Send / Receive / Swap) | NOT STARTED | P0 | 2A |
-| Portfolio token list (all held tokens + USD values) | NOT STARTED | P0 | 2A |
-| Receive flow (address + QR code + copy + share) | NOT STARTED | P0 | 2A |
+| WalletHeader — total portfolio value (USD) | DONE | P0 | 2A |
+| Action buttons row (Send / Receive / Swap) | DONE | P0 | 2A |
+| Portfolio token list (all held tokens + USD values) | DONE | P0 | 2A |
+| Receive flow (address + QR code + copy + share) | DONE | P0 | 2A |
 | Send flow (token select → address → amount → confirm → send) | NOT STARTED | P1 | 2B |
-| GET /api/user/portfolio endpoint (balances + USD prices) | NOT STARTED | P0 | 2A |
+| GET /api/user/portfolio endpoint (balances + USD prices) | DONE | P0 | 2A |
 | Transaction history (all types, not just swaps) | NOT STARTED | P1 | 2B |
 | Pull-to-refresh on portfolio | NOT STARTED | P2 | 2C |
 | **Scan Tab** | | | |
@@ -341,6 +349,13 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | TokenSelector component (search + select) | DONE | P1 | — |
 | History section in swap tab (slide-up panel) | DONE | P2 | — |
 | React Error Boundary | DONE | P1 | — |
+| TabBar component | DONE | P0 | 2A |
+| SwapPanel component (extracted) | DONE | P0 | 2A |
+| WalletTab component (portfolio + actions) | DONE | P0 | 2A |
+| ReceiveModal (QR + copy + share) | DONE | P0 | 2A |
+| GET /api/user/portfolio (batched prices) | DONE | P0 | 2A |
+| fetchPortfolio API client function | DONE | P0 | 2A |
+| qrcode.react installed in webapp | DONE | P0 | 2A |
 
 ---
 
@@ -618,21 +633,22 @@ Minor improvements to existing swap UI:
 
 **Goal:** Tab navigation working, wallet tab shows portfolio, receive flow works.
 
-| # | Task | Files | Backend? |
-|---|------|-------|----------|
-| 1 | Create TabBar component | `webapp/src/components/TabBar.tsx`, `index.css` | No |
-| 2 | Extract SwapPanel from App.tsx | `webapp/src/components/SwapPanel.tsx` | No |
-| 3 | Refactor App.tsx as tab router | `webapp/src/App.tsx` | No |
-| 4 | Create `GET /api/user/portfolio` | `src/api/routes/user.ts` | Yes |
-| 5 | Add `fetchPortfolio` to API client | `webapp/src/lib/api.ts` | No |
-| 6 | Build WalletTab (portfolio list) | `webapp/src/components/WalletTab.tsx` | No |
-| 7 | Build ReceiveModal (QR + copy + share) | `webapp/src/components/ReceiveModal.tsx` | No |
-| 8 | Install `qrcode` package in webapp | `webapp/package.json` | No |
-| 9 | Style all new components | `webapp/src/styles/index.css` | No |
-| 10 | Test end-to-end: tabs + portfolio + receive | — | — |
+| # | Task | Files | Backend? | Status |
+|---|------|-------|----------|--------|
+| 1 | Create TabBar component | `webapp/src/components/TabBar.tsx`, `index.css` | No | ✅ DONE |
+| 2 | Extract SwapPanel from App.tsx | `webapp/src/components/SwapPanel.tsx` | No | ✅ DONE |
+| 3 | Refactor App.tsx as tab router | `webapp/src/App.tsx` | No | ✅ DONE |
+| 4 | Create `GET /api/user/portfolio` | `src/api/routes/user.ts` | Yes | ✅ DONE |
+| 5 | Add `fetchPortfolio` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
+| 6 | Build WalletTab (portfolio list) | `webapp/src/components/WalletTab.tsx` | No | ✅ DONE |
+| 7 | Build ReceiveModal (QR + copy + share) | `webapp/src/components/ReceiveModal.tsx` | No | ✅ DONE |
+| 8 | Install `qrcode.react` package in webapp | `webapp/package.json` | No | ✅ DONE |
+| 9 | Style all new components | `webapp/src/styles/index.css` | No | ✅ DONE |
+| 10 | Test end-to-end: tabs + portfolio + receive | — | — | Pending deploy |
 
-**Estimated new files:** 4 components + 1 backend route update
-**Deps to add:** `qrcode` (webapp)
+**New files created:** `TabBar.tsx`, `SwapPanel.tsx`, `WalletTab.tsx`, `ReceiveModal.tsx`
+**Deps added:** `qrcode.react` (webapp)
+**Backend helpers added:** `getTokenPricesBatch` (jupiter/price.ts), `getTokensMetadata` (jupiter/tokens.ts)
 
 #### Sprint 2B — Scan + Send + Settings (P1)
 
@@ -679,38 +695,36 @@ Minor improvements to existing swap UI:
 
 ### Phase 2 — New File Structure
 
-After Phase 2, the webapp will look like:
-
 ```
 webapp/src/
-├── App.tsx                    # Tab router + shared state (walletAddress, balances, activeTab)
+├── App.tsx                    # Tab router + shared state (walletAddress, balances, activeTab) ✅ 2A
 ├── main.tsx                   # Privy + Telegram SDK setup (unchanged)
 ├── ErrorBoundary.tsx          # Error boundary (unchanged)
 ├── TokenSelector.tsx          # Token search modal (unchanged)
 ├── components/
-│   ├── TabBar.tsx             # Bottom tab navigation (Wallet | Swap | Scan | Settings)
-│   ├── WalletTab.tsx          # Portfolio view + action buttons + token list + activity
-│   ├── SwapPanel.tsx          # Full swap UI (extracted from current App.tsx)
-│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans
-│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout
-│   ├── ReceiveModal.tsx       # QR code + address + copy + share
-│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm)
-│   ├── RiskGauge.tsx          # Visual risk score display (color-coded)
-│   └── Toast.tsx              # Toast notification system
+│   ├── TabBar.tsx             # Bottom tab navigation (Wallet | Swap | Scan | Settings) ✅ 2A
+│   ├── WalletTab.tsx          # Portfolio view + action buttons + token list ✅ 2A
+│   ├── SwapPanel.tsx          # Full swap UI (extracted from App.tsx) ✅ 2A
+│   ├── ReceiveModal.tsx       # QR code + address + copy + share ✅ 2A
+│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans  ❌ 2B
+│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout ❌ 2B
+│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ❌ 2B
+│   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ❌ 2B
+│   └── Toast.tsx              # Toast notification system ❌ 2C
 ├── lib/
-│   └── api.ts                 # API client (add: fetchPortfolio, fetchTokenScan, fetchSendTransaction)
+│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ❌ 2B, fetchSendTransaction ❌ 2B)
 └── styles/
-    └── index.css              # All styles (add: tab bar, wallet, scan, settings, send, receive)
+    └── index.css              # All styles (tab bar + wallet + receive ✅ 2A; scan + settings + send ❌ 2B)
 ```
 
 ### Phase 2 — New/Modified Backend Routes
 
-| Method | Path | Description | Sprint |
-|--------|------|-------------|--------|
-| GET | `/api/user/portfolio` | Balances + USD prices in one call | 2A |
-| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B |
-| GET | `/api/user` (update) | Add `referralCode` + `referralCount` to response | 2B |
-| GET | `/api/quote` (update) | Accept optional `slippageBps` query param | 2B |
+| Method | Path | Description | Sprint | Status |
+|--------|------|-------------|--------|--------|
+| GET | `/api/user/portfolio` | Balances + USD prices in one call | 2A | ✅ DONE |
+| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B | NOT STARTED |
+| GET | `/api/user` (update) | Add `referralCode` + `referralCount` to response | 2B | NOT STARTED |
+| GET | `/api/quote` (update) | Accept optional `slippageBps` query param | 2B | NOT STARTED |
 
 ### Phase 3 — PREMIUM FEATURES
 
@@ -1031,6 +1045,29 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-26 — Sprint 2A: Tab Navigation + Wallet Tab + Receive Flow (Phase 2A Complete)
+
+**Backend:**
+- Added `GET /api/user/portfolio` to `src/api/routes/user.ts` — returns all held tokens with USD prices in one batched call (avoids N+1). Uses new `getTokenPricesBatch()` (Jupiter Price API v3) and `getTokensMetadata()` for parallel lookup. Tokens sorted by USD value desc.
+- Added `getTokenPricesBatch(mints)` to `src/jupiter/price.ts` — batch-fetches prices for multiple mints in a single API call.
+- Added `getTokensMetadata(mints)` to `src/jupiter/tokens.ts` — batch metadata lookup from cached token list.
+
+**Frontend:**
+- Refactored `App.tsx` as a clean tab router. Shared state (walletAddress, tokenBalances, solBalance, refreshBalance) lives in App.tsx and is passed to tabs as props. Auth guards (loading, onboarding) remain in App.tsx.
+- Created `webapp/src/components/TabBar.tsx` — fixed bottom navigation bar (Wallet / Swap / Scan / Settings). Scan and Settings tabs show "Coming soon" placeholder for Sprint 2B.
+- Created `webapp/src/components/SwapPanel.tsx` — extracted all swap logic from App.tsx. Self-contained with its own Privy hooks, token loading, quote + swap state, and history slide-up panel.
+- Created `webapp/src/components/WalletTab.tsx` — portfolio home screen. Shows total USD value, short address + copy, action buttons (Receive, Send placeholder, Swap), and token list with icon/symbol/amount/USD value. Skeleton loading states.
+- Created `webapp/src/components/ReceiveModal.tsx` — bottom-sheet modal with QR code (via `qrcode.react`), full wallet address, copy button, share button (Telegram or Web Share API), and SPL safety warning.
+- Added `PortfolioToken`, `Portfolio` interfaces and `fetchPortfolio()` to `webapp/src/lib/api.ts`.
+- Installed `qrcode.react ^4.2.0` in webapp.
+- Added comprehensive Phase 2A CSS: tab bar, wallet tab, portfolio list, skeleton shimmer, modal system, receive modal, placeholder tabs.
+
+**Doc fixes:**
+- `GET /api/user` response noted as NOT YET including `referralCode`/`referralCount` (Sprint 2B).
+- `fees.ts` and `referrals.ts` correctly noted as stubs with no active logic.
+- Phase 2 Summary Table updated with Sprint 2A items all marked DONE.
+- Phase 2 New File Structure updated to reflect actual vs planned files.
 
 ### 2026-02-26 — Phase 2 Planning + Beta Test Checklist
 - Added comprehensive Beta Test Checklist to CLAUDE.md (pre-test, core flow, edge cases, security checks)

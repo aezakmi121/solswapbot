@@ -917,3 +917,605 @@ body {
     align-items: flex-start;
   }
 }
+
+/* ══════════════════════════════════════════
+   PHASE 2A — TAB NAVIGATION & NEW COMPONENTS
+   ══════════════════════════════════════════ */
+
+/* ── Tabbed app layout ── */
+.app--tabbed {
+  padding-bottom: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app--tabbed .header {
+  padding: 12px 16px 12px;
+  flex-shrink: 0;
+}
+
+.tab-content {
+  overflow-y: auto;
+  padding: 0 16px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Bottom Tab Bar ── */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  flex-shrink: 0;
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s;
+  font-family: var(--font);
+}
+
+.tab-item:hover {
+  color: var(--text-secondary);
+}
+
+.tab-item--active {
+  color: var(--accent);
+}
+
+.tab-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.tab-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* ── Panel Loading (inside tab) ── */
+.panel-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Panel header (inside SwapPanel) ── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0 12px;
+}
+
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.history-link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.history-link-btn:hover {
+  background: rgba(124, 92, 252, 0.1);
+}
+
+/* ── Swap Panel ── */
+.swap-panel {
+  padding-top: 0;
+}
+
+/* ── Wallet Tab ── */
+.wallet-tab {
+  padding-top: 8px;
+}
+
+/* ── Portfolio Header ── */
+.portfolio-header {
+  text-align: center;
+  padding: 24px 0 20px;
+}
+
+.portfolio-total {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.portfolio-value-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.portfolio-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.portfolio-address {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.portfolio-copy-btn {
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  color: var(--text-muted);
+}
+
+.portfolio-copy-btn:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* ── Wallet Action Buttons ── */
+.wallet-actions {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.wallet-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wallet-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wallet-action-btn--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wallet-action-icon {
+  font-size: 1.2rem;
+}
+
+/* ── Portfolio Section ── */
+.portfolio-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.portfolio-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-section-header h3 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.portfolio-refresh-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.portfolio-refresh-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+.portfolio-refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Portfolio Token List ── */
+.portfolio-token-list {
+  padding: 4px 0;
+}
+
+.portfolio-token-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  transition: background 0.1s;
+}
+
+.portfolio-token-row:hover {
+  background: var(--bg-input);
+}
+
+.portfolio-token-icon-wrap {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+
+.portfolio-token-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.portfolio-token-icon-placeholder {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.portfolio-token-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portfolio-token-symbol {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.portfolio-token-name {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-token-values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.portfolio-token-amount {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.portfolio-token-usd {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.portfolio-token-usd--unknown {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* ── Portfolio Empty / Error ── */
+.portfolio-empty {
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.portfolio-empty p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.portfolio-empty-hint {
+  font-size: 0.8rem !important;
+  margin-top: 4px;
+}
+
+.portfolio-error {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--error);
+  font-size: 0.88rem;
+}
+
+.portfolio-skeleton {
+  padding: 4px 0;
+}
+
+/* ── Skeleton shimmer ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-input) 25%,
+    var(--bg-secondary) 50%,
+    var(--bg-input) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-value {
+  height: 48px;
+  width: 160px;
+  margin: 0 auto;
+}
+
+.skeleton-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-text-sm {
+  height: 14px;
+  width: 80px;
+  margin-bottom: 4px;
+}
+
+.skeleton-text-xs {
+  height: 11px;
+  width: 55px;
+}
+
+/* ── Modal (Receive + future modals) ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-panel {
+  background: var(--bg-secondary);
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+  animation: slideUp 0.25s ease;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+/* ── Receive Modal ── */
+.receive-qr {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.receive-network {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.receive-address {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.receive-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.receive-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.receive-btn--primary {
+  background: linear-gradient(135deg, var(--accent), #6c4cec);
+  border: none;
+  color: white;
+}
+
+.receive-btn--primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.receive-btn--secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.receive-btn--secondary:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.receive-warning {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+  padding: 8px;
+  background: rgba(251, 191, 36, 0.08);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(251, 191, 36, 0.15);
+}
+
+/* ── Placeholder tabs (Scan/Settings coming in 2B) ── */
+.placeholder-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 24px;
+  gap: 12px;
+}
+
+.placeholder-icon {
+  font-size: 2.5rem;
+  margin-bottom: 4px;
+}
+
+.placeholder-tab h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.placeholder-tab p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+/* ── Logout button in Settings placeholder ── */
+.logout-btn--settings {
+  margin-top: 16px;
+  padding: 10px 24px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--error);
+  background: rgba(248, 113, 113, 0.08);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.logout-btn--settings:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: var(--error);
+}
+
+/* ── Wallet badge is now clickable ── */
+.wallet-badge {
+  cursor: pointer;
+}
+
+.wallet-badge:hover {
+  border-color: rgba(124, 92, 252, 0.4);
+}

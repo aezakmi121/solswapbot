@@ -203,6 +203,35 @@ export async function fetchSwapStatus(
     return res.json();
 }
 
+export interface PortfolioToken {
+    mint: string;
+    symbol: string;
+    name: string;
+    icon: string | null;
+    amount: number;
+    decimals: number;
+    priceUsd: number | null;
+    valueUsd: number | null;
+}
+
+export interface Portfolio {
+    totalValueUsd: number;
+    tokens: PortfolioToken[];
+    walletAddress: string | null;
+}
+
+/** Fetch full portfolio — balances + USD prices in one batched call */
+export async function fetchPortfolio(): Promise<Portfolio> {
+    const res = await fetch(`${API_BASE}/api/user/portfolio`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to fetch portfolio");
+    }
+    return res.json();
+}
+
 /** Fetch SOL + SPL token balances for a wallet */
 export async function fetchBalances(walletAddress: string): Promise<TokenBalance[]> {
     const res = await fetch(

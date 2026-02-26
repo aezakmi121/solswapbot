@@ -1,0 +1,188 @@
+import { useState, useEffect } from "react";
+import { fetchPortfolio, Portfolio, PortfolioToken } from "../lib/api";
+import { ReceiveModal } from "./ReceiveModal";
+
+interface WalletTabProps {
+    walletAddress: string;
+    solBalance: number | null;
+    onNavigateToSwap: () => void;
+}
+
+function formatUsd(v: number): string {
+    if (v >= 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+    return `$${v.toFixed(2)}`;
+}
+
+function formatAmount(amount: number, decimals: number): string {
+    if (amount === 0) return "0";
+    if (amount < 0.001) return amount.toPrecision(2);
+    const maxDecimals = Math.min(decimals, amount < 1 ? 6 : 4);
+    return amount.toLocaleString("en-US", { maximumFractionDigits: maxDecimals });
+}
+
+function TokenRow({ token }: { token: PortfolioToken }) {
+    const [iconError, setIconError] = useState(false);
+
+    return (
+        <div className="portfolio-token-row">
+            <div className="portfolio-token-icon-wrap">
+                {token.icon && !iconError ? (
+                    <img
+                        className="portfolio-token-icon"
+                        src={token.icon}
+                        alt={token.symbol}
+                        onError={() => setIconError(true)}
+                    />
+                ) : (
+                    <div className="portfolio-token-icon-placeholder">
+                        {token.symbol.slice(0, 2)}
+                    </div>
+                )}
+            </div>
+            <div className="portfolio-token-info">
+                <span className="portfolio-token-symbol">{token.symbol}</span>
+                <span className="portfolio-token-name">{token.name}</span>
+            </div>
+            <div className="portfolio-token-values">
+                <span className="portfolio-token-amount">
+                    {formatAmount(token.amount, token.decimals)}
+                </span>
+                {token.valueUsd !== null ? (
+                    <span className="portfolio-token-usd">{formatUsd(token.valueUsd)}</span>
+                ) : (
+                    <span className="portfolio-token-usd portfolio-token-usd--unknown">—</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: WalletTabProps) {
+    const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [showReceive, setShowReceive] = useState(false);
+
+    const loadPortfolio = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const data = await fetchPortfolio();
+            setPortfolio(data);
+        } catch (err) {
+            setError("Failed to load portfolio");
+            console.error("Portfolio load error:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadPortfolio();
+    }, [walletAddress]);
+
+    const shortAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+    const [addrCopied, setAddrCopied] = useState(false);
+    const handleCopyAddr = () => {
+        navigator.clipboard.writeText(walletAddress).then(() => {
+            setAddrCopied(true);
+            setTimeout(() => setAddrCopied(false), 2000);
+        }).catch(() => {});
+    };
+
+    return (
+        <div className="wallet-tab">
+            {/* ── Portfolio Value ── */}
+            <div className="portfolio-header">
+                {loading ? (
+                    <div className="portfolio-value-loading">
+                        <div className="skeleton skeleton-value" />
+                    </div>
+                ) : (
+                    <div className="portfolio-total">
+                        {portfolio
+                            ? formatUsd(portfolio.totalValueUsd)
+                            : solBalance !== null
+                                ? formatUsd(solBalance * 0)
+                                : "$—"}
+                    </div>
+                )}
+                <div className="portfolio-address-row">
+                    <span className="portfolio-address">{shortAddr(walletAddress)}</span>
+                    <button className="portfolio-copy-btn" onClick={handleCopyAddr} title="Copy address">
+                        {addrCopied ? "✓" : "📋"}
+                    </button>
+                </div>
+            </div>
+
+            {/* ── Action Buttons ── */}
+            <div className="wallet-actions">
+                <button className="wallet-action-btn" onClick={() => setShowReceive(true)}>
+                    <span className="wallet-action-icon">📥</span>
+                    <span>Receive</span>
+                </button>
+                <button className="wallet-action-btn wallet-action-btn--disabled" disabled title="Coming soon">
+                    <span className="wallet-action-icon">📤</span>
+                    <span>Send</span>
+                </button>
+                <button className="wallet-action-btn" onClick={onNavigateToSwap}>
+                    <span className="wallet-action-icon">🔄</span>
+                    <span>Swap</span>
+                </button>
+            </div>
+
+            {/* ── Token List ── */}
+            <div className="portfolio-section">
+                <div className="portfolio-section-header">
+                    <h3>Your Tokens</h3>
+                    <button className="portfolio-refresh-btn" onClick={loadPortfolio} disabled={loading}>
+                        {loading ? "..." : "↻"}
+                    </button>
+                </div>
+
+                {loading ? (
+                    <div className="portfolio-skeleton">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="portfolio-token-row">
+                                <div className="skeleton skeleton-icon" />
+                                <div className="portfolio-token-info">
+                                    <div className="skeleton skeleton-text-sm" />
+                                    <div className="skeleton skeleton-text-xs" />
+                                </div>
+                                <div className="portfolio-token-values">
+                                    <div className="skeleton skeleton-text-sm" />
+                                    <div className="skeleton skeleton-text-xs" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : error ? (
+                    <div className="portfolio-error">
+                        <p>{error}</p>
+                        <button className="reset-btn" onClick={loadPortfolio}>Retry</button>
+                    </div>
+                ) : portfolio && portfolio.tokens.length > 0 ? (
+                    <div className="portfolio-token-list">
+                        {portfolio.tokens.map((token) => (
+                            <TokenRow key={token.mint} token={token} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="portfolio-empty">
+                        <p>No tokens yet.</p>
+                        <p className="portfolio-empty-hint">Receive SOL to get started.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Receive Modal ── */}
+            {showReceive && (
+                <ReceiveModal
+                    walletAddress={walletAddress}
+                    onClose={() => setShowReceive(false)}
+                />
+            )}
+        </div>
+    );
+}
