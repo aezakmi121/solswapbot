@@ -59,9 +59,16 @@ export function createBot(): Bot {
     )
   );
 
-  // Error handler — log full error object for debugging
+  // Error handler — log full context so errors are never silently swallowed (M12)
   bot.catch((err) => {
-    console.error("Bot error:", err);
+    const ctx = err.ctx;
+    const e = err.error;
+    const updateType = ctx?.msg ? "message" : ctx?.callbackQuery ? "callback_query" : "unknown";
+    console.error(
+      "Bot error:",
+      ctx ? `from=${ctx.from?.id} chat=${ctx.chat?.id} update_type=${updateType}` : "(no ctx)",
+      e instanceof Error ? e.stack ?? e.message : e
+    );
   });
 
   return bot;

@@ -1,8 +1,22 @@
-import express from "express";
+import express, { Request, Response, NextFunction, RequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { config } from "../config";
+
+/**
+ * Wraps an async Express route handler so any rejected promise is forwarded
+ * to Express's error middleware instead of silently hanging the request (M21).
+ *
+ * Usage: router.get("/path", asyncHandler(async (req, res) => { ... }))
+ */
+export function asyncHandler(
+    fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+): RequestHandler {
+    return (req, res, next) => {
+        fn(req, res, next).catch(next);
+    };
+}
 import { telegramAuthMiddleware } from "./middleware/telegramAuth";
 import { quoteRouter } from "./routes/quote";
 import { swapRouter } from "./routes/swap";

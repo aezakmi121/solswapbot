@@ -11,7 +11,7 @@ export async function getReferralEarnings(userId: string, feeSharePercent: numbe
     _sum: { feeAmountUsd: true },
   });
 
-  const totalFees = result._sum.feeAmountUsd ?? 0;
+  const totalFees = result._sum.feeAmountUsd?.toNumber() ?? 0;
   return totalFees * (feeSharePercent / 100);
 }
 

@@ -12,6 +12,20 @@ import { config } from "../config";
  *   - Cross-chain (LI.FI): integrator fee via LI.FI partner portal
  */
 
+/**
+ * Convert a human-readable amount string to smallest unit (integer string).
+ * Uses BigInt string arithmetic to avoid floating-point precision loss (H5).
+ * e.g. humanToSmallestUnit("1.555555", 6) → "1555555"
+ */
+function humanToSmallestUnit(humanAmount: string, decimals: number): string {
+    const [intPart = "0", fracPart = ""] = humanAmount.split(".");
+    // Pad fractional part to `decimals` digits, or trim if user entered too many
+    const fracPadded = fracPart.padEnd(decimals, "0").slice(0, decimals);
+    const result =
+        BigInt(intPart) * (10n ** BigInt(decimals)) + BigInt(fracPadded || "0");
+    return result.toString();
+}
+
 export interface RouteQuoteRequest {
     inputToken: string;   // Symbol or mint address
     outputToken: string;  // Symbol or mint address
@@ -64,10 +78,8 @@ async function getSameChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResu
         const outputMint = outputTokenInfo?.address ?? req.outputToken;
         const inputDecimals = inputTokenInfo?.decimals ?? 9;
 
-        // Convert human amount to smallest unit
-        const amountInSmallestUnit = Math.round(
-            parseFloat(req.amount) * Math.pow(10, inputDecimals)
-        ).toString();
+        // Convert human amount to smallest unit (BigInt arithmetic avoids float precision loss)
+        const amountInSmallestUnit = humanToSmallestUnit(req.amount, inputDecimals);
 
         const quote = await getQuote({
             inputMint,
@@ -148,10 +160,8 @@ async function getCrossChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteRes
             };
         }
 
-        // Convert human amount to smallest unit for LI.FI
-        const amountInSmallestUnit = Math.round(
-            parseFloat(req.amount) * Math.pow(10, inputTokenInfo.decimals)
-        ).toString();
+        // Convert human amount to smallest unit for LI.FI (BigInt avoids float precision loss)
+        const amountInSmallestUnit = humanToSmallestUnit(req.amount, inputTokenInfo.decimals);
 
         const lifiResult = await getLiFiQuote({
             fromChain: inputChainInfo.lifiChainId,
