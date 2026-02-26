@@ -18,6 +18,7 @@ model User {
   referredBy       User?          @relation("Referrals", fields: [referredById], references: [id])
   referrals        User[]         @relation("Referrals")
   swaps            Swap[]
+  transfers        Transfer[]
   scans            TokenScan[]
   watchedWallets   WatchedWallet[]
   subscription     Subscription?
@@ -54,6 +55,23 @@ enum SwapStatus {
   CONFIRMED
   FAILED
   TIMEOUT
+}
+
+// ─── Transfers (outbound sends) ─────────────────────────
+model Transfer {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  tokenMint        String
+  tokenSymbol      String?
+  humanAmount      String   // human-readable e.g. "0.5"
+  recipientAddress String
+  txSignature      String?
+  status           String   @default("CONFIRMED")
+  createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([txSignature])
 }
 
 // ─── Token Scanner ──────────────────────────────────────

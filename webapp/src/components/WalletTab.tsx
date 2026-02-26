@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchPortfolio, Portfolio, PortfolioToken } from "../lib/api";
+import { fetchPortfolio, fetchActivity, Portfolio, PortfolioToken, ActivityItem } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { SendFlow } from "./SendFlow";
 import { toast } from "../lib/toast";
@@ -20,6 +20,69 @@ function formatAmount(amount: number, decimals: number): string {
     if (amount < 0.001) return amount.toPrecision(2);
     const maxDecimals = Math.min(decimals, amount < 1 ? 6 : 4);
     return amount.toLocaleString("en-US", { maximumFractionDigits: maxDecimals });
+}
+
+function timeAgo(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+    const isConfirmed = item.status === "CONFIRMED";
+    const statusIcon = isConfirmed ? "✅" : item.status === "FAILED" ? "❌" : "⏳";
+
+    if (item.type === "swap") {
+        return (
+            <div className="activity-row">
+                <span className="activity-type-icon">🔄</span>
+                <div className="activity-info">
+                    <span className="activity-desc">{item.inputSymbol} → {item.outputSymbol}</span>
+                    <span className="activity-time">{timeAgo(item.createdAt)}</span>
+                </div>
+                <div className="activity-right">
+                    <span className="activity-status">{statusIcon}</span>
+                    {item.txSignature && (
+                        <a
+                            className="activity-link"
+                            href={`https://solscan.io/tx/${item.txSignature}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >↗</a>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="activity-row">
+            <span className="activity-type-icon">📤</span>
+            <div className="activity-info">
+                <span className="activity-desc">
+                    Sent {item.humanAmount} {item.tokenSymbol}
+                </span>
+                <span className="activity-time">
+                    {item.recipientAddress.slice(0, 4)}...{item.recipientAddress.slice(-4)} · {timeAgo(item.createdAt)}
+                </span>
+            </div>
+            <div className="activity-right">
+                <span className="activity-status">{statusIcon}</span>
+                {item.txSignature && (
+                    <a
+                        className="activity-link"
+                        href={`https://solscan.io/tx/${item.txSignature}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >↗</a>
+                )}
+            </div>
+        </div>
+    );
 }
 
 function TokenRow({ token }: { token: PortfolioToken }) {
@@ -65,6 +128,9 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
     const [error, setError] = useState("");
     const [showReceive, setShowReceive] = useState(false);
     const [showSend, setShowSend] = useState(false);
+    const [activity, setActivity] = useState<ActivityItem[]>([]);
+    const [activityLoading, setActivityLoading] = useState(true);
+    const [showAllActivity, setShowAllActivity] = useState(false);
 
     const loadPortfolio = async () => {
         setLoading(true);
@@ -80,8 +146,21 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
         }
     };
 
+    const loadActivity = async () => {
+        setActivityLoading(true);
+        try {
+            const data = await fetchActivity();
+            setActivity(data);
+        } catch (err) {
+            console.error("Activity load error:", err);
+        } finally {
+            setActivityLoading(false);
+        }
+    };
+
     useEffect(() => {
         loadPortfolio();
+        loadActivity();
     }, [walletAddress]);
 
     const shortAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -176,6 +255,45 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
                     <div className="portfolio-empty">
                         <p>No tokens yet.</p>
                         <p className="portfolio-empty-hint">Receive SOL to get started.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Recent Activity ── */}
+            <div className="portfolio-section">
+                <div className="portfolio-section-header">
+                    <h3>Recent Activity</h3>
+                    {!activityLoading && activity.length > 5 && (
+                        <button
+                            className="activity-view-all"
+                            onClick={() => setShowAllActivity((v) => !v)}
+                        >
+                            {showAllActivity ? "Show less" : `View all (${activity.length})`}
+                        </button>
+                    )}
+                </div>
+
+                {activityLoading ? (
+                    <div className="portfolio-skeleton">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="activity-row">
+                                <div className="skeleton skeleton-icon" />
+                                <div className="portfolio-token-info">
+                                    <div className="skeleton skeleton-text-sm" />
+                                    <div className="skeleton skeleton-text-xs" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : activity.length === 0 ? (
+                    <div className="portfolio-empty">
+                        <p>No transactions yet.</p>
+                    </div>
+                ) : (
+                    <div className="activity-list">
+                        {(showAllActivity ? activity : activity.slice(0, 5)).map((item) => (
+                            <ActivityRow key={item.id} item={item} />
+                        ))}
                     </div>
                 )}
             </div>
