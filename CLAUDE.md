@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-26 | Version: 0.3.0 (Sprint 2B complete)
+> Updated: 2026-02-26 | Version: 0.4.0 (Sprint 2C complete)
 > Read this file FIRST before making any changes.
 
 ---
@@ -339,13 +339,13 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | Log out button (moved from footer) | DONE | P1 | 2B |
 | **Swap Tab Enhancements** | | | |
 | Slippage settings gear icon (uses Settings value) | DONE | P1 | 2B |
-| Recent/favorite tokens shortcut | NOT STARTED | P2 | 2C |
+| Recent/favorite tokens shortcut | DONE | P2 | 2C |
 | Cross-chain swap UI (chain selector for LI.FI) | NOT STARTED | P2 | 2C |
 | **UI/UX Polish** | | | |
-| Skeleton loading states (shimmer placeholders) | NOT STARTED | P2 | 2C |
-| Toast notifications (copy, send, errors) | NOT STARTED | P2 | 2C |
-| Haptic feedback via Telegram WebApp API | NOT STARTED | P2 | 2C |
-| Smooth tab transition animations | NOT STARTED | P2 | 2C |
+| Skeleton loading states (shimmer placeholders) | PARTIAL | P2 | 2C |
+| Toast notifications (copy, send, errors) | DONE | P2 | 2C |
+| Haptic feedback via Telegram WebApp API | DONE | P2 | 2C |
+| Smooth tab transition animations | DONE | P2 | 2C |
 | **Already Done** | | | |
 | TokenSelector component (search + select) | DONE | P1 | — |
 | History section in swap tab (slide-up panel) | DONE | P2 | — |
@@ -676,21 +676,22 @@ Minor improvements to existing swap UI:
 
 **Goal:** Production-quality UX polish, cross-chain swap UI, remaining features.
 
-| # | Task | Files | Backend? |
-|---|------|-------|----------|
-| 1 | Skeleton loading states (shimmer) | All components | No |
-| 2 | Toast notification system | `webapp/src/components/Toast.tsx` | No |
-| 3 | Haptic feedback (Telegram WebApp API) | Throughout | No |
-| 4 | Pull-to-refresh on WalletTab | `WalletTab.tsx` | No |
-| 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No |
-| 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No |
-| 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No |
-| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No |
-| 9 | Tab transition animations | `index.css` | No |
-| 10 | About section in Settings | `SettingsPanel.tsx` | No |
-| 11 | Referral share link | `SettingsPanel.tsx` | No |
+| # | Task | Files | Backend? | Status |
+|---|------|-------|----------|--------|
+| 1 | Skeleton loading states (shimmer) | All components | No | PARTIAL (WalletTab has skeletons) |
+| 2 | Toast notification system | `webapp/src/components/Toast.tsx`, `lib/toast.ts` | No | ✅ DONE |
+| 3 | Haptic feedback (Telegram WebApp API) | `App.tsx` (tabs), `SwapPanel.tsx` (swap) | No | ✅ DONE |
+| 4 | Pull-to-refresh on WalletTab | `WalletTab.tsx` | No | NOT STARTED |
+| 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No | ✅ DONE |
+| 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No | ✅ DONE |
+| 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No | ✅ DONE |
+| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No | NOT STARTED |
+| 9 | Tab transition animations | `index.css` | No | ✅ DONE |
+| 10 | Tab active indicator (visible line + bg) | `index.css` | No | ✅ DONE |
+| 11 | Scan layout fix (stacked input + paste btn) | `ScanPanel.tsx`, `index.css` | No | ✅ DONE |
+| 12 | Toast wired into all copy/send actions | All components | No | ✅ DONE |
 
-**Estimated new files:** 1 (Toast) + updates to existing
+**New files created:** `Toast.tsx`, `toast.ts`
 
 ---
 
@@ -1046,6 +1047,23 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-26 — Sprint 2C: Polish, Toast System, Haptic Feedback, Recent Tokens (v0.4.0)
+
+**Frontend only (no backend changes):**
+- Created `webapp/src/lib/toast.ts` — global toast utility using `window.dispatchEvent(CustomEvent("solswap:toast"))`. Any component calls `toast(message, type)` — no prop drilling.
+- Created `webapp/src/components/Toast.tsx` — listens for `solswap:toast` events and renders floating pill notifications (success=green, error=red, info=purple). Auto-dismisses after 2.5s.
+- Wired `toast()` into all copy actions: `ReceiveModal` ("Address copied!"), `WalletTab` ("Address copied!"), `SettingsPanel` ("Address copied!" + "Referral link copied!"), `SendFlow` ("Transaction sent!").
+- Added haptic feedback in `App.tsx`: `tg.HapticFeedback.selectionChanged()` on tab switch.
+- Added haptic feedback in `SwapPanel.tsx`: `impactOccurred("medium")` on swap button tap; `notificationOccurred("success"/"error")` on swap confirmed/failed.
+- Added swap toast notifications: "Swap confirmed!" on success, error message on failure.
+- Added recent tokens chips to `SwapPanel.tsx`: saves last 5 selected tokens to `localStorage` (`solswap_recent_tokens`); shows up to 4 chips as a horizontal scrollable row above the swap card; clicking a chip sets the input token.
+- Fixed scan tab layout: `ScanPanel.tsx` now has stacked input+button layout with clear (✕) and paste (📋) buttons inside the input wrapper.
+- Added CSS: tab active indicator (`::before` 2px accent line at top + subtle bg), toast container/item styles with slide-in animation, scan stacked layout classes (`scan-input-wrap`, `scan-clear-btn`, `scan-paste-btn`, `scan-submit-btn`, `btn-spinner`), recent token chip styles, tab fade-in animation on all panel components (`.wallet-tab`, `.swap-panel`, `.scan-panel`, `.settings-panel`).
+
+**New files:** `webapp/src/lib/toast.ts`, `webapp/src/components/Toast.tsx`
+
+---
 
 ### 2026-02-26 — Sprint 2B: Scan Tab + Send Flow + Settings Panel (Phase 2B Complete)
 

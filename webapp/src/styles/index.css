@@ -965,8 +965,9 @@ body {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.15s;
+  transition: color 0.15s, background 0.15s;
   font-family: var(--font);
+  position: relative;
 }
 
 .tab-item:hover {
@@ -975,6 +976,23 @@ body {
 
 .tab-item--active {
   color: var(--accent);
+  background: rgba(99, 102, 241, 0.07);
+}
+
+.tab-item--active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 2px 2px;
+}
+
+.tab-item--active .tab-label {
+  font-weight: 600;
 }
 
 .tab-icon {
@@ -1804,31 +1822,84 @@ body {
 
 .scan-input-row {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.scan-input {
-  flex: 1;
-  padding: 10px 14px;
+.scan-input-wrap {
+  display: flex;
+  align-items: center;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 0.88rem;
-  font-family: var(--font);
-  outline: none;
-  transition: border-color 0.2s;
-  min-width: 0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
 }
 
-.scan-input:focus {
+.scan-input-wrap:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
+.scan-input {
+  flex: 1;
+  padding: 11px 12px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: var(--font);
+  outline: none;
+  min-width: 0;
+}
+
+.scan-input:focus {
+  border: none;
+  box-shadow: none;
+}
+
 .scan-input::placeholder {
   color: var(--text-muted);
+}
+
+.scan-clear-btn,
+.scan-paste-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  height: 42px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+}
+
+.scan-clear-btn:hover,
+.scan-paste-btn:hover {
+  color: var(--text-secondary);
+}
+
+.scan-submit-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .scan-btn {
@@ -2279,4 +2350,131 @@ body {
   color: var(--error);
   max-width: 280px;
   line-height: 1.5;
+}
+/* ═══════════════════════════════════════════════════════
+   Sprint 2C — Toast, Recent Tokens, Tab Animations
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Toast Notifications ── */
+.toast-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: toastSlideIn 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.toast--success {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: var(--success);
+}
+
+.toast--error {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: var(--error);
+}
+
+.toast--info {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: var(--accent);
+}
+
+.toast-icon {
+  font-size: 0.85rem;
+  font-style: normal;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+/* ── Recent Tokens Chips (SwapPanel) ── */
+.recent-tokens {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.recent-tokens::-webkit-scrollbar {
+  display: none;
+}
+
+.recent-tokens-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.recent-token-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+
+.recent-token-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.recent-token-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ── Tab Transition Animations ── */
+.wallet-tab,
+.swap-panel,
+.scan-panel,
+.settings-panel {
+  animation: tabFadeIn 0.18s ease;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

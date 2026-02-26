@@ -12,6 +12,7 @@ import { SwapPanel } from "./components/SwapPanel";
 import { WalletTab } from "./components/WalletTab";
 import { ScanPanel } from "./components/ScanPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { Toast } from "./components/Toast";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
 
@@ -35,8 +36,12 @@ export function App() {
     const [solBalance, setSolBalance] = useState<number | null>(null);
     const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
 
-    // ── Tab navigation ──
+    // ── Tab navigation with haptic ──
     const [activeTab, setActiveTab] = useState<TabId>("wallet");
+    const handleTabChange = (tab: TabId) => {
+        (tg as any)?.HapticFeedback?.selectionChanged();
+        setActiveTab(tab);
+    };
 
     // ── Slippage (persisted in localStorage) ──
     const [slippageBps, setSlippageBps] = useState<number>(loadSlippage);
@@ -189,7 +194,10 @@ export function App() {
             </main>
 
             {/* ── Bottom tab bar ── */}
-            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+            <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+
+            {/* ── Toast notifications ── */}
+            <Toast />
         </div>
     );
 }
