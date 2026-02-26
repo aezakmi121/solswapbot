@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-26 | Version: 0.2.0 (Sprint 2A complete)
+> Updated: 2026-02-26 | Version: 0.3.0 (Sprint 2B complete)
 > Read this file FIRST before making any changes.
 
 ---
@@ -223,11 +223,11 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/user` | Get user profile + SOL balance (`telegramId`, `walletAddress`, `solBalance` — does **not** yet include `referralCode`/`referralCount`, see Sprint 2B) |
+| GET | `/api/user` | Get user profile + SOL balance (`telegramId`, `walletAddress`, `solBalance`, `referralCode`, `referralCount`) |
 | POST | `/api/user/wallet` | Save Privy wallet address `{ walletAddress }` |
 | GET | `/api/user/balances?walletAddress=<addr>` | Get SOL + all SPL token balances |
 | GET | `/api/user/portfolio` | Get all held tokens with USD prices in one batched call — `{ totalValueUsd, tokens[], walletAddress }` |
-| GET | `/api/quote?inputMint=&outputMint=&humanAmount=` | Get swap quote with USD breakdown |
+| GET | `/api/quote?inputMint=&outputMint=&humanAmount=&slippageBps=` | Get swap quote with USD breakdown; optional `slippageBps` (0-5000, default 50) |
 | POST | `/api/swap` | Build unsigned swap TX `{ quoteResponse, userPublicKey }` |
 | POST | `/api/swap/confirm` | Record swap + start on-chain polling `{ txSignature, inputMint, ... }` |
 | GET | `/api/swap/status?swapId=<id>` | Poll swap confirmation status |
@@ -236,6 +236,7 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | GET | `/api/cross-chain/chains` | Supported chains list |
 | GET | `/api/cross-chain/tokens` | Cross-chain token registry |
 | GET | `/api/history` | Last 20 swaps for the authenticated user |
+| POST | `/api/send` | Build unsigned transfer TX `{ tokenMint, recipientAddress, amount, senderAddress }` → `{ transaction: base64, lastValidBlockHeight }` |
 
 ### Auth Flow
 1. Frontend sends `Authorization: tma <tg.initData>` header
@@ -260,7 +261,7 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 
 ## Implementation Status & Phases
 
-### Current State (v0.2.0) — SPRINT 2A COMPLETE
+### Current State (v0.3.0) — SPRINT 2B COMPLETE
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -316,28 +317,28 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | Action buttons row (Send / Receive / Swap) | DONE | P0 | 2A |
 | Portfolio token list (all held tokens + USD values) | DONE | P0 | 2A |
 | Receive flow (address + QR code + copy + share) | DONE | P0 | 2A |
-| Send flow (token select → address → amount → confirm → send) | NOT STARTED | P1 | 2B |
+| Send flow (token select → address → amount → confirm → send) | DONE | P1 | 2B |
 | GET /api/user/portfolio endpoint (balances + USD prices) | DONE | P0 | 2A |
 | Transaction history (all types, not just swaps) | NOT STARTED | P1 | 2B |
 | Pull-to-refresh on portfolio | NOT STARTED | P2 | 2C |
 | **Scan Tab** | | | |
-| ScanPanel — mint address input + search | NOT STARTED | P1 | 2B |
-| Risk score gauge (0-100, color-coded arc) | NOT STARTED | P1 | 2B |
-| Individual check results (pass/fail with details) | NOT STARTED | P1 | 2B |
-| Token info display (supply, price, age) | NOT STARTED | P1 | 2B |
+| ScanPanel — mint address input + search | DONE | P1 | 2B |
+| Risk score gauge (0-100, color-coded arc) | DONE | P1 | 2B |
+| Individual check results (pass/fail with details) | DONE | P1 | 2B |
+| Token info display (supply, price, age) | DONE | P1 | 2B |
 | "Swap this token" quick action → navigates to Swap tab | NOT STARTED | P2 | 2C |
 | Recent scans list (from DB) | NOT STARTED | P2 | 2C |
 | GET /api/scan/history endpoint | NOT STARTED | P2 | 2C |
 | Frontend `fetchScan` API function | NOT STARTED | P1 | 2B |
 | **Settings Tab** | | | |
-| View full wallet address + copy button | NOT STARTED | P1 | 2B |
-| Show wallet QR code | NOT STARTED | P1 | 2B |
-| Slippage tolerance setting (0.1% / 0.5% / 1.0% / custom) | NOT STARTED | P1 | 2B |
-| Referral code display + share | NOT STARTED | P2 | 2C |
-| About section (version, fees, non-custodial disclaimer) | NOT STARTED | P2 | 2C |
-| Log out button (moved from footer) | NOT STARTED | P1 | 2B |
+| View full wallet address + copy button | DONE | P1 | 2B |
+| Show wallet QR code | DONE | P1 | 2B |
+| Slippage tolerance setting (0.1% / 0.5% / 1.0% / custom) | DONE | P1 | 2B |
+| Referral code display + share | DONE | P1 | 2B |
+| About section (version, fees, non-custodial disclaimer) | DONE | P1 | 2B |
+| Log out button (moved from footer) | DONE | P1 | 2B |
 | **Swap Tab Enhancements** | | | |
-| Slippage settings gear icon (uses Settings value) | NOT STARTED | P1 | 2B |
+| Slippage settings gear icon (uses Settings value) | DONE | P1 | 2B |
 | Recent/favorite tokens shortcut | NOT STARTED | P2 | 2C |
 | Cross-chain swap UI (chain selector for LI.FI) | NOT STARTED | P2 | 2C |
 | **UI/UX Polish** | | | |
@@ -654,22 +655,22 @@ Minor improvements to existing swap UI:
 
 **Goal:** Scan tab works, send flow works, settings with slippage.
 
-| # | Task | Files | Backend? |
-|---|------|-------|----------|
-| 1 | Build ScanPanel | `webapp/src/components/ScanPanel.tsx` | No |
-| 2 | Add `fetchTokenScan` to API client | `webapp/src/lib/api.ts` | No |
-| 3 | Build RiskGauge component | `webapp/src/components/RiskGauge.tsx` | No |
-| 4 | Build SettingsPanel | `webapp/src/components/SettingsPanel.tsx` | No |
-| 5 | Slippage localStorage + pass to quote API | `webapp/src/lib/api.ts`, `App.tsx` | No |
-| 6 | Create `POST /api/send` (build transfer TX) | `src/api/routes/send.ts`, `server.ts` | Yes |
-| 7 | Build SendFlow component | `webapp/src/components/SendFlow.tsx` | No |
-| 8 | Add `fetchSendTransaction` to API client | `webapp/src/lib/api.ts` | No |
-| 9 | Add referralCode + count to GET /api/user | `src/api/routes/user.ts`, `src/db/queries/users.ts` | Yes |
-| 10 | Add slippage gear icon to SwapPanel | `webapp/src/components/SwapPanel.tsx` | No |
-| 11 | Style scan, send, settings components | `webapp/src/styles/index.css` | No |
+| # | Task | Files | Backend? | Status |
+|---|------|-------|----------|--------|
+| 1 | Build ScanPanel | `webapp/src/components/ScanPanel.tsx` | No | ✅ DONE |
+| 2 | Add `fetchTokenScan` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
+| 3 | Build RiskGauge component | `webapp/src/components/RiskGauge.tsx` | No | ✅ DONE |
+| 4 | Build SettingsPanel | `webapp/src/components/SettingsPanel.tsx` | No | ✅ DONE |
+| 5 | Slippage localStorage + pass to quote API | `webapp/src/lib/api.ts`, `App.tsx` | No | ✅ DONE |
+| 6 | Create `POST /api/send` (build transfer TX) | `src/api/routes/send.ts`, `server.ts` | Yes | ✅ DONE |
+| 7 | Build SendFlow component | `webapp/src/components/SendFlow.tsx` | No | ✅ DONE |
+| 8 | Add `fetchSendTransaction` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
+| 9 | Add referralCode + count to GET /api/user | `src/api/routes/user.ts` (uses existing `getUserWithReferralCount`) | Yes | ✅ DONE |
+| 10 | Add slippage gear icon to SwapPanel | `webapp/src/components/SwapPanel.tsx` | No | ✅ DONE |
+| 11 | Style scan, send, settings components | `webapp/src/styles/index.css` | No | ✅ DONE |
 
-**Estimated new files:** 4 components + 1 backend route
-**Deps to add:** none
+**New files created:** `ScanPanel.tsx`, `RiskGauge.tsx`, `SettingsPanel.tsx`, `SendFlow.tsx`, `send.ts`
+**Deps added:** none
 
 #### Sprint 2C — Polish & Extras (P2)
 
@@ -706,13 +707,13 @@ webapp/src/
 │   ├── WalletTab.tsx          # Portfolio view + action buttons + token list ✅ 2A
 │   ├── SwapPanel.tsx          # Full swap UI (extracted from App.tsx) ✅ 2A
 │   ├── ReceiveModal.tsx       # QR code + address + copy + share ✅ 2A
-│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans  ❌ 2B
-│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout ❌ 2B
-│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ❌ 2B
-│   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ❌ 2B
+│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans  ✅ 2B
+│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout ✅ 2B
+│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ✅ 2B
+│   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ✅ 2B
 │   └── Toast.tsx              # Toast notification system ❌ 2C
 ├── lib/
-│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ❌ 2B, fetchSendTransaction ❌ 2B)
+│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B)
 └── styles/
     └── index.css              # All styles (tab bar + wallet + receive ✅ 2A; scan + settings + send ❌ 2B)
 ```
@@ -722,9 +723,9 @@ webapp/src/
 | Method | Path | Description | Sprint | Status |
 |--------|------|-------------|--------|--------|
 | GET | `/api/user/portfolio` | Balances + USD prices in one call | 2A | ✅ DONE |
-| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B | NOT STARTED |
-| GET | `/api/user` (update) | Add `referralCode` + `referralCount` to response | 2B | NOT STARTED |
-| GET | `/api/quote` (update) | Accept optional `slippageBps` query param | 2B | NOT STARTED |
+| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B | ✅ DONE |
+| GET | `/api/user` (update) | `referralCode` + `referralCount` added to response | 2B | ✅ DONE |
+| GET | `/api/quote` (update) | Accepts optional `slippageBps` query param (0-5000) | 2B | ✅ DONE |
 
 ### Phase 3 — PREMIUM FEATURES
 
@@ -1045,6 +1046,28 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-26 — Sprint 2B: Scan Tab + Send Flow + Settings Panel (Phase 2B Complete)
+
+**Backend:**
+- Added `POST /api/send` (`src/api/routes/send.ts`) — builds an unsigned `VersionedTransaction` for native SOL transfers (`SystemProgram.transfer`) or SPL token transfers (`createTransferInstruction`). Auto-creates recipient ATA if it doesn't exist (sender pays rent). Returns base64 tx + `lastValidBlockHeight`. Registered in `server.ts`.
+- Updated `GET /api/user` to include `referralCode` and `referralCount` in the response — uses the existing `getUserWithReferralCount` query (which was already implemented in `users.ts`).
+- Updated `GET /api/quote` to accept optional `slippageBps` query param (integer, 0–5000). Validated and passed through to `getQuote()`. Existing default of 50bps unchanged when param is omitted.
+
+**Frontend:**
+- Created `webapp/src/components/SettingsPanel.tsx` — slippage selector (0.1%/0.5%/1.0%/custom) stored in `localStorage`; full wallet address + copy + QR (reuses `ReceiveModal`); referral code display + copy share link; about section; logout button.
+- Created `webapp/src/components/RiskGauge.tsx` — color-coded risk score display (LOW=green, MEDIUM=yellow, HIGH=red) with numeric score and badge label.
+- Created `webapp/src/components/ScanPanel.tsx` — mint address input + scan button; calls `GET /api/scan`; displays `RiskGauge` + per-check pass/fail results + token info (supply, price, decimals); "Swap This Token" navigates to Swap tab; recent scans stored in `localStorage` (up to 5).
+- Created `webapp/src/components/SendFlow.tsx` — 5-step bottom-sheet modal: select token → enter recipient + amount → confirm summary → executing (Privy sign) → done (Solscan link) / error. Signs using Privy `useSignAndSendTransaction`. Send button wired in `WalletTab`.
+- Updated `webapp/src/components/SwapPanel.tsx` — added `slippageBps` prop passed to `fetchQuote`; added `onOpenSettings` prop; header now shows ⚙️ `slippageBps%` button that navigates to Settings tab.
+- Updated `webapp/src/components/WalletTab.tsx` — Send action button now opens `SendFlow` (was disabled). `SendFlow` receives `portfolio.tokens` and `onSent` callback to refresh portfolio.
+- Updated `webapp/src/App.tsx` — `slippage` state loaded from `localStorage` (default 50bps); `ScanPanel` and `SettingsPanel` replace placeholder tabs; `slippageBps` and `onOpenSettings` passed to `SwapPanel`; `handleSlippageChange` syncs state + localStorage.
+- Updated `webapp/src/lib/api.ts` — `fetchQuote` accepts optional `slippageBps`; `UserData` adds `referralCode`/`referralCount`; new `ScanResult`/`ScanCheckResult` interfaces; new `fetchTokenScan()` and `fetchSendTransaction()` functions.
+- Added Sprint 2B CSS to `webapp/src/styles/index.css` — styles for SettingsPanel, slippage chips, RiskGauge, ScanPanel (checks/info/recent), SendFlow (overlay/sheet/steps/status).
+
+**New files:** `src/api/routes/send.ts`, `webapp/src/components/ScanPanel.tsx`, `webapp/src/components/RiskGauge.tsx`, `webapp/src/components/SettingsPanel.tsx`, `webapp/src/components/SendFlow.tsx`
+
+---
 
 ### 2026-02-26 — Sprint 2A: Tab Navigation + Wallet Tab + Receive Flow (Phase 2A Complete)
 
