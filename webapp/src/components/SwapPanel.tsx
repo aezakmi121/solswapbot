@@ -11,9 +11,57 @@ import {
     confirmSwap,
     fetchSwapStatus,
     SwapRecord,
+    fetchCrossChainQuote,
+    CrossChainQuoteResult,
 } from "../lib/api";
 import { TokenSelector } from "../TokenSelector";
 import { toast } from "../lib/toast";
+
+// ─── Cross-chain registry (mirrors backend chains.ts) ─────────────────────────
+const CC_CHAINS = [
+    { id: "solana",   name: "Solana",    icon: "🟣" },
+    { id: "ethereum", name: "Ethereum",  icon: "🔷" },
+    { id: "bsc",      name: "BNB Chain", icon: "🟡" },
+    { id: "polygon",  name: "Polygon",   icon: "🟣" },
+    { id: "arbitrum", name: "Arbitrum",  icon: "🔵" },
+    { id: "base",     name: "Base",      icon: "🔵" },
+] as const;
+
+type ChainId = typeof CC_CHAINS[number]["id"];
+
+const CC_TOKENS: Record<ChainId, Array<{ symbol: string; address: string; decimals: number }>> = {
+    solana:   [
+        { symbol: "SOL",  address: "So11111111111111111111111111111111111111112", decimals: 9 },
+        { symbol: "USDC", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+        { symbol: "USDT", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 },
+        { symbol: "BONK", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5 },
+        { symbol: "JUP",  address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",  decimals: 6 },
+    ],
+    ethereum: [
+        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+        { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
+        { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+        { symbol: "WETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18 },
+    ],
+    bsc: [
+        { symbol: "BNB",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+        { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
+        { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
+    ],
+    polygon: [
+        { symbol: "MATIC", address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+        { symbol: "USDC",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+    ],
+    arbitrum: [
+        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+        { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+        { symbol: "ARB",  address: "0x912CE59144191C1204E64559FE8253a0e49E6548", decimals: 18 },
+    ],
+    base: [
+        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+        { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+    ],
+};
 
 const tg = (window as any).Telegram?.WebApp;
 
@@ -72,6 +120,18 @@ export function SwapPanel({
     // Polling ref for swap confirmation
     const confirmPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
     const quoteAbortRef = useRef<AbortController | null>(null);
+    const ccAbortRef = useRef<AbortController | null>(null);
+
+    // Cross-chain mode state
+    const [crossChainMode, setCrossChainMode] = useState(false);
+    const [ccInputChain, setCcInputChain] = useState<ChainId>("solana");
+    const [ccOutputChain, setCcOutputChain] = useState<ChainId>("ethereum");
+    const [ccInputSymbol, setCcInputSymbol] = useState("SOL");
+    const [ccOutputSymbol, setCcOutputSymbol] = useState("ETH");
+    const [ccAmount, setCcAmount] = useState("");
+    const [ccQuote, setCcQuote] = useState<CrossChainQuoteResult | null>(null);
+    const [ccLoading, setCcLoading] = useState(false);
+    const [ccError, setCcError] = useState("");
 
     // Token loading
     const [tokensLoaded, setTokensLoaded] = useState(false);
@@ -194,6 +254,48 @@ export function SwapPanel({
         return () => clearTimeout(timer);
     }, [quote, getQuote]);
 
+    // Cross-chain quote fetch (debounced, with AbortController)
+    const getCrossChainQuote = useCallback(async () => {
+        ccAbortRef.current?.abort();
+        if (!ccAmount || Number(ccAmount) <= 0) {
+            setCcQuote(null);
+            return;
+        }
+        const controller = new AbortController();
+        ccAbortRef.current = controller;
+        setCcLoading(true);
+        setCcError("");
+        try {
+            const result = await fetchCrossChainQuote({
+                inputToken: ccInputSymbol,
+                outputToken: ccOutputSymbol,
+                inputChain: ccInputChain,
+                outputChain: ccOutputChain,
+                amount: ccAmount,
+                slippageBps,
+            });
+            if (controller.signal.aborted) return;
+            if (result.error) {
+                setCcError(result.error);
+                setCcQuote(null);
+            } else {
+                setCcQuote(result);
+            }
+        } catch (err) {
+            if (controller.signal.aborted) return;
+            setCcError(err instanceof Error ? err.message : "Failed to get quote");
+            setCcQuote(null);
+        } finally {
+            if (!controller.signal.aborted) setCcLoading(false);
+        }
+    }, [ccInputSymbol, ccOutputSymbol, ccInputChain, ccOutputChain, ccAmount, slippageBps]);
+
+    useEffect(() => {
+        if (!crossChainMode) return;
+        const timer = setTimeout(getCrossChainQuote, 700);
+        return () => clearTimeout(timer);
+    }, [crossChainMode, getCrossChainQuote]);
+
     // Flip tokens
     const flipTokens = () => {
         const temp = inputToken;
@@ -203,10 +305,11 @@ export function SwapPanel({
         setQuote(null);
     };
 
-    // Clean up polling on unmount
+    // Clean up polling and in-flight requests on unmount
     useEffect(() => {
         return () => {
             if (confirmPollRef.current) clearInterval(confirmPollRef.current);
+            ccAbortRef.current?.abort();
         };
     }, []);
 
@@ -390,6 +493,17 @@ export function SwapPanel({
                     <button className="slippage-indicator" onClick={onOpenSettings} title="Adjust slippage in Settings">
                         ⚙️ {(slippageBps / 100).toFixed(1)}%
                     </button>
+                    <button
+                        className={`cc-toggle-btn${crossChainMode ? " cc-toggle-btn--active" : ""}`}
+                        onClick={() => {
+                            setCrossChainMode((v) => !v);
+                            setCcQuote(null);
+                            setCcError("");
+                        }}
+                        title="Cross-chain swap via LI.FI"
+                    >
+                        🌉 Cross-chain
+                    </button>
                     <button className="history-link-btn" onClick={loadHistory}>
                         History
                     </button>
@@ -426,7 +540,168 @@ export function SwapPanel({
                 </div>
             )}
 
-            <div className="swap-card">
+            {/* ── Cross-chain mode ── */}
+            {crossChainMode && (
+                <div className="cc-panel">
+                    {/* Input chain + token row */}
+                    <div className="cc-row">
+                        <span className="cc-label">From</span>
+                        <div className="cc-selectors">
+                            <select
+                                className="cc-chain-select"
+                                value={ccInputChain}
+                                onChange={(e) => {
+                                    const chain = e.target.value as ChainId;
+                                    setCcInputChain(chain);
+                                    setCcInputSymbol(CC_TOKENS[chain][0].symbol);
+                                    setCcQuote(null);
+                                }}
+                            >
+                                {CC_CHAINS.map((c) => (
+                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="cc-token-select"
+                                value={ccInputSymbol}
+                                onChange={(e) => { setCcInputSymbol(e.target.value); setCcQuote(null); }}
+                            >
+                                {CC_TOKENS[ccInputChain].map((t) => (
+                                    <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+                                ))}
+                            </select>
+                            <input
+                                className="cc-amount-input"
+                                type="number"
+                                placeholder="0.0"
+                                value={ccAmount}
+                                onChange={(e) => { setCcAmount(e.target.value); setCcQuote(null); }}
+                                min="0"
+                                step="any"
+                                inputMode="decimal"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Flip chains */}
+                    <button
+                        className="cc-flip-btn"
+                        onClick={() => {
+                            const tempChain = ccInputChain;
+                            const tempSymbol = ccInputSymbol;
+                            setCcInputChain(ccOutputChain);
+                            setCcInputSymbol(ccOutputSymbol);
+                            setCcOutputChain(tempChain);
+                            setCcOutputSymbol(tempSymbol);
+                            setCcAmount("");
+                            setCcQuote(null);
+                        }}
+                        aria-label="Flip chains"
+                    >
+                        ⇅
+                    </button>
+
+                    {/* Output chain + token row */}
+                    <div className="cc-row">
+                        <span className="cc-label">To</span>
+                        <div className="cc-selectors">
+                            <select
+                                className="cc-chain-select"
+                                value={ccOutputChain}
+                                onChange={(e) => {
+                                    const chain = e.target.value as ChainId;
+                                    setCcOutputChain(chain);
+                                    setCcOutputSymbol(CC_TOKENS[chain][0].symbol);
+                                    setCcQuote(null);
+                                }}
+                            >
+                                {CC_CHAINS.map((c) => (
+                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="cc-token-select"
+                                value={ccOutputSymbol}
+                                onChange={(e) => { setCcOutputSymbol(e.target.value); setCcQuote(null); }}
+                            >
+                                {CC_TOKENS[ccOutputChain].map((t) => (
+                                    <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+                                ))}
+                            </select>
+                            <div className="cc-output-amount">
+                                {ccLoading ? (
+                                    <span className="pulse">Fetching...</span>
+                                ) : ccQuote ? (
+                                    (() => {
+                                        const outDecimals = CC_TOKENS[ccOutputChain].find(
+                                            (t) => t.symbol === ccOutputSymbol
+                                        )?.decimals ?? 6;
+                                        const raw = BigInt(ccQuote.outputAmount || "0");
+                                        const human = Number(raw) / 10 ** outDecimals;
+                                        return human > 0 ? human.toPrecision(6) : "—";
+                                    })()
+                                ) : "—"}
+                            </div>
+                        </div>
+                    </div>
+
+                    {ccError && <div className="cc-error">{ccError}</div>}
+
+                    {/* Quote breakdown */}
+                    {ccQuote && !ccQuote.error && (
+                        <div className="cc-breakdown">
+                            {ccQuote.outputAmountUsd && Number(ccQuote.outputAmountUsd) > 0 && (
+                                <div className="cc-breakdown-row">
+                                    <span>You receive ~</span>
+                                    <span>${Number(ccQuote.outputAmountUsd).toFixed(2)}</span>
+                                </div>
+                            )}
+                            {Number(ccQuote.feeUsd) > 0 && (
+                                <div className="cc-breakdown-row">
+                                    <span>Bridge fee</span>
+                                    <span>~${Number(ccQuote.feeUsd).toFixed(2)}</span>
+                                </div>
+                            )}
+                            {ccQuote.estimatedTimeSeconds > 0 && (
+                                <div className="cc-breakdown-row">
+                                    <span>Est. time</span>
+                                    <span>
+                                        {ccQuote.estimatedTimeSeconds < 60
+                                            ? `${ccQuote.estimatedTimeSeconds}s`
+                                            : `~${Math.ceil(ccQuote.estimatedTimeSeconds / 60)} min`}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="cc-bridge-badge">
+                                🌉 {ccQuote.isCrossChain ? "Cross-chain via LI.FI Bridge" : "⚡ Best route via Jupiter"}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Swap action for cross-chain */}
+                    <button
+                        className="swap-btn"
+                        disabled={!ccQuote || ccLoading || !ccAmount}
+                        onClick={() => toast("Cross-chain bridging execution coming in Phase 3. Quote shown above.", "info")}
+                    >
+                        {ccLoading
+                            ? "Getting quote..."
+                            : !ccAmount || Number(ccAmount) <= 0
+                                ? "Enter an amount"
+                                : ccQuote
+                                    ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol} (Phase 3)`
+                                    : "Enter an amount"}
+                    </button>
+                    {ccQuote && (
+                        <div className="cc-phase-note">
+                            ℹ️ Cross-chain bridging execution arrives in Phase 3. Quote shown for reference.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Same-chain swap card (hidden when cross-chain mode is active) ── */}
+            {!crossChainMode && <div className="swap-card">
                 {/* ── You sell ── */}
                 <div className="token-section">
                     <label className="token-label">You sell</label>
@@ -605,7 +880,7 @@ export function SwapPanel({
                         </button>
                     </div>
                 )}
-            </div>
+            </div>}
 
             {/* ── Token Selector Modal ── */}
             <TokenSelector
