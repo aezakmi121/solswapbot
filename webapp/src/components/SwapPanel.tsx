@@ -500,9 +500,9 @@ export function SwapPanel({
                             setCcQuote(null);
                             setCcError("");
                         }}
-                        title="Cross-chain swap via LI.FI"
+                        title={crossChainMode ? "Return to Solana swap" : "Bridge tokens across blockchains"}
                     >
-                        🌉 Cross-chain
+                        {crossChainMode ? "◎ Solana swap" : "🌐 Cross-chain"}
                     </button>
                     <button className="history-link-btn" onClick={loadHistory}>
                         History
@@ -543,10 +543,16 @@ export function SwapPanel({
             {/* ── Cross-chain mode ── */}
             {crossChainMode && (
                 <div className="cc-panel">
-                    {/* Input chain + token row */}
-                    <div className="cc-row">
-                        <span className="cc-label">From</span>
-                        <div className="cc-selectors">
+                    {/* Banner */}
+                    <div className="cc-banner">
+                        <span className="cc-banner-title">🌉 Cross-Chain Bridge</span>
+                        <span className="cc-banner-sub">Bridge tokens across blockchains via LI.FI</span>
+                    </div>
+
+                    {/* You Pay section */}
+                    <div className="cc-section">
+                        <span className="cc-section-label">You Pay</span>
+                        <div className="cc-pickers-row">
                             <select
                                 className="cc-chain-select"
                                 value={ccInputChain}
@@ -570,17 +576,17 @@ export function SwapPanel({
                                     <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
                                 ))}
                             </select>
-                            <input
-                                className="cc-amount-input"
-                                type="number"
-                                placeholder="0.0"
-                                value={ccAmount}
-                                onChange={(e) => { setCcAmount(e.target.value); setCcQuote(null); }}
-                                min="0"
-                                step="any"
-                                inputMode="decimal"
-                            />
                         </div>
+                        <input
+                            className="cc-amount-input"
+                            type="number"
+                            placeholder="0.0"
+                            value={ccAmount}
+                            onChange={(e) => { setCcAmount(e.target.value); setCcQuote(null); }}
+                            min="0"
+                            step="any"
+                            inputMode="decimal"
+                        />
                     </div>
 
                     {/* Flip chains */}
@@ -601,10 +607,10 @@ export function SwapPanel({
                         ⇅
                     </button>
 
-                    {/* Output chain + token row */}
-                    <div className="cc-row">
-                        <span className="cc-label">To</span>
-                        <div className="cc-selectors">
+                    {/* You Receive section */}
+                    <div className="cc-section">
+                        <span className="cc-section-label">You Receive</span>
+                        <div className="cc-pickers-row">
                             <select
                                 className="cc-chain-select"
                                 value={ccOutputChain}
@@ -628,20 +634,22 @@ export function SwapPanel({
                                     <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
                                 ))}
                             </select>
-                            <div className="cc-output-amount">
-                                {ccLoading ? (
-                                    <span className="pulse">Fetching...</span>
-                                ) : ccQuote ? (
-                                    (() => {
-                                        const outDecimals = CC_TOKENS[ccOutputChain].find(
-                                            (t) => t.symbol === ccOutputSymbol
-                                        )?.decimals ?? 6;
-                                        const raw = BigInt(ccQuote.outputAmount || "0");
-                                        const human = Number(raw) / 10 ** outDecimals;
-                                        return human > 0 ? human.toPrecision(6) : "—";
-                                    })()
-                                ) : "—"}
-                            </div>
+                        </div>
+                        <div className="cc-output-display">
+                            {ccLoading ? (
+                                <span className="pulse">Fetching...</span>
+                            ) : ccQuote ? (
+                                (() => {
+                                    const outDecimals = CC_TOKENS[ccOutputChain].find(
+                                        (t) => t.symbol === ccOutputSymbol
+                                    )?.decimals ?? 6;
+                                    const raw = BigInt(ccQuote.outputAmount || "0");
+                                    const human = Number(raw) / 10 ** outDecimals;
+                                    return human > 0 ? human.toPrecision(6) : "—";
+                                })()
+                            ) : (
+                                <span style={{ color: "var(--text-muted)" }}>—</span>
+                            )}
                         </div>
                     </div>
 
@@ -678,7 +686,7 @@ export function SwapPanel({
                         </div>
                     )}
 
-                    {/* Swap action for cross-chain */}
+                    {/* Bridge button */}
                     <button
                         className="swap-btn"
                         disabled={!ccQuote || ccLoading || !ccAmount}
@@ -704,7 +712,7 @@ export function SwapPanel({
             {!crossChainMode && <div className="swap-card">
                 {/* ── You sell ── */}
                 <div className="token-section">
-                    <label className="token-label">You sell</label>
+                    <label className="token-label">You pay</label>
                     <div className="token-row">
                         {renderTokenButton(inputToken, "input")}
                         <input
