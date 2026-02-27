@@ -383,6 +383,61 @@ export async function fetchScanHistory(): Promise<ScanHistoryItem[]> {
     return data.scans;
 }
 
+// ─── Transactions (unified history) ────────────────────────────────────────────
+
+export interface UnifiedTransaction {
+    id: string;             // "swap_<cuid>" or "send_<cuid>"
+    type: "swap" | "send";
+    status: string;         // PENDING | SUBMITTED | CONFIRMED | FAILED | TIMEOUT
+    // swap fields
+    inputSymbol?: string;
+    outputSymbol?: string;
+    inputAmount?: string;   // human-readable, e.g. "0.5000"
+    outputAmount?: string;
+    inputChain?: string;
+    outputChain?: string;
+    feeAmountUsd?: number | null;
+    // send fields
+    tokenSymbol?: string;
+    humanAmount?: string;
+    recipientAddress?: string;
+    // shared
+    txSignature: string | null;
+    createdAt: string;
+}
+
+export interface TransactionsResponse {
+    transactions: UnifiedTransaction[];
+    total: number;
+    hasMore: boolean;
+}
+
+/** Fetch paginated, filtered transactions (swaps + sends) */
+export async function fetchTransactions(params: {
+    type?: "all" | "swap" | "send";
+    preset?: "today" | "7d" | "30d";
+    from?: string;  // ISO date string "YYYY-MM-DD"
+    to?: string;    // ISO date string "YYYY-MM-DD"
+    offset?: number;
+    limit?: number;
+}): Promise<TransactionsResponse> {
+    const q = new URLSearchParams();
+    if (params.type) q.set("type", params.type);
+    if (params.preset) q.set("preset", params.preset);
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    if (params.offset !== undefined) q.set("offset", String(params.offset));
+    if (params.limit !== undefined) q.set("limit", String(params.limit));
+    const res = await fetch(`${API_BASE}/api/transactions?${q}`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch transactions");
+    }
+    return res.json();
+}
+
 // ─── Cross-Chain ───────────────────────────────────────────────────────────────
 
 export interface CrossChainQuoteResult {

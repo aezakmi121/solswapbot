@@ -14,6 +14,7 @@ import { ScanPanel } from "./components/ScanPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Toast } from "./components/Toast";
 import { TermsModal, hasAcceptedTerms } from "./components/TermsModal";
+import { TransactionsTab } from "./components/TransactionsTab";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
 
@@ -200,6 +201,9 @@ export function App() {
                 )}
                 {activeTab === "scan" && (
                     <ScanPanel onNavigateToSwap={() => setActiveTab("swap")} />
+                )}
+                {activeTab === "history" && (
+                    <TransactionsTab walletAddress={walletAddress} />
                 )}
                 {activeTab === "settings" && (
                     <SettingsPanel
