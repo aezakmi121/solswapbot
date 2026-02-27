@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchPortfolio, fetchActivity, Portfolio, PortfolioToken, ActivityItem } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { SendFlow } from "./SendFlow";
 import { toast } from "../lib/toast";
+
+const PULL_THRESHOLD = 72; // px of downward drag needed to trigger refresh
 
 interface WalletTabProps {
     walletAddress: string;
@@ -132,7 +134,14 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
     const [activityLoading, setActivityLoading] = useState(true);
     const [showAllActivity, setShowAllActivity] = useState(false);
 
-    const loadPortfolio = async () => {
+    // ── Pull-to-refresh state ──
+    const [ptrState, setPtrState] = useState<"idle" | "pulling" | "refreshing">("idle");
+    const [pullY, setPullY] = useState(0); // 0..1 progress
+    const touchStartY = useRef(0);
+    const isPulling = useRef(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+
+    const loadPortfolio = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
@@ -144,9 +153,9 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const loadActivity = async () => {
+    const loadActivity = useCallback(async () => {
         setActivityLoading(true);
         try {
             const data = await fetchActivity();
@@ -156,12 +165,56 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
         } finally {
             setActivityLoading(false);
         }
-    };
+    }, []);
+
+    const refreshAll = useCallback(async () => {
+        await Promise.all([loadPortfolio(), loadActivity()]);
+    }, [loadPortfolio, loadActivity]);
 
     useEffect(() => {
         loadPortfolio();
         loadActivity();
-    }, [walletAddress]);
+    }, [walletAddress, loadPortfolio, loadActivity]);
+
+    // ── Pull-to-refresh touch handlers ──
+    const getScrollParent = (): HTMLElement | null =>
+        rootRef.current?.closest(".tab-content") as HTMLElement | null;
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        const scrollParent = getScrollParent();
+        if (scrollParent && scrollParent.scrollTop > 0) return; // Only allow from top
+        touchStartY.current = e.touches[0].clientY;
+        isPulling.current = true;
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!isPulling.current || ptrState === "refreshing") return;
+        const scrollParent = getScrollParent();
+        if (scrollParent && scrollParent.scrollTop > 0) {
+            isPulling.current = false;
+            return;
+        }
+        const delta = e.touches[0].clientY - touchStartY.current;
+        if (delta > 0) {
+            const progress = Math.min(delta / PULL_THRESHOLD, 1);
+            setPullY(progress);
+            setPtrState("pulling");
+        }
+    };
+
+    const handleTouchEnd = async () => {
+        if (!isPulling.current) return;
+        isPulling.current = false;
+        if (pullY >= 1 && ptrState !== "refreshing") {
+            setPtrState("refreshing");
+            setPullY(0);
+            await refreshAll();
+            setPtrState("idle");
+        } else {
+            setPullY(0);
+            setPtrState("idle");
+        }
+    };
 
     const shortAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -175,7 +228,28 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
     };
 
     return (
-        <div className="wallet-tab">
+        <div
+            className="wallet-tab"
+            ref={rootRef}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
+            {/* ── Pull-to-refresh indicator ── */}
+            {(ptrState === "pulling" || ptrState === "refreshing") && (
+                <div
+                    className="ptr-indicator"
+                    style={{ opacity: ptrState === "refreshing" ? 1 : pullY }}
+                >
+                    <div className={`ptr-spinner${ptrState === "refreshing" ? " ptr-spinner--spinning" : ""}`}
+                        style={{ transform: ptrState === "pulling" ? `rotate(${pullY * 360}deg)` : undefined }}
+                    />
+                    <span className="ptr-label">
+                        {ptrState === "refreshing" ? "Refreshing..." : pullY >= 1 ? "Release to refresh" : "Pull to refresh"}
+                    </span>
+                </div>
+            )}
+
             {/* ── Portfolio Value ── */}
             <div className="portfolio-header">
                 {loading ? (
