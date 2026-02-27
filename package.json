@@ -7,7 +7,10 @@
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --require tsx/cjs --test src/__tests__/smoke.test.ts",
+    "test:live": "bash scripts/smoke-test.sh",
+    "test:live:prod": "bash scripts/smoke-test.sh https://srv1418768.hstgr.cloud"
   },
   "engines": {
     "node": ">=20.0.0"
