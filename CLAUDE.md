@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-27 | Version: 0.4.2 (Phase 2 complete — all M-issues fixed, pull-to-refresh)
+> Updated: 2026-02-27 | Version: 0.4.3 (Scanner: animated gauge, token name fix, new checks, disclaimer)
 > Read this file FIRST before making any changes.
 
 ---
@@ -1051,6 +1051,29 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-27 — Scanner: Animated Gauge, Token Name Fix, New Checks, Disclaimer (v0.4.3)
+
+**Backend:**
+- `src/scanner/checks.ts`: Added two new synchronous checks (zero extra RPC calls):
+  - `checkJupiterVerified` (weight 10) — token on Jupiter's verified list = safe; not found = mild risk
+  - `checkHasMetadata` (weight 15) — token has name + symbol = safe; anonymous = risk
+  - New max possible score: 105 (clamped to 100). Score thresholds unchanged (0-20 LOW, 21-50 MEDIUM, 51+ HIGH)
+- `src/scanner/analyze.ts`: Fetches `tokenMeta` via `getTokenByMint()` (Jupiter cache, no extra network call for cached tokens) in parallel with existing RPC calls. Runs new checks. Extends `ScanResult.tokenInfo` with `name`, `symbol`, `icon` fields.
+
+**Frontend:**
+- `RiskGauge.tsx`: Full rewrite — animated SVG semicircle arc (speedometer/gauge). Green→yellow→red gradient via `linearGradient`. Score arc animates from 0 → score via `stroke-dashoffset` CSS transition (1.2s ease) on mount and score change. Token `icon`, `symbol`, `name` displayed above the gauge.
+- `ScanPanel.tsx`: Passes `tokenName`/`tokenSymbol`/`tokenIcon` to `RiskGauge`. Truncated mint address shown below gauge. Legal disclaimer added below every scan result. Recent scans now show token symbol (e.g. "BONK") instead of truncated mint address.
+- `webapp/src/lib/api.ts`: `ScanResult.tokenInfo` interface extended with `name`, `symbol`, `icon`.
+- `index.css`: New SVG gauge styles (`.risk-gauge-svg`, `.risk-gauge-number`, `.risk-gauge-denom`, `.risk-token-header`, `.risk-token-icon`, `.risk-token-symbol`, `.risk-token-name`). New `.scan-mint-addr` and `.scan-disclaimer` block.
+
+**Planned future scanner improvements (from research — not yet built):**
+- Jupiter Token API v2 `organicScore`, `liquidity`, `holderCount`, `firstPool.createdAt` (pool age), `cexes[]`
+- Helius `getAsset` for update authority / metadata mutability check
+- Token-2022 extension parsing: permanent delegate, transfer fees, transfer hook
+- Known program exclusion from top-holder concentration (filters Raydium pool accounts)
+- Single wallet >20% of supply check (from existing `getTokenLargestAccounts` data)
+- LP burned detection via `getTokenLargestAccounts(lpMint)` burn address check
 
 ### 2026-02-27 — Phase 2 Complete: Pull-to-Refresh + All Medium Issues Resolved (v0.4.2)
 
