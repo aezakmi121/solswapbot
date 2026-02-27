@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { fetchUser, UserData } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
+import { TermsModal } from "./TermsModal";
 import { toast } from "../lib/toast";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
@@ -26,6 +27,7 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
     const [customSlippage, setCustomSlippage] = useState("");
     const [showCustom, setShowCustom] = useState(false);
     const [showQr, setShowQr] = useState(false);
+    const [showTerms, setShowTerms] = useState(false);
 
     useEffect(() => {
         fetchUser().then(setUserData).catch(() => {});
@@ -167,10 +169,16 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
             <div className="settings-section">
                 <div className="settings-section-title">About</div>
                 <div className="settings-card settings-about">
-                    <p className="settings-about-name">SolSwap v0.2.0</p>
+                    <p className="settings-about-name">SolSwap v0.4.0</p>
                     <p className="settings-about-sub">Non-custodial · Privy MPC wallet</p>
                     <p className="settings-about-sub">Platform fee: 0.5% per swap</p>
                     <p className="settings-about-sub">Powered by Jupiter &amp; LI.FI</p>
+                    <button
+                        className="settings-terms-link"
+                        onClick={() => setShowTerms(true)}
+                    >
+                        View Terms of Use
+                    </button>
                 </div>
             </div>
 
@@ -184,6 +192,11 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
             {/* QR modal (reuse ReceiveModal) */}
             {showQr && (
                 <ReceiveModal walletAddress={walletAddress} onClose={() => setShowQr(false)} />
+            )}
+
+            {/* Terms of Use modal (re-readable from Settings) */}
+            {showTerms && (
+                <TermsModal onAccept={() => setShowTerms(false)} />
             )}
         </div>
     );

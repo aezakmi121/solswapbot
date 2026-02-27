@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-26 | Version: 0.4.0 (Sprint 2C complete)
+> Updated: 2026-02-27 | Version: 0.4.1 (ToS + Legal Disclaimer added)
 > Read this file FIRST before making any changes.
 
 ---
@@ -175,6 +175,7 @@ solswapbot/
 |-------|--------|--------|
 | **User** | telegramId, walletAddress, referralCode, referredBy | DONE |
 | **Swap** | inputMint, outputMint, amounts, chains, feeAmountUsd, txSignature, status | DONE |
+| **Transfer** | tokenMint, tokenSymbol, humanAmount, recipientAddress, txSignature, status | DONE |
 | **TokenScan** | mintAddress, riskScore (0-100), riskLevel, flags (JSON) | DONE |
 | **WatchedWallet** | walletAddress, label, active | DONE (schema only, no API) |
 | **Subscription** | tier (FREE/SCANNER_PRO/WHALE_TRACKER/SIGNALS/ALL_ACCESS), expiresAt | DONE (schema only, no enforcement) |
@@ -236,7 +237,9 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | GET | `/api/cross-chain/chains` | Supported chains list |
 | GET | `/api/cross-chain/tokens` | Cross-chain token registry |
 | GET | `/api/history` | Last 20 swaps for the authenticated user |
+| GET | `/api/activity` | Last 20 swaps + sends merged, sorted by date |
 | POST | `/api/send` | Build unsigned transfer TX `{ tokenMint, recipientAddress, amount, senderAddress }` → `{ transaction: base64, lastValidBlockHeight }` |
+| POST | `/api/transfer/confirm` | Record completed send `{ txSignature, tokenMint, tokenSymbol, humanAmount, recipientAddress }` |
 
 ### Auth Flow
 1. Frontend sends `Authorization: tma <tg.initData>` header
@@ -690,8 +693,9 @@ Minor improvements to existing swap UI:
 | 10 | Tab active indicator (visible line + bg) | `index.css` | No | ✅ DONE |
 | 11 | Scan layout fix (stacked input + paste btn) | `ScanPanel.tsx`, `index.css` | No | ✅ DONE |
 | 12 | Toast wired into all copy/send actions | All components | No | ✅ DONE |
+| 13 | Terms of Use modal (first-launch gate + re-viewable in Settings) | `TermsModal.tsx`, `SettingsPanel.tsx`, `App.tsx`, `index.css` | No | ✅ DONE |
 
-**New files created:** `Toast.tsx`, `toast.ts`
+**New files created:** `Toast.tsx`, `toast.ts`, `TermsModal.tsx`
 
 ---
 
@@ -712,7 +716,8 @@ webapp/src/
 │   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout ✅ 2B
 │   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ✅ 2B
 │   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ✅ 2B
-│   └── Toast.tsx              # Toast notification system ❌ 2C
+│   ├── Toast.tsx              # Toast notification system ✅ 2C
+│   └── TermsModal.tsx         # First-launch ToS gate + re-viewable from Settings ✅ 2C
 ├── lib/
 │   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B)
 └── styles/
@@ -958,7 +963,7 @@ Remaining work: Zod on LI.FI (M9), and MEDIUM-priority cleanup items.
 | M18 | Privy App ID can be empty string | `webapp/src/main.tsx` | OPEN |
 | ~~M19~~ | ~~User.walletAddress not indexed~~ | `prisma/schema.prisma` | ✅ FIXED — `@@index([walletAddress])` |
 | M20 | Swap.feeAmountUsd is Float | `prisma/schema.prisma` | OPEN |
-| M21 | Async Express handlers bypass error handler | `src/api/server.ts` | OPEN |
+| ~~M21~~ | ~~Async Express handlers bypass error handler~~ | `src/api/server.ts` | ✅ FIXED — `asyncHandler` wrapper in server.ts |
 | M22 | `@solana/web3.js` still in webapp | `webapp/package.json` | OPEN |
 | M23 | Unused webapp deps | `webapp/package.json` | OPEN |
 | M24 | `@types/express@^5` used with Express 4 | `package.json` | OPEN |
@@ -1047,6 +1052,22 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-27 — Terms of Use + Legal Disclaimer (v0.4.1)
+
+**Frontend only (no backend changes):**
+- Created `webapp/src/components/TermsModal.tsx` — first-launch gate modal (full-screen bottom sheet). Shows 8 legal sections covering: non-custodial wallet, not financial advice, DeFi risks, platform fee (0.5%), no KYC/pseudonymous use, no fiat services, eligibility (18+), limitation of liability.
+- Terms must be scrolled to bottom before "I Agree" button activates — prevents blind acceptance.
+- Acceptance stored in `localStorage` under key `solswap_terms_accepted`. Shown once on first launch; never shown again after acceptance.
+- Wired into `App.tsx` as the first gate before even showing the loading/onboarding screen.
+- Added "View Terms of Use" button to `SettingsPanel.tsx` About section — re-opens modal for users who want to re-read terms.
+- Added all Terms modal styles to `index.css`: overlay, sheet, header, scrollable body, section headings, footer with accept button (disabled state → ready state), settings link style.
+- Fixed version number in SettingsPanel About section: v0.2.0 → v0.4.0.
+- Fixed `CLAUDE.md` inaccuracies: added `Transfer` model (6th DB model), added `/api/activity` + `/api/transfer/confirm` routes, marked M21 as fixed (asyncHandler), updated file structure.
+
+**New files:** `webapp/src/components/TermsModal.tsx`
+
+---
 
 ### 2026-02-26 — Sprint 2C: Polish, Toast System, Haptic Feedback, Recent Tokens (v0.4.0)
 
