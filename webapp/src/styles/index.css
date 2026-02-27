@@ -2714,3 +2714,33 @@ body {
 .settings-terms-link:hover {
   background: rgba(124, 92, 252, 0.08);
 }
+
+/* ── Pull-to-Refresh ── */
+.ptr-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  transition: opacity 0.15s;
+}
+
+.ptr-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: transform 0.1s linear;
+}
+
+.ptr-spinner--spinning {
+  animation: spin 0.7s linear infinite;
+}
+
+.ptr-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
