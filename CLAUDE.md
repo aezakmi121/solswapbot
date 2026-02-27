@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-27 | Version: 0.5.0 (Phase 2 complete: scan history DB, cross-chain swap UI)
+> Updated: 2026-02-27 | Version: 0.5.1 (Phase 2.5: Transactions tab — 5th tab, date filters, load more, detail view)
 > Read this file FIRST before making any changes.
 
 ---
@@ -238,6 +238,8 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | GET | `/api/cross-chain/tokens` | Cross-chain token registry |
 | GET | `/api/history` | Last 20 swaps for the authenticated user |
 | GET | `/api/activity` | Last 20 swaps + sends merged, sorted by date |
+| GET | `/api/transactions` | Paginated swaps + sends. Params: `type`, `preset`, `from`, `to`, `offset`, `limit` |
+| GET | `/api/transactions` | Paginated, filtered transactions (swaps + sends). Query: `type=all\|swap\|send`, `preset=today\|7d\|30d`, `from=YYYY-MM-DD`, `to=YYYY-MM-DD`, `offset`, `limit` (1–50). Returns `{ transactions, total, hasMore }` |
 | POST | `/api/send` | Build unsigned transfer TX `{ tokenMint, recipientAddress, amount, senderAddress }` → `{ transaction: base64, lastValidBlockHeight }` |
 | POST | `/api/transfer/confirm` | Record completed send `{ txSignature, tokenMint, tokenSymbol, humanAmount, recipientAddress }` |
 
@@ -718,11 +720,12 @@ webapp/src/
 │   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ✅ 2B
 │   ├── Toast.tsx              # Toast notification system ✅ 2C
 │   ├── TermsModal.tsx         # First-launch ToS gate + re-viewable from Settings ✅ 2C
-│   └── CcTokenModal.tsx       # Cross-chain token selector modal (chain + token picker) ✅ 2C
+│   ├── CcTokenModal.tsx       # Cross-chain token selector modal (chain + token picker) ✅ 2C
+│   └── TransactionsTab.tsx    # 5th tab: paginated tx history, date filters, detail modal ✅ 2.5
 ├── lib/
-│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B)
+│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B, fetchTransactions ✅ 2.5)
 └── styles/
-    └── index.css              # All styles (tab bar + wallet + receive ✅ 2A; scan + settings + send ❌ 2B)
+    └── index.css              # All styles (tab bar + wallet + receive ✅ 2A; scan + settings + send ✅ 2B; transactions ✅ 2.5)
 ```
 
 ### Phase 2 — New/Modified Backend Routes
@@ -738,8 +741,9 @@ webapp/src/
 
 | Task | Status | Priority |
 |------|--------|----------|
+| Helius webhook integration (incoming tx tracking) | NOT STARTED | P1 |
+| Receive tracking in Transactions tab (via Helius webhooks) | NOT STARTED | P1 |
 | Whale tracker API routes | NOT STARTED | P2 |
-| Helius webhook integration | NOT STARTED | P2 |
 | TrackPanel component (manage watched wallets) | NOT STARTED | P2 |
 | Whale alert notifications via bot | NOT STARTED | P2 |
 | Subscription payment flow (Telegram Stars) | NOT STARTED | P2 |
@@ -1052,6 +1056,37 @@ pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is runni
 ---
 
 ## Changelog
+
+### 2026-02-27 — Transactions Tab: 5th tab, date filters, load more, detail modal (v0.5.1)
+
+**Backend:**
+- New `src/db/queries/transactions.ts` — `getTransactions()` fetches and merges Swap + Transfer rows for a user, resolves token symbols + decimals (via Jupiter metadata cache), converts raw BigInt amounts to human-readable strings, sorts by date desc, and applies offset-based pagination. Supports type filter (all/swap/send) and date range (from/to Date objects).
+- New `src/api/routes/transactions.ts` — `GET /api/transactions` with query params: `type=all|swap|send`, `preset=today|7d|30d`, `from=YYYY-MM-DD`, `to=YYYY-MM-DD`, `offset`, `limit` (1–50). Returns `{ transactions: UnifiedTransaction[], total: number, hasMore: boolean }`.
+- Registered `transactionsRouter` in `src/api/server.ts` (protected, requires Telegram initData auth).
+
+**Frontend:**
+- New `webapp/src/components/TransactionsTab.tsx` — full transactions history UI:
+  - Type filter chips: All / 🔄 Swaps / 📤 Sends / 📥 Receives
+  - Date preset chips: Today / 7 days / 30 days / 📅 Custom
+  - Custom date range: two `<input type="date">` fields (from + to)
+  - Results grouped by month with item count
+  - Compact transaction rows: icon, token pair / amount, status emoji, timestamp
+  - "Load 20 more" button with pagination (offset-based)
+  - "Showing X of Y transactions" count line
+  - Tap any row → slide-up detail modal (amounts, fee, date, chain, tx ID, Solscan link, copy tx)
+  - Receives tab shows informative placeholder + wallet address copy (Helius webhook tracking coming Phase 3)
+  - Shimmer skeleton loading state on initial load
+  - Haptic feedback on tab/filter changes
+- Updated `webapp/src/components/TabBar.tsx` — added "history" as 5th tab (📋 History). Added `.tab-bar--five` class for 5-tab font-size tuning.
+- Updated `webapp/src/App.tsx` — imports `TransactionsTab`, renders it on `activeTab === "history"`.
+- Updated `webapp/src/lib/api.ts` — added `UnifiedTransaction` and `TransactionsResponse` interfaces, `fetchTransactions()` function.
+- Added `webapp/src/styles/index.css` — full Transactions tab styles: type chips, date chips, custom range inputs, month dividers, tx rows, load more, empty state, receives placeholder, detail modal (overlay + sheet + status badge + detail rows + sig copy + Solscan link), skeleton shimmer rows. `.tab-bar--five` label font-size override.
+
+**Phase 3 note:** Receives (incoming transfers) require Helius webhook integration to track. Placeholder shown in UI explaining this. Bumped to P1 priority in Phase 3 table.
+
+**New files:** `src/db/queries/transactions.ts`, `src/api/routes/transactions.ts`, `webapp/src/components/TransactionsTab.tsx`
+
+---
 
 ### 2026-02-27 — Scanner: Animated Gauge, Token Name Fix, New Checks, Disclaimer (v0.4.3)
 
