@@ -18,12 +18,12 @@ check_body() {
   local desc="$1" expected="$2" actual="$3"
   if echo "$actual" | grep -q "$expected"; then
     echo -e "${GREEN}✓${RESET} $desc"
-    ((PASS++))
+    PASS=$((PASS+1))
   else
     echo -e "${RED}✗${RESET} $desc"
     echo "  expected body to contain: $expected"
     echo "  got: $actual"
-    ((FAIL++))
+    FAIL=$((FAIL+1))
   fi
 }
 
@@ -31,10 +31,10 @@ check_status() {
   local desc="$1" expected="$2" actual="$3"
   if [[ "$actual" == "$expected" ]]; then
     echo -e "${GREEN}✓${RESET} $desc"
-    ((PASS++))
+    PASS=$((PASS+1))
   else
     echo -e "${RED}✗${RESET} $desc (expected HTTP $expected, got HTTP $actual)"
-    ((FAIL++))
+    FAIL=$((FAIL+1))
   fi
 }
 
@@ -110,10 +110,10 @@ status=$(curl -s -o /dev/null -w "%{http_code}" \
   -d '{"quoteResponse":{"platformFee":{"feeBps":0}},"userPublicKey":"fake"}')
 if [[ "$status" == "400" || "$status" == "401" ]]; then
   echo -e "${GREEN}✓${RESET} POST /api/swap with feeBps=0 rejected (HTTP $status)"
-  ((PASS++))
+  PASS=$((PASS+1))
 else
   echo -e "${RED}✗${RESET} POST /api/swap with feeBps=0 should return 400 or 401, got $status"
-  ((FAIL++))
+  FAIL=$((FAIL+1))
 fi
 
 echo ""
