@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-27 | Version: 0.5.1
+> Updated: 2026-02-27 | Version: 0.5.2
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -32,6 +32,9 @@ npm run dev                # Vite dev server at localhost:5173
 | `npm run build` | Compile TypeScript → `dist/` |
 | `npm start` | Run compiled `dist/app.js` (production) |
 | `npm run lint` | Type-check without emit |
+| `npm test` | Run unit smoke tests (Node built-in runner, no server needed) |
+| `npm run test:live` | Run integration smoke tests against `http://localhost:3001` |
+| `npm run test:live:prod` | Run integration smoke tests against production VPS |
 | `cd webapp && npm run dev` | Start Mini App Vite dev server |
 | `cd webapp && npm run build` | Build Mini App for Vercel deploy |
 | `npx prisma db push` | Apply schema changes to SQLite (no migration file needed) |
@@ -214,11 +217,16 @@ solswapbot/
 │   │       ├── fees.ts           # STUB — reserved for Phase 3 revenue analytics. No active logic.
 │   │       └── referrals.ts      # STUB — reserved for Phase 3. No active logic.
 │   │
-│   └── utils/
-│       ├── retry.ts              # withRetry() — exponential backoff, checks err.status first
-│       ├── validation.ts         # isValidSolanaAddress() (ed25519 curve), isValidPublicKey() (any PDA)
-│       ├── formatting.ts         # formatTokenAmount(), shortenAddress()
-│       └── constants.ts          # Token registry (6 hardcoded tokens: SOL, USDC, USDT, BONK, JUP, WIF)
+│   ├── utils/
+│   │   ├── retry.ts              # withRetry() — exponential backoff, checks err.status first
+│   │   ├── validation.ts         # isValidSolanaAddress() (ed25519 curve), isValidPublicKey() (any PDA)
+│   │   ├── formatting.ts         # formatTokenAmount(), shortenAddress()
+│   │   └── constants.ts          # Token registry (6 hardcoded tokens: SOL, USDC, USDT, BONK, JUP, WIF)
+│   │
+│   └── __tests__/
+│       └── smoke.test.ts         # Unit tests (Node built-in runner, no server). Covers: Telegram HMAC
+│                                 #   auth algorithm correctness, auth expiry/replay prevention,
+│                                 #   platform fee bypass detection, Solana address validation (23 tests)
 │
 ├── webapp/                       # Telegram Mini App — deployed to Vercel
 │   ├── index.html
@@ -260,7 +268,13 @@ solswapbot/
 ├── package.json                  # Node >=20, backend deps
 ├── tsconfig.json
 ├── .env.example
-└── CLAUDE.md                     # This file
+├── CLAUDE.md                     # This file — master context for AI assistants
+├── README.md                     # Public-facing project overview
+├── API.md                        # API endpoint reference (supplementary)
+├── ARCHITECTURE.md               # System architecture diagrams
+├── SECURITY.md                   # Security model (note: partially outdated — CLAUDE.md is authoritative)
+├── TESTING.md                    # Testing guide (note: partially outdated — CLAUDE.md is authoritative)
+└── PLAN.md                       # Project planning notes
 ```
 
 ---
@@ -705,11 +719,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
 |----|----------|-------------|------|-----------|
 | AGE-1 | LOW | Token age check gives wrong result for tokens with >5,000 total txs (popular tokens appear "new") | `scanner/checks.ts:269` | Not fixed. Low impact: only affects 10-point check; popular tokens score LOW anyway via other checks |
 | H5 | LOW | Float precision for display values — BigInt used for DB/calculations, floats remain for USD display math | `jupiter/quote.ts` | PARTIAL — acceptable for display purposes |
-| API-1 | MEDIUM | `lite-api.jup.ag` (free Jupiter API) is being sunset. Need to migrate to `api.jup.ag` + API key from `portal.jup.ag` (free tier = 60 req/min) | `config.ts JUPITER_API_URL` | NOT STARTED — migrate before sunset |
-| DB-1 | INFO | `fees.ts` and `referrals.ts` are empty stubs (no active queries) | `db/queries/fees.ts` | Reserved for Phase 3 |
+| API-1 | ~~MEDIUM~~ **FIXED** | `lite-api.jup.ag` sunset migration — `config.ts` now defaults to `https://api.jup.ag/swap/v1`. Set `JUPITER_API_KEY` from `portal.jup.ag` for production. | `config.ts` | **DONE** — default updated; API key optional (free tier) |
+| DB-1 | INFO | `fees.ts` and `referrals.ts` are stubs with Phase 3 query logic but no route wiring | `db/queries/fees.ts` | Reserved for Phase 3 |
 | DB-2 | INFO | `WatchedWallet` and `Subscription` schema models have no API routes or enforcement | `schema.prisma` | Reserved for Phase 3 |
 | MON-1 | MEDIUM | No monitoring or alerting beyond PM2 logs. No uptime checks, no error rate tracking | VPS | Phase 3 |
-| TEST-1 | HIGH | No automated test suite (unit or integration tests) | — | Phase 3 |
+| TEST-1 | ~~HIGH~~ **PARTIAL** | Unit test suite exists (`npm test`, 23 tests: auth, fee bypass, address validation). Integration smoke tests exist (`npm run test:live`, 13 tests). No end-to-end Privy/swap signing tests. | `src/__tests__/smoke.test.ts`, `scripts/smoke-test.sh` | Unit + integration done. E2E pending Phase 3. |
 | RECV-1 | MEDIUM | Incoming transfers (receives) not tracked — Helius webhooks needed | Phase 3 | NOT STARTED |
 
 ---
@@ -734,14 +748,13 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 #### Blockers before FULL production (broad public launch):
 
-1. **Jupiter API sunset** — `lite-api.jup.ag` is being deprecated (announced Aug 2025).
-   Must obtain API key from `portal.jup.ag` and update `JUPITER_API_URL` to
-   `https://api.jup.ag/swap/v1` before the free endpoint goes offline. This will
-   break ALL swaps when it happens. **Priority: HIGH.**
+1. ~~**Jupiter API sunset**~~ **DONE** — `config.ts` already defaults to `https://api.jup.ag/swap/v1`.
+   Get free API key from `portal.jup.ag` and set `JUPITER_API_KEY` in `.env` for
+   authenticated rate limits (60 req/min free tier vs anonymous throttle). **Priority: LOW — get key, not blocking.**
 
-2. **No automated tests** — A single bad deploy could break swaps silently.
-   At minimum, add smoke tests for: auth middleware, quote validation, fee bypass prevention.
-   **Priority: HIGH before scaling.**
+2. ~~**No automated tests**~~ **PARTIAL** — 23 unit tests (`npm test`) + 13 integration tests
+   (`npm run test:live`) now exist and pass. Missing: true end-to-end Privy signing tests
+   (require real Telegram session + wallet). **Priority: LOW for launch, MEDIUM before scaling.**
 
 3. **No monitoring** — When the server goes down at 3am, you won't know until a user
    reports it. Add uptime monitoring (UptimeRobot free tier is sufficient) and a Telegram
@@ -759,11 +772,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
    All users get all features for free. Not a bug, but premium features can't be sold yet.
 
 #### Recommended launch sequence:
-1. Fix Jupiter API key migration (critical path)
-2. Add uptime monitoring (1 hour of work)
-3. Manual end-to-end test with real SOL (see Beta Test Checklist)
-4. Soft launch to 50-100 users, watch PM2 logs closely
-5. Add smoke tests before scaling past 500 users
+1. Add uptime monitoring (1 hour of work)
+2. Manual end-to-end test with real SOL (see Beta Test Checklist)
+3. Soft launch to 50-100 users, watch PM2 logs closely
+4. Register `JUPITER_API_KEY` + `LIFI_API_KEY` for production rate limits and integrator fees
+5. Add Helius webhooks + receive tracking before scaling past 500 users
 
 ---
 
@@ -778,7 +791,7 @@ SOLANA_RPC_URL=                # Helius RPC endpoint: https://your.helius-rpc.co
 FEE_WALLET_ADDRESS=            # Solana address for 0.5% fee collection (must be valid pubkey)
 
 # ── IMPORTANT (defaults provided, but should be set in production) ─────────────
-JUPITER_API_URL=https://lite-api.jup.ag/swap/v1   # ⚠️ BEING SUNSET — migrate to api.jup.ag soon
+JUPITER_API_URL=https://api.jup.ag/swap/v1         # Default is already api.jup.ag (lite-api sunset migration done)
 PLATFORM_FEE_BPS=50            # 0.5% fee. Range 0-200. Change carefully (swap.ts validates against this)
 API_PORT=3001
 CORS_ORIGIN=https://your-app.vercel.app   # ⚠️ MUST match Vercel URL in production (crashes if "*" + prod)
@@ -969,8 +982,8 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 
 | Task | Priority | Notes |
 |------|----------|-------|
-| Jupiter API key migration | P0 | `lite-api.jup.ag` sunset imminent |
-| Automated smoke tests | P0 | At minimum: auth, quote, fee validation |
+| ~~Jupiter API key migration~~ | ~~P0~~ **DONE** | Default now `api.jup.ag/swap/v1`. Get `JUPITER_API_KEY` from portal.jup.ag for rate limits. |
+| ~~Automated smoke tests~~ | ~~P0~~ **DONE** | 23 unit tests (`npm test`) + 13 integration tests (`npm run test:live`). |
 | Uptime monitoring | P1 | UptimeRobot + Telegram alert on crash |
 | Helius webhook integration | P1 | Required for receive tracking in Transactions tab |
 | Receive tracking in Transactions tab | P1 | Depends on Helius webhooks |
@@ -993,6 +1006,15 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-02-27 — CLAUDE.md Consistency Pass (v0.5.2 doc update)
+- Fixed JUPITER_API_URL default: already `api.jup.ag/swap/v1` in config.ts (API-1 marked DONE)
+- Added `src/__tests__/smoke.test.ts` to project structure (23-test unit suite)
+- Added `npm test` and `npm run test:live:prod` to Commands table
+- Updated Known Issues: API-1 FIXED, TEST-1 PARTIAL (unit+integration tests exist)
+- Updated Production Readiness: removed Jupiter migration from blockers, updated test status
+- Phase 3 roadmap: Jupiter migration and smoke tests marked DONE
+- Added supplementary docs (API.md, SECURITY.md, etc.) to project structure with accuracy notes
 
 ### 2026-02-27 — CLAUDE.md Full Rewrite (v0.5.1 doc update)
 - Complete rewrite of CLAUDE.md for AI/external developer onboarding clarity
