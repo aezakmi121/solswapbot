@@ -13,6 +13,7 @@ import { WalletTab } from "./components/WalletTab";
 import { ScanPanel } from "./components/ScanPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Toast } from "./components/Toast";
+import { TermsModal, hasAcceptedTerms } from "./components/TermsModal";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
 
@@ -42,6 +43,9 @@ export function App() {
         (tg as any)?.HapticFeedback?.selectionChanged();
         setActiveTab(tab);
     };
+
+    // ── Terms of Use (first-launch gate) ──
+    const [termsAccepted, setTermsAccepted] = useState<boolean>(hasAcceptedTerms);
 
     // ── Slippage (persisted in localStorage) ──
     const [slippageBps, setSlippageBps] = useState<number>(loadSlippage);
@@ -99,6 +103,15 @@ export function App() {
 
     const balancesLoaded = tokenBalances.length > 0;
     const shortAddr = (addr: string) => `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+
+    // ── Terms gate (must accept before using app) ──
+    if (!termsAccepted) {
+        return (
+            <div className="app">
+                <TermsModal onAccept={() => setTermsAccepted(true)} />
+            </div>
+        );
+    }
 
     // ── Loading ──
     if (!ready) {
