@@ -1,763 +1,769 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
-> **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-27 | Version: 0.5.1 (Phase 2.5: Transactions tab — 5th tab, date filters, load more, detail view)
-> Read this file FIRST before making any changes.
+> **Single source of truth for the SolSwap project.**
+> Updated: 2026-02-27 | Version: 0.5.1
+> Read this file FIRST before making any changes. If you are an AI assistant picking
+> up this project cold, this document contains everything you need to understand the
+> full codebase, make changes safely, and avoid breaking production.
 
 ---
 
 ## Quick Start
 
 ```bash
+# Backend
 npm install
-cp .env.example .env  # Fill in API keys
-npx prisma generate && npx prisma db push
-npm run dev
+cp .env.example .env       # Fill in required keys (see Environment Variables section)
+npx prisma generate
+npx prisma db push
+npm run dev                # Starts bot + API together via tsx watch
+
+# Frontend (separate terminal)
+cd webapp
+npm install
+npm run dev                # Vite dev server at localhost:5173
 ```
 
 ## Commands
 
-- `npm run dev` — Start bot + API in dev mode (tsx watch)
-- `npm run build` — Compile TypeScript
-- `npm start` — Run production build
-- `npm run lint` — Type-check without emit
-- `cd webapp && npm run dev` — Start Mini App dev server
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Start bot + API in dev mode (tsx watch, hot-reload) |
+| `npm run build` | Compile TypeScript → `dist/` |
+| `npm start` | Run compiled `dist/app.js` (production) |
+| `npm run lint` | Type-check without emit |
+| `cd webapp && npm run dev` | Start Mini App Vite dev server |
+| `cd webapp && npm run build` | Build Mini App for Vercel deploy |
+| `npx prisma db push` | Apply schema changes to SQLite (no migration file needed) |
+| `npx prisma generate` | Regenerate Prisma client after schema changes |
+| `pm2 restart ecosystem.config.js` | Restart on VPS after deploy |
+| `pm2 logs --lines 50` | Tail VPS logs |
 
 ---
 
 ## What Is SolSwap?
 
-SolSwap is a **Telegram Mini App** for swapping tokens across multiple blockchains (Solana, Ethereum, BNB Chain, Polygon, Arbitrum, Base) — entirely inside Telegram. No external wallets, no redirects.
+SolSwap is a **non-custodial Telegram Mini App** for swapping tokens across 6 blockchains
+(Solana, Ethereum, BNB Chain, Polygon, Arbitrum, Base) — entirely inside Telegram.
 
-It also provides **token safety scanning**, **whale tracking**, and **AI market signals** — accessible from a single Mini App interface.
+**Core user value:**
+- Swap tokens without leaving Telegram, no external wallet required
+- Send/receive tokens with full portfolio view
+- Scan tokens for rug/scam risk before trading
+- Full transaction history with date filters
+
+**Revenue model:** Jupiter `platformFeeBps=50` (0.5% on all Solana swaps) auto-collects
+into `FEE_WALLET_ADDRESS`. Cross-chain fees via LI.FI integrator program (future).
+
+**Non-custodial guarantee:** Privy MPC manages embedded wallets. We never see or store
+private keys. All signing happens inside the Mini App via the Privy SDK.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│ Telegram                                │
-│  ┌──────────┐    ┌────────────────────┐ │
-│  │ Grammy   │    │ Mini App (Vite)    │ │
-│  │ Bot      │    │ React + Privy SDK  │ │
-│  │ /start   │    │ Wallet|Swap|Scan|⚙ │ │
-│  └────┬─────┘    └────────┬───────────┘ │
-└───────┼───────────────────┼─────────────┘
-        │                   │
-        ▼                   ▼
-┌─────────────────────────────────────────┐
-│ Express API Server (:3001)              │
-│ Routes: /api/quote, /api/swap,          │
-│   /api/scan, /api/price, /api/user,     │
-│   /api/tokens, /api/cross-chain/*       │
-├─────────────────────────────────────────┤
-│ SQLite via Prisma ORM                   │
-└─────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────┐
-│ External APIs                           │
-│  • Jupiter (Solana swaps + fees)        │
-│  • LI.FI (cross-chain routing)          │
-│  • Helius (webhooks, RPC)               │
-│  • Privy (embedded wallets, MPC)        │
-│  • Gemini API (AI signals)              │
-└─────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ Telegram Client                                                        │
+│  ┌─────────────────┐          ┌─────────────────────────────────────┐ │
+│  │  Grammy Bot      │          │  Mini App (Vite + React)            │ │
+│  │  /start → opens  │          │  5 tabs: Wallet | Swap | Scan |     │ │
+│  │  Mini App        │          │  Settings | History                 │ │
+│  └────────┬─────────┘          └──────────────────┬──────────────────┘ │
+└───────────┼──────────────────────────────────────┼────────────────────┘
+            │                                       │
+            ▼                                       ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ Express API Server  (port 3001, behind Vercel proxy)                  │
+│                                                                       │
+│  Public:  GET /api/health  GET /api/price/:mint  GET /api/tokens      │
+│                                                                       │
+│  Protected (Telegram initData HMAC auth):                             │
+│  GET  /api/user               POST /api/user/wallet                   │
+│  GET  /api/user/balances      GET  /api/user/portfolio                │
+│  GET  /api/quote              POST /api/swap                          │
+│  POST /api/swap/confirm       GET  /api/swap/status                   │
+│  GET  /api/scan               GET  /api/scan/history                  │
+│  GET  /api/cross-chain/quote  GET  /api/cross-chain/chains            │
+│  GET  /api/cross-chain/tokens GET  /api/history                       │
+│  GET  /api/activity           POST /api/send                          │
+│  POST /api/transfer/confirm   GET  /api/transactions                  │
+├───────────────────────────────────────────────────────────────────────┤
+│ SQLite via Prisma ORM  (6 models, see Database Schema)                │
+└───────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ External APIs                                                         │
+│  • Jupiter (Solana swaps)    lite-api.jup.ag/swap/v1   ← being sunset│
+│  • Jupiter Tokens            lite-api.jup.ag/tokens/v2/tag           │
+│  • Jupiter Price             lite-api.jup.ag/price/v3/price          │
+│  • LI.FI (cross-chain)       li.quest/v1  (works without key)        │
+│  • Helius (Solana RPC)       your-endpoint.helius-rpc.com            │
+│  • Privy (embedded wallets)  privy.io SDK (frontend only)            │
+│  • Gemini (AI — Phase 4)     generativelanguage.googleapis.com       │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
 
-1. **Mini App-First** — Bot is only a launcher (`/start`). ALL features live in the Mini App.
-2. **Non-Custodial** — Privy MPC handles wallets. We never hold keys.
-3. **Revenue via API Params** — Jupiter `platformFeeBps` (0.5%) and LI.FI integrator fees. Zero liability.
-4. **SQLite Is Enough** — Read-heavy, light writes. ~4 MB/month at 1K users. One-line Prisma migration to Postgres if needed.
+1. **Mini App-first** — The Grammy bot only handles `/start` (opens the Mini App) and
+   `/help`. Every feature is in the Mini App. Do NOT add bot commands.
+
+2. **Non-custodial via Privy MPC** — Privy creates an embedded Solana wallet on first
+   login. `useSignAndSendTransaction` signs inside the browser. We build unsigned txs
+   server-side; the private key never touches our servers.
+
+3. **Revenue via fee params, not custody** — Jupiter `platformFeeBps=50` and the
+   `feeAccount` ATA (derived via `getAssociatedTokenAddressSync`) auto-collect 0.5%
+   per swap into `FEE_WALLET_ADDRESS`. Zero liability.
+
+4. **SQLite is sufficient** — ~4 MB/month at 1K users, read-heavy. PM2 single instance
+   ensures no write conflicts. One-line Prisma migration to Postgres if ever needed.
+
+5. **Auth via Telegram initData HMAC** — Every protected route verifies the signed
+   `initData` string from Telegram's WebApp SDK. The `telegramId` is extracted server-side
+   from the verified payload — never trusted from the client body.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Bot Framework | Grammy (TypeScript) |
-| API Server | Express.js |
-| Database | SQLite via Prisma ORM |
-| Mini App Frontend | Vite + React + TypeScript |
-| Wallet Infrastructure | Privy (MPC embedded wallets) |
-| Solana DEX | Jupiter API — Swap V1, Token V2, Price V3 (lite-api.jup.ag) |
-| Cross-Chain | LI.FI API (routing + bridging) |
-| Blockchain RPC | Helius (Solana) |
-| AI | Google Gemini API |
-| Validation | Zod schemas |
-| Deployment | Hostinger VPS (backend) + Vercel (webapp) |
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Bot Framework | Grammy | 1.35.0 |
+| API Server | Express.js | 4.21.2 |
+| Database | SQLite via Prisma ORM | 6.4.1 |
+| Mini App Frontend | Vite + React + TypeScript | latest |
+| Wallet Infrastructure | Privy SDK (`@privy-io/react-auth`) | 3.14.1+ |
+| Solana Client (backend) | `@solana/web3.js` | 1.98.4 |
+| Solana Client (frontend) | `@solana/kit` only | — |
+| SPL Token (backend) | `@solana/spl-token` | ^0.4.14 |
+| Solana DEX | Jupiter Swap V1 + Token V2 + Price V3 | — |
+| Cross-Chain | LI.FI API | — |
+| Blockchain RPC | Helius (Solana) | — |
+| Schema Validation | Zod | 3.24.2 |
+| Security | Helmet + express-rate-limit | — |
+| QR Code | qrcode.react | ^4.2.0 |
+| Process Manager | PM2 | ecosystem.config.js |
+| Deployment (backend) | Hostinger VPS `srv1418768.hstgr.cloud` | — |
+| Deployment (frontend) | Vercel | vercel.json rewrites |
 
 ---
 
 ## Project Structure
 
+Every file that exists, with its purpose:
+
 ```
 solswapbot/
 ├── src/
-│   ├── app.ts                 # Entry point — starts bot + API server + graceful shutdown
-│   ├── config.ts              # Zod-validated env config (crash-early)
+│   ├── app.ts                    # Entry point: starts bot + API server + graceful shutdown handler
+│   ├── config.ts                 # Zod-validated env schema — crashes on startup if required vars missing
+│   │
 │   ├── api/
-│   │   ├── server.ts          # Express setup, trust proxy, helmet, CORS, rate limiter
+│   │   ├── server.ts             # Express setup: trust proxy, helmet, CORS, rate limiter, all route mounts
 │   │   ├── middleware/
-│   │   │   └── telegramAuth.ts # Telegram initData HMAC-SHA256 verification (C2/C5)
+│   │   │   └── telegramAuth.ts   # HMAC-SHA256 verification of Telegram initData. Sets res.locals.telegramId
 │   │   └── routes/
-│   │       ├── quote.ts       # GET /api/quote (Jupiter + USD breakdown)
-│   │       ├── swap.ts        # POST /api/swap, POST /api/swap/confirm, GET /api/swap/status
-│   │       ├── price.ts       # GET /api/price/:mint
-│   │       ├── tokens.ts      # GET /api/tokens, GET /api/tokens/search
-│   │       ├── user.ts        # GET /api/user, POST /api/user/wallet, GET /api/user/balances
-│   │       ├── scan.ts        # GET /api/scan (token safety)
-│   │       ├── crossChain.ts  # GET /api/cross-chain/quote|chains|tokens
-│   │       └── history.ts     # GET /api/history (last 20 swaps)
+│   │       ├── crossChain.ts     # GET /api/cross-chain/quote|chains|tokens  (LI.FI routing)
+│   │       ├── history.ts        # GET /api/history (last 20 swaps) + GET /api/activity (swaps+sends merged)
+│   │       ├── price.ts          # GET /api/price/:mint  (Jupiter Price V3, public)
+│   │       ├── quote.ts          # GET /api/quote  (Jupiter quote + USD breakdown + slippageBps support)
+│   │       ├── scan.ts           # GET /api/scan + GET /api/scan/history
+│   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
+│   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status
+│   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
+│   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends)
+│   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
+│   │       └── user.ts           # GET /api/user + POST /api/user/wallet + GET /api/user/balances + GET /api/user/portfolio
+│   │
 │   ├── bot/
-│   │   ├── index.ts           # Bot setup — /start + /help only, catch-all → Mini App
+│   │   ├── index.ts              # Bot setup: /start + /help only, catch-all → Mini App redirect
 │   │   ├── commands/
-│   │   │   └── start.ts       # /start — upserts user + shows Mini App button
+│   │   │   └── start.ts          # /start handler: upserts user in DB + sends Mini App button
 │   │   └── middleware/
-│   │       ├── logger.ts      # Audit trail (swap, connect, start, status)
-│   │       └── rateLimit.ts   # Per-user per-command limits
+│   │       ├── logger.ts         # Audit trail for swap/connect/start events
+│   │       └── rateLimit.ts      # Per-user per-command rate limits
+│   │
 │   ├── jupiter/
-│   │   ├── quote.ts           # Jupiter quote with platformFeeBps + Zod validation
-│   │   ├── swap.ts            # Jupiter swap TX builder (passes feeAccount as ATA)
-│   │   ├── price.ts           # Jupiter price API v3
-│   │   └── tokens.ts          # Jupiter token list API v2 + fallback tokens
+│   │   ├── quote.ts              # getQuote() — Jupiter Swap V1 quote with platformFeeBps + Zod validation
+│   │   ├── swap.ts               # buildSwapTransaction() — builds unsigned tx, feeAccount as ATA
+│   │   ├── price.ts              # getTokenPriceUsd() (single) + getTokenPricesBatch() (multi-mint)
+│   │   └── tokens.ts             # loadTokenList() (cached), getTokenByMint(), getTokensMetadata(), searchTokens()
+│   │
 │   ├── aggregator/
-│   │   ├── router.ts          # Smart router: Jupiter (same-chain) vs LI.FI (cross-chain)
-│   │   ├── lifi.ts            # LI.FI API client (works without key)
-│   │   └── chains.ts          # Chain + token registry (6 chains, 20+ tokens)
+│   │   ├── router.ts             # Smart router: same-chain → Jupiter, cross-chain → LI.FI
+│   │   ├── lifi.ts               # LI.FI API client with Zod validation + withRetry wrapper
+│   │   └── chains.ts             # Backend chain + token registry (6 chains, 20+ tokens)
+│   │
 │   ├── scanner/
-│   │   ├── analyze.ts         # Token risk scoring (0-100, 4 checks in parallel)
-│   │   └── checks.ts          # Safety checks: mint auth, freeze, top holders, age
+│   │   ├── analyze.ts            # analyzeToken(): orchestrates all checks, computes risk score 0-100
+│   │   └── checks.ts             # Individual checks: mintAuthority, freezeAuthority, topHolders,
+│   │                             #   tokenAge, jupiterVerified, hasMetadata
+│   │
 │   ├── solana/
-│   │   ├── connection.ts      # RPC connection singleton
-│   │   └── transaction.ts     # TX polling + confirmation (100 attempts × 3s)
+│   │   ├── connection.ts         # Helius RPC connection singleton
+│   │   └── transaction.ts        # pollTransactionInBackground(): 100 attempts × 3s, TIMEOUT status
+│   │
 │   ├── db/
-│   │   ├── client.ts          # Prisma singleton
+│   │   ├── client.ts             # Prisma singleton
 │   │   └── queries/
-│   │       ├── users.ts       # User CRUD (upsert) + referral count
-│   │       ├── fees.ts        # Fee aggregation queries
-│   │       └── referrals.ts   # Referral earnings queries
+│   │       ├── users.ts          # upsertUser, findUserByTelegramId, updateUserWallet, getUserWithReferralCount
+│   │       ├── transactions.ts   # getTransactions(): merge+sort+paginate Swap+Transfer for a user
+│   │       ├── fees.ts           # STUB — reserved for Phase 3 revenue analytics. No active logic.
+│   │       └── referrals.ts      # STUB — reserved for Phase 3. No active logic.
+│   │
 │   └── utils/
-│       ├── retry.ts           # Exponential backoff (transient errors only)
-│       ├── validation.ts      # Solana address validation + input sanitization
-│       ├── formatting.ts      # Token amounts + address shortening
-│       └── constants.ts       # Token registry (6 tokens)
-├── webapp/                    # Telegram Mini App (deployed to Vercel)
-│   ├── src/
-│   │   ├── App.tsx            # Main swap interface — balance check, quote, swap flow
-│   │   ├── main.tsx           # React entry + PrivyProvider + ErrorBoundary
-│   │   ├── ErrorBoundary.tsx  # React error boundary — catches crashes, shows reload button
-│   │   ├── TokenSelector.tsx  # Token search + selection modal (Jupiter-powered)
-│   │   ├── lib/
-│   │   │   └── api.ts         # API client — auth headers, all fetch functions
-│   │   └── styles/
-│   │       └── index.css      # Dark theme styles
+│       ├── retry.ts              # withRetry() — exponential backoff, checks err.status first
+│       ├── validation.ts         # isValidSolanaAddress() (ed25519 curve), isValidPublicKey() (any PDA)
+│       ├── formatting.ts         # formatTokenAmount(), shortenAddress()
+│       └── constants.ts          # Token registry (6 hardcoded tokens: SOL, USDC, USDT, BONK, JUP, WIF)
+│
+├── webapp/                       # Telegram Mini App — deployed to Vercel
 │   ├── index.html
 │   ├── vite.config.ts
-│   └── vercel.json            # Rewrites /api/* → VPS backend (HTTPS)
+│   ├── vercel.json               # Rewrites /api/* → https://srv1418768.hstgr.cloud/api/:path*
+│   ├── package.json              # Deps: @privy-io/react-auth, @solana/kit, qrcode.react, React
+│   └── src/
+│       ├── main.tsx              # React entry: PrivyProvider config + ErrorBoundary wrap + VITE_PRIVY_APP_ID check
+│       ├── App.tsx               # Tab router: manages activeTab, shared wallet state, auth guards (loading/onboarding)
+│       ├── ErrorBoundary.tsx     # React error boundary — catches render crashes, shows reload button
+│       ├── TokenSelector.tsx     # Reusable token search modal (Jupiter-powered, used in SwapPanel)
+│       │
+│       ├── components/
+│       │   ├── TabBar.tsx            # Fixed bottom nav: Wallet | Swap | Scan | Settings | History (5 tabs)
+│       │   ├── WalletTab.tsx         # Portfolio home: total USD, address, action buttons, token list, activity feed, pull-to-refresh
+│       │   ├── SwapPanel.tsx         # Full swap UI: quote, slippage, AbortController, history slide-up, cross-chain mode
+│       │   ├── ScanPanel.tsx         # Token scanner: address input, RiskGauge, check results, recent scans
+│       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, referral code, about, logout
+│       │   ├── TransactionsTab.tsx   # 5th tab: paginated history, type chips, date chips, load more, detail modal
+│       │   ├── ReceiveModal.tsx      # Bottom sheet: QR code, full address, copy, share
+│       │   ├── SendFlow.tsx          # Multi-step send: select token → recipient+amount → confirm → executing → done
+│       │   ├── RiskGauge.tsx         # Animated SVG semicircle speedometer gauge for risk score 0-100
+│       │   ├── CcTokenModal.tsx      # Cross-chain token selector: chain picker + token picker (uses chains.ts)
+│       │   ├── Toast.tsx             # Floating toast notifications (CustomEvent "solswap:toast")
+│       │   └── TermsModal.tsx        # First-launch ToS gate (scroll-to-bottom to accept), re-viewable in Settings
+│       │
+│       ├── lib/
+│       │   ├── api.ts                # All fetch functions + TypeScript interfaces for every API response
+│       │   ├── chains.ts             # Frontend chain/token registry mirroring backend chains.ts (6 chains, 20+ tokens)
+│       │   └── toast.ts              # toast(message, type) utility — dispatches CustomEvent, no prop drilling
+│       │
+│       └── styles/
+│           └── index.css             # All styles: dark theme, tabs, wallet, swap, scan, settings, transactions, toasts
+│
 ├── prisma/
-│   └── schema.prisma          # User, Swap, TokenScan, WatchedWallet, Subscription + indexes
-├── package.json
+│   └── schema.prisma             # 6 models: User, Swap, Transfer, TokenScan, WatchedWallet, Subscription
+│
+├── ecosystem.config.js           # PM2 config: single instance (SQLite safe), 256MB limit, logs in ./logs/
+├── package.json                  # Node >=20, backend deps
 ├── tsconfig.json
-├── ecosystem.config.js        # PM2 config for VPS (single instance, SQLite, 256MB limit)
-└── .env.example
+├── .env.example
+└── CLAUDE.md                     # This file
 ```
 
 ---
 
-## Database Schema (Prisma)
+## Database Schema (Prisma / SQLite)
 
-| Model | Fields | Status |
-|-------|--------|--------|
-| **User** | telegramId, walletAddress, referralCode, referredBy | DONE |
-| **Swap** | inputMint, outputMint, amounts, chains, feeAmountUsd, txSignature, status | DONE |
-| **Transfer** | tokenMint, tokenSymbol, humanAmount, recipientAddress, txSignature, status | DONE |
-| **TokenScan** | mintAddress, riskScore (0-100), riskLevel, flags (JSON) | DONE |
-| **WatchedWallet** | walletAddress, label, active | DONE (schema only, no API) |
-| **Subscription** | tier (FREE/SCANNER_PRO/WHALE_TRACKER/SIGNALS/ALL_ACCESS), expiresAt | DONE (schema only, no enforcement) |
+```prisma
+model User {
+  id               String    @id @default(cuid())
+  telegramId       String    @unique
+  telegramUsername String?
+  walletAddress    String?           // Privy-managed embedded wallet
+  referralCode     String    @unique @default(cuid())
+  referredById     String?
+  referredBy       User?     @relation("Referrals", ...)
+  referrals        User[]    @relation("Referrals")
+  swaps            Swap[]
+  transfers        Transfer[]
+  scans            TokenScan[]
+  watchedWallets   WatchedWallet[]
+  subscription     Subscription?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  @@index([walletAddress])
+}
 
-> **Note:** `src/db/queries/fees.ts` and `src/db/queries/referrals.ts` exist but contain no active logic — they are stubs reserved for Phase 3 revenue analytics.
+model Swap {
+  id            String      @id @default(cuid())
+  userId        String
+  inputMint     String
+  outputMint    String
+  inputAmount   BigInt              // raw token units (not human-readable)
+  outputAmount  BigInt
+  inputChain    String      @default("solana")
+  outputChain   String      @default("solana")
+  feeAmountUsd  Decimal?            // Decimal type (not Float) for precision
+  txSignature   String?
+  status        SwapStatus  @default(PENDING)
+  createdAt     DateTime    @default(now())
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([txSignature])
+}
 
-Status enum: `PENDING → SUBMITTED → CONFIRMED / FAILED / TIMEOUT`
+enum SwapStatus { PENDING | SUBMITTED | CONFIRMED | FAILED | TIMEOUT }
+
+model Transfer {
+  id               String   @id @default(cuid())
+  userId           String
+  tokenMint        String
+  tokenSymbol      String?
+  humanAmount      String           // human-readable e.g. "0.5" (not raw units)
+  recipientAddress String
+  txSignature      String?
+  status           String   @default("CONFIRMED")  // string not enum
+  createdAt        DateTime @default(now())
+  @@index([userId, createdAt])
+  @@index([txSignature])
+}
+
+model TokenScan {
+  id          String   @id @default(cuid())
+  userId      String
+  mintAddress String
+  tokenName   String?
+  tokenSymbol String?
+  riskScore   Int                 // 0-100
+  riskLevel   String              // "LOW" | "MEDIUM" | "HIGH"
+  flags       String              // JSON array of unsafe check names
+  createdAt   DateTime @default(now())
+  @@index([userId, createdAt])
+  @@index([mintAddress])
+}
+
+model WatchedWallet {
+  // Schema exists. No API routes yet. Reserved for Phase 3 (Whale Tracker).
+  userId        String
+  walletAddress String
+  label         String?
+  active        Boolean  @default(true)
+  @@unique([userId, walletAddress])
+}
+
+model Subscription {
+  // Schema exists. No enforcement logic yet. Reserved for Phase 3.
+  userId    String    @unique
+  tier      SubTier   @default(FREE)
+  expiresAt DateTime?
+}
+
+enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
+```
+
+**Important notes:**
+- `Swap.inputAmount` / `outputAmount` are `BigInt` (raw token units). Divide by `10^decimals` for display.
+- `Transfer.humanAmount` is already a human-readable string (e.g. "0.5"), NOT raw units.
+- `Swap.status` uses the `SwapStatus` enum; `Transfer.status` uses a plain `String`.
+- `fees.ts` and `referrals.ts` in `db/queries/` are stubs with no active logic.
+- `WatchedWallet` and `Subscription` are schema-only — no enforcement anywhere in the codebase.
 
 ---
 
 ## Revenue Flow
 
 ```
-User swaps SOL → USDC via Mini App
-  └→ Jupiter API receives platformFeeBps=50
-     └→ 0.5% fee auto-collects into FEE_WALLET_ADDRESS
-        └→ ✅ feeAccount correctly derived as ATA via getAssociatedTokenAddressSync (fixed 2026-02-25)
+Solana swap (SOL → USDC):
+  User → Mini App → POST /api/swap
+    → buildSwapTransaction() passes platformFeeBps=50 to Jupiter
+    → Jupiter deducts 0.5% fee into FEE_WALLET_ADDRESS ATA
+    → feeAccount = getAssociatedTokenAddressSync(outputMint, FEE_WALLET, true)
+    → Fee lands in our wallet automatically, no manual collection needed
 
-User swaps SOL → ETH (cross-chain)
-  └→ LI.FI API routes through best bridge
-     └→ Integrator fee via LI.FI partner portal (needs API key)
+Cross-chain swap (SOL → ETH):
+  User → Mini App → GET /api/cross-chain/quote → POST handled by LI.FI SDK
+    → LI.FI integrator fees configured on LI.FI partner portal (needs LIFI_API_KEY)
+    → Not yet live — requires LIFI_API_KEY with partner program
 
-User subscribes to Whale Tracker (future)
-  └→ Telegram Stars payment → converts to revenue
-
-User clicks exchange link (future)
-  └→ Affiliate commission (up to 50% lifetime)
+Future revenue streams (Phase 3+):
+  - Subscription fees via Telegram Stars
+  - Exchange affiliate commissions (up to 50% lifetime)
+  - Referral program (25% fee share, REFERRAL_FEE_SHARE_PERCENT)
 ```
 
 ---
 
 ## API Routes Reference
 
-All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the VPS backend.
+### Auth Mechanism
+
+All protected routes require header: `Authorization: tma <tg.initData>`
+
+The `initData` is the signed query string Telegram injects into every Mini App session.
+Backend validates HMAC-SHA256 using `TELEGRAM_BOT_TOKEN` and rejects if:
+- Signature is invalid
+- `auth_date` is older than 1 hour
+- `user` field is missing
+
+On success, `res.locals.telegramId` is set for downstream handlers.
 
 ### Public Routes (no auth)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | Health check — returns `{ status: "ok" }` |
-| GET | `/api/price/:mint` | Get USD price for a token mint (Jupiter Price API v3) |
-| GET | `/api/tokens` | Get popular token list (Jupiter-sourced, cached) |
-| GET | `/api/tokens/search?query=<q>` | Search tokens by symbol, name, or mint address |
+| GET | `/api/health` | Returns `{ status: "ok", timestamp }` |
+| GET | `/api/price/:mint` | USD price for a token mint (Jupiter Price V3) |
+| GET | `/api/tokens` | Popular token list (Jupiter V2, cached in memory, 1h TTL) |
+| GET | `/api/tokens/search?query=<q>` | Search by symbol, name, or mint (≥2 chars) |
 
-### Protected Routes (require `Authorization: tma <initData>`)
+### Protected Routes
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/user` | Get user profile + SOL balance (`telegramId`, `walletAddress`, `solBalance`, `referralCode`, `referralCount`) |
-| POST | `/api/user/wallet` | Save Privy wallet address `{ walletAddress }` |
-| GET | `/api/user/balances?walletAddress=<addr>` | Get SOL + all SPL token balances |
-| GET | `/api/user/portfolio` | Get all held tokens with USD prices in one batched call — `{ totalValueUsd, tokens[], walletAddress }` |
-| GET | `/api/quote?inputMint=&outputMint=&humanAmount=&slippageBps=` | Get swap quote with USD breakdown; optional `slippageBps` (0-5000, default 50) |
-| POST | `/api/swap` | Build unsigned swap TX `{ quoteResponse, userPublicKey }` |
-| POST | `/api/swap/confirm` | Record swap + start on-chain polling `{ txSignature, inputMint, ... }` |
-| GET | `/api/swap/status?swapId=<id>` | Poll swap confirmation status |
-| GET | `/api/scan?mint=<addr>` | Token safety scan (risk score 0-100) |
-| GET | `/api/cross-chain/quote` | LI.FI cross-chain quote |
-| GET | `/api/cross-chain/chains` | Supported chains list |
-| GET | `/api/cross-chain/tokens` | Cross-chain token registry |
-| GET | `/api/history` | Last 20 swaps for the authenticated user |
-| GET | `/api/activity` | Last 20 swaps + sends merged, sorted by date |
-| GET | `/api/transactions` | Paginated swaps + sends. Params: `type`, `preset`, `from`, `to`, `offset`, `limit` |
-| GET | `/api/transactions` | Paginated, filtered transactions (swaps + sends). Query: `type=all\|swap\|send`, `preset=today\|7d\|30d`, `from=YYYY-MM-DD`, `to=YYYY-MM-DD`, `offset`, `limit` (1–50). Returns `{ transactions, total, hasMore }` |
-| POST | `/api/send` | Build unsigned transfer TX `{ tokenMint, recipientAddress, amount, senderAddress }` → `{ transaction: base64, lastValidBlockHeight }` |
-| POST | `/api/transfer/confirm` | Record completed send `{ txSignature, tokenMint, tokenSymbol, humanAmount, recipientAddress }` |
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| GET | `/api/user` | — | `{ telegramId, walletAddress, solBalance, referralCode, referralCount }` |
+| POST | `/api/user/wallet` | `{ walletAddress }` | `{ success: true }` |
+| GET | `/api/user/balances?walletAddress=` | — | `{ balances: [{ mint, amount, decimals }] }` |
+| GET | `/api/user/portfolio` | — | `{ totalValueUsd, tokens: [PortfolioToken], walletAddress }` |
+| GET | `/api/quote?inputMint=&outputMint=&humanAmount=&slippageBps=` | — | `{ quote, display: QuoteDisplay }` |
+| POST | `/api/swap` | `{ quoteResponse, userPublicKey }` | `{ swapTransaction: base64, lastValidBlockHeight }` |
+| POST | `/api/swap/confirm` | `{ txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }` | `{ swapId, status: "SUBMITTED" }` |
+| GET | `/api/swap/status?swapId=` | — | `{ swapId, status, txSignature }` |
+| GET | `/api/scan?mint=` | — | `ScanResult` (see Scanner section) |
+| GET | `/api/scan/history` | — | `{ scans: [{ id, mintAddress, tokenName, tokenSymbol, riskScore, riskLevel, createdAt }] }` |
+| GET | `/api/cross-chain/quote?inputToken=&outputToken=&inputChain=&outputChain=&amount=&slippageBps=` | — | `CrossChainQuoteResult` |
+| GET | `/api/cross-chain/chains` | — | LI.FI supported chain list |
+| GET | `/api/cross-chain/tokens` | — | LI.FI token registry |
+| GET | `/api/history` | — | `{ swaps: SwapRecord[] }` — last 20 swaps (legacy) |
+| GET | `/api/activity` | — | `{ activity: ActivityItem[] }` — last 20 swaps+sends merged |
+| GET | `/api/transactions?type=&preset=&from=&to=&offset=&limit=` | — | `{ transactions: UnifiedTransaction[], total, hasMore }` |
+| POST | `/api/send` | `{ tokenMint, recipientAddress, amount, senderAddress }` | `{ transaction: base64, lastValidBlockHeight }` |
+| POST | `/api/transfer/confirm` | `{ txSignature, tokenMint, tokenSymbol?, humanAmount, recipientAddress }` | `{ transferId, status }` |
 
-### Auth Flow
-1. Frontend sends `Authorization: tma <tg.initData>` header
-2. `telegramAuth.ts` middleware validates HMAC-SHA256 signature using bot token
-3. Extracts `telegramId` from verified payload → `res.locals.telegramId`
-4. Rejects if hash invalid, auth_date expired (>1hr), or user field missing
+#### `/api/transactions` query params in detail
+- `type`: `all` (default) | `swap` | `send`
+- `preset`: `today` | `7d` | `30d` (overrides `from`/`to`)
+- `from`: ISO date `YYYY-MM-DD` (inclusive)
+- `to`: ISO date `YYYY-MM-DD` (inclusive, padded to end of day)
+- `offset`: integer ≥ 0 (default 0)
+- `limit`: 1–50 (default 20)
+
+#### `/api/quote` params in detail
+- `inputMint`: Solana mint address
+- `outputMint`: Solana mint address
+- `humanAmount`: human-readable number string (e.g. `"0.5"`)
+- `slippageBps`: integer 0–5000 (optional, default 50 = 0.5%)
+
+#### `/api/user/portfolio` PortfolioToken shape
+```typescript
+{
+  mint: string;
+  symbol: string;      // from Jupiter token list, fallback: first 6 chars of mint
+  name: string;        // from Jupiter token list, fallback: "Unknown Token"
+  icon: string | null; // Jupiter logoURI
+  amount: number;      // human-readable balance
+  decimals: number;
+  priceUsd: number | null;
+  valueUsd: number | null;
+}
+```
+Sorted by `valueUsd` descending; tokens with `null` value at end sorted alphabetically.
+
+---
+
+## Token Scanner (Detailed)
+
+The scanner is the most complex backend subsystem. Understanding it is important before
+modifying `src/scanner/analyze.ts` or `src/scanner/checks.ts`.
+
+### Risk Score Algorithm
+
+```
+Score = sum of weights for all UNSAFE checks that did NOT error out.
+Clamped to 0-100.
+
+0-20:  LOW risk    (green)
+21-50: MEDIUM risk (yellow)
+51+:   HIGH risk   (red)
+
+Check           Weight  Description
+─────────────────────────────────────────────────────────────────────
+Mint Authority    30    Creator can mint infinite tokens → dump risk
+Freeze Authority  20    Creator can freeze your balance
+Top Holders       20    Top 10 own >50% → whale dump risk
+Token Metadata    15    No name/symbol → anonymous token
+Jupiter Verified  10    Not on Jupiter verified list → unvetted
+Token Age         10    Brand-new tokens higher risk
+─────────────────────────────────────────────────────────────────────
+Max possible:    105    Clamped to 100
+```
+
+### RPC Optimizations (all in `analyze.ts`)
+- `accountInfo` fetched once → shared by `checkMintAuthority` + `checkFreezeAuthority`
+- `getTokenSupply` fetched once → shared with `checkTopHolders`
+- `tokenMeta` fetched from Jupiter cache → shared by `checkJupiterVerified` + `checkHasMetadata`
+- Four async checks run in `Promise.all()`; two synchronous checks run inline
+
+### errored Flag (Important)
+If a check throws due to a network/RPC error, it returns `{ errored: true, safe: true }`.
+The `analyzeToken()` function skips errored checks from the score calculation.
+This prevents network flakiness from inflating the risk score of legitimate tokens.
+
+### Known Token Age Bug
+`checkTokenAge` walks backwards through signature history in pages of 1,000 (up to 5 pages
+= 5,000 signatures). `getSignaturesForAddress` returns newest-first.
+
+**Impact:** For tokens with >5,000 total transactions (USDC, BONK, popular tokens), the
+function finds the blockTime of the 5,000th-most-recent tx, not the first-ever tx. This
+can make old tokens appear "new" (e.g. "0.2 hours old") and returns `safe: false`.
+
+**Mitigation:** Popular tokens score LOW risk anyway (Jupiter verified, has metadata,
+low holder concentration). The false age result only affects the 10-point Token Age check.
+**The scanner is primarily designed for new/unknown memecoins** where the 5,000-tx limit
+is never reached and the oldest tx IS correctly found.
+
+**Fix when needed:** Add an early-exit if `ageDays >= 30` on any page — no need to keep
+paging back once you know the token is old enough to be safe.
+
+### Token Age Thresholds
+```
+< 24 hours  → safe: false, "X.X hours old (very new!)"
+1-7 days    → safe: false, "X.X days old (new)"
+7-30 days   → safe: true,  "XX days old"
+1-12 months → safe: true,  "X months old"
+12+ months  → safe: true,  "X.X+ years old"
+```
 
 ---
 
 ## Coding Patterns
 
-1. **Zod validation** on Jupiter API responses (NOT yet on LI.FI — see audit M9)
-2. **Prisma queries** in `src/db/queries/` — one file per domain
-3. **Retry wrapper** via `src/utils/retry.ts` — used for Jupiter, NOT for LI.FI or price API (see audit M10)
-4. **Input sanitization** via `src/utils/validation.ts` — applied on quote route (mint addresses, amounts)
-5. **Config validated at startup** — crash early on missing env vars
-6. **Smart routing** — `src/aggregator/router.ts` auto-selects Jupiter (same-chain) vs LI.FI (cross-chain)
-7. **Telegram initData auth** — `src/api/middleware/telegramAuth.ts` HMAC-validates initData on protected routes
-8. **Dynamic balance checks** — `GET /api/user/balances` returns SOL + all SPL token balances via RPC
+Follow these patterns consistently. Deviating will break the codebase conventions.
 
----
-
-## Implementation Status & Phases
-
-### Current State (v0.3.0) — SPRINT 2B COMPLETE
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Grammy bot (/start launcher) | DONE | Catch-all redirects to Mini App |
-| Express API (8 route groups) | DONE | quote, swap, price, tokens, user, scan, cross-chain, history |
-| Jupiter swap integration | DONE | Quote + TX builder + platformFeeBps |
-| Jupiter price feed | DONE | v3 API, no auth needed |
-| LI.FI cross-chain routing | DONE | 6 chains, works without API key |
-| Token scanner (4 checks) | DONE | Mint auth, freeze, holders, age |
-| Smart routing (Jupiter/LI.FI) | DONE | Auto-selects by chain |
-| DB schema (5 models) | DONE | All models + indexes |
-| Retry logic + validation | DONE | Exponential backoff, Zod throughout |
-| Rate limiting middleware | DONE | Per-user per-command |
-| Webapp — Privy-integrated swap page | DONE | Telegram login, embedded wallet, in-app signing |
-| Privy SDK integration | DONE | PrivyProvider + useWallets + useSignAndSendTransaction |
-| POST /api/user/wallet | DONE | Auto-saves Privy wallet address to DB |
-| GET /api/history | DONE | Returns last 20 swaps with token symbol resolution |
-| History panel (slide-up UI) | DONE | Accessible from Swap tab |
-| Tab navigation (Wallet / Swap / Scan / Settings) | DONE | TabBar + App.tsx tab router |
-| SwapPanel component | DONE | Extracted from App.tsx, all swap logic self-contained |
-| WalletTab component | DONE | Portfolio view, action buttons, Receive flow |
-| ReceiveModal component | DONE | QR code (qrcode.react), copy, share |
-| GET /api/user/portfolio | DONE | Batched balance + price lookup in one request |
-
-### Phase 1 — WALLET & CORE SWAP (COMPLETED 2026-02-24)
-
-| Task | Status | Priority |
-|------|--------|----------|
-| Integrate Privy SDK in webapp | DONE | P0 |
-| Privy wallet creation on first open | DONE | P0 |
-| In-app transaction signing (replace Phantom deep-link) | DONE | P0 |
-| End-to-end swap flow (deposit → swap → confirm) | DONE | P0 |
-| GET /api/history endpoint | DONE | P1 |
-| POST /api/user/wallet endpoint | DONE | P1 |
-| Swap history panel UI | DONE | P1 |
-
-### Phase 2 — MINI APP UI & WALLET FEATURES
-
-> **Goal:** Transform the Mini App from a single swap screen into a full wallet experience
-> with tab navigation, portfolio view, send/receive, token scanner, and settings.
-> Modeled after Phantom, Tonkeeper, and top Telegram mini app wallet UX patterns.
-
-#### Phase 2 Summary Table
-
-| Task | Status | Priority | Sprint |
-|------|--------|----------|--------|
-| **Architecture & Navigation** | | | |
-| Tab navigation bar (Wallet / Swap / Scan / Settings) | DONE | P0 | 2A |
-| Extract SwapPanel from App.tsx | DONE | P0 | 2A |
-| App.tsx → tab router + shared state | DONE | P0 | 2A |
-| **Wallet Tab (Home)** | | | |
-| WalletHeader — total portfolio value (USD) | DONE | P0 | 2A |
-| Action buttons row (Send / Receive / Swap) | DONE | P0 | 2A |
-| Portfolio token list (all held tokens + USD values) | DONE | P0 | 2A |
-| Receive flow (address + QR code + copy + share) | DONE | P0 | 2A |
-| Send flow (token select → address → amount → confirm → send) | DONE | P1 | 2B |
-| GET /api/user/portfolio endpoint (balances + USD prices) | DONE | P0 | 2A |
-| Transaction history (all types, not just swaps) | DONE | P1 | 2B |
-| Pull-to-refresh on portfolio | DONE | P2 | 2C |
-| **Scan Tab** | | | |
-| ScanPanel — mint address input + search | DONE | P1 | 2B |
-| Risk score gauge (0-100, color-coded arc) | DONE | P1 | 2B |
-| Individual check results (pass/fail with details) | DONE | P1 | 2B |
-| Token info display (supply, price, age) | DONE | P1 | 2B |
-| "Swap this token" quick action → navigates to Swap tab | DONE | P2 | 2C |
-| Recent scans list (localStorage + DB history) | DONE | P2 | 2C |
-| GET /api/scan/history endpoint | DONE | P2 | 2C |
-| Frontend `fetchScanHistory` API function | DONE | P1 | 2B |
-| **Settings Tab** | | | |
-| View full wallet address + copy button | DONE | P1 | 2B |
-| Show wallet QR code | DONE | P1 | 2B |
-| Slippage tolerance setting (0.1% / 0.5% / 1.0% / custom) | DONE | P1 | 2B |
-| Referral code display + share | DONE | P1 | 2B |
-| About section (version, fees, non-custodial disclaimer) | DONE | P1 | 2B |
-| Log out button (moved from footer) | DONE | P1 | 2B |
-| **Swap Tab Enhancements** | | | |
-| Slippage settings gear icon (uses Settings value) | DONE | P1 | 2B |
-| Recent/favorite tokens shortcut | DONE | P2 | 2C |
-| Cross-chain swap UI (chain selector for LI.FI) | DONE | P2 | 2C |
-| **UI/UX Polish** | | | |
-| Skeleton loading states (shimmer placeholders) | PARTIAL | P2 | 2C |
-| Toast notifications (copy, send, errors) | DONE | P2 | 2C |
-| Haptic feedback via Telegram WebApp API | DONE | P2 | 2C |
-| Smooth tab transition animations | DONE | P2 | 2C |
-| **Already Done** | | | |
-| TokenSelector component (search + select) | DONE | P1 | — |
-| History section in swap tab (slide-up panel) | DONE | P2 | — |
-| React Error Boundary | DONE | P1 | — |
-| TabBar component | DONE | P0 | 2A |
-| SwapPanel component (extracted) | DONE | P0 | 2A |
-| WalletTab component (portfolio + actions) | DONE | P0 | 2A |
-| ReceiveModal (QR + copy + share) | DONE | P0 | 2A |
-| GET /api/user/portfolio (batched prices) | DONE | P0 | 2A |
-| fetchPortfolio API client function | DONE | P0 | 2A |
-| qrcode.react installed in webapp | DONE | P0 | 2A |
-
----
-
-### Phase 2 — Detailed Design
-
-#### 2.1 Tab Navigation
-
-```
-┌──────────────────────────────────────┐
-│  ⚡ SolSwap           [wallet badge] │  ← shared header
-├──────────────────────────────────────┤
-│                                      │
-│         [ Tab Content Area ]         │
-│                                      │
-├──────────────────────────────────────┤
-│  🏠 Wallet  │  🔄 Swap  │  🔍 Scan  │  ⚙️ Settings  │  ← bottom tab bar
-└──────────────────────────────────────┘
-```
-
-**Implementation:**
-- `App.tsx` becomes a tab router: renders `<WalletTab>`, `<SwapPanel>`, `<ScanPanel>`, or `<SettingsPanel>` based on active tab
-- State (`activeTab`) stored in App.tsx, passed as prop or via context
-- Shared state (wallet address, balances, tokens) stays in App.tsx and passes down
-- Tab bar is a fixed-bottom component, always visible
-- Default tab on launch: **Wallet**
-- Swap tab preserves all existing swap logic (extracted from current App.tsx)
-
-**Files to create:**
-```
-webapp/src/
-├── components/
-│   ├── TabBar.tsx           # Bottom navigation bar
-│   ├── WalletTab.tsx        # Portfolio + send/receive
-│   ├── SwapPanel.tsx        # Extracted from App.tsx (all swap logic)
-│   ├── ScanPanel.tsx        # Token scanner UI
-│   ├── SettingsPanel.tsx    # Wallet info + preferences
-│   ├── ReceiveModal.tsx     # QR code + address + copy + share
-│   ├── SendFlow.tsx         # Multi-step send flow
-│   └── RiskGauge.tsx        # Visual risk score component for scanner
-```
-
-#### 2.2 Wallet Tab (Home Screen)
-
-The primary screen users see when opening the app. Modeled after Phantom/Tonkeeper.
-
-```
-┌──────────────────────────────────────┐
-│          $124.56                     │  ← Total portfolio value (USD)
-│     GkXn...4f2R  📋                 │  ← Address (tap to copy)
-├──────────────────────────────────────┤
-│  [ 📥 Receive ]  [ 📤 Send ]  [ 🔄 Swap ]  │  ← Action buttons
-├──────────────────────────────────────┤
-│  Your Tokens                         │
-│  ┌──────────────────────────────────┐│
-│  │ ◎ SOL        1.234    $234.56   ││  ← Token icon, symbol, amount, USD
-│  │ 💵 USDC    50.00       $50.00   ││
-│  │ 🪐 JUP      100.0      $12.34   ││
-│  │ 🐕 BONK  1,000,000      $5.67   ││
-│  └──────────────────────────────────┘│
-├──────────────────────────────────────┤
-│  Recent Activity                     │
-│  🔄 SOL → USDC    0.5 SOL   ✅ 2h  │
-│  📤 Sent SOL      0.1 SOL   ✅ 1d  │
-│  📥 Received USDC 10 USDC   ✅ 3d  │
-└──────────────────────────────────────┘
-```
-
-**Portfolio Token List:**
-- Calls `GET /api/user/balances` (already exists) + `GET /api/price/:mint` for each held token
-- New endpoint: `GET /api/user/portfolio` — returns balances merged with USD prices in one call (avoids N+1)
-- Tokens sorted by USD value descending, then alphabetically
-- Tokens with 0 balance are hidden
-- Shows token icon (from Jupiter token list), symbol, human-readable amount, USD value
-- Pull-to-refresh: calls `refreshBalance()` on swipe-down
-
-**Backend changes needed:**
-- New route: `GET /api/user/portfolio` — combines balances + batch price lookup in one request
-  - Returns: `{ totalValueUsd, tokens: [{ mint, symbol, name, icon, amount, decimals, priceUsd, valueUsd }] }`
-  - Uses Jupiter Price API v3 batch endpoint (comma-separated mints)
-
-#### 2.3 Receive Flow
-
-Bottom-sheet modal triggered by "Receive" action button.
-
-```
-┌──────────────────────────────────────┐
-│  Receive Tokens              ✕      │
-├──────────────────────────────────────┤
-│         ┌─────────────┐             │
-│         │             │             │
-│         │  [QR CODE]  │             │  ← QR code encoding wallet address
-│         │             │             │
-│         └─────────────┘             │
-│                                      │
-│  Solana Network                      │  ← Network label
-│                                      │
-│  GkXn8f4R...2jK9p4f2R              │  ← Full address (monospace)
-│                                      │
-│  [ 📋 Copy Address ]  [ 📤 Share ] │  ← Action buttons
-│                                      │
-│  ⚠️ Only send Solana tokens to     │
-│  this address.                       │  ← Safety warning
-└──────────────────────────────────────┘
-```
-
-**Implementation:**
-- QR code generated client-side using `qrcode` npm package (lightweight, no backend needed)
-- Copy button uses `navigator.clipboard.writeText()` with haptic feedback
-- Share button uses Telegram WebApp's share API or native `navigator.share()` if available
-- Network label: "Solana Network" (hardcoded for now, future: chain selector for cross-chain)
-- Safety warning: reminds user to only send Solana SPL tokens to this address
-
-#### 2.4 Send Flow
-
-Multi-step bottom-sheet flow triggered by "Send" action button.
-
-```
-Step 1: Select Token          Step 2: Enter Details         Step 3: Confirm
-┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
-│ Send                 │     │ Send SOL             │     │ Confirm Send         │
-│                      │     │                      │     │                      │
-│ Select token to send │     │ To:                  │     │ Sending              │
-│                      │     │ [paste address    📋]│     │ 0.5 SOL (~$95.00)    │
-│ ◎ SOL     1.234     │     │                      │     │                      │
-│ 💵 USDC   50.00     │     │ Amount:              │     │ To:                  │
-│ 🪐 JUP    100.0     │     │ [0.5          ] [MAX]│     │ 7xKX...9f2R          │
-│                      │     │ Balance: 1.234 SOL   │     │                      │
-│                      │     │ ~$95.00              │     │ Network fee: ~0.000005│
-│                      │     │                      │     │ SOL                  │
-│                      │     │ [Continue →]         │     │ [Confirm & Send]     │
-└──────────────────────┘     └──────────────────────┘     └──────────────────────┘
-```
-
-**Implementation:**
-- Step 1: Show only tokens the user holds (from portfolio data), tap to select
-- Step 2: Recipient address input (paste from clipboard, validate as Solana address)
-  - Amount input with MAX button (reserves 0.01 SOL for fees if sending SOL)
-  - Real-time USD value display
-  - "Continue" validates address + amount before proceeding
-- Step 3: Confirmation screen showing summary
-  - "Confirm & Send" builds + signs + sends transfer transaction via Privy
-  - Shows confirming state → done with Solscan link
-
-**Backend changes needed:**
-- New route: `POST /api/send` — builds an unsigned SPL transfer or SOL transfer transaction
-  - Body: `{ tokenMint, recipientAddress, amount, senderAddress }`
-  - Returns: `{ transaction: base64, lastValidBlockHeight }`
-  - Validates recipient address, amount > 0, sender has balance
-- Uses `@solana/spl-token` `createTransferInstruction` for SPL tokens
-- Uses `SystemProgram.transfer` for native SOL
-
-#### 2.5 Scan Tab (Token Scanner)
-
-```
-┌──────────────────────────────────────┐
-│  Token Scanner                       │
-│                                      │
-│  [Paste token address or search... ] │  ← Input field
-│  [ Scan ]                            │  ← Submit button
-├──────────────────────────────────────┤
-│                                      │
-│         Risk Score: 25/100           │
-│      ┌──────────────────┐            │
-│      │   🟢 LOW RISK    │            │  ← Color-coded badge
-│      └──────────────────┘            │
-│                                      │
-│  Checks:                             │
-│  ✅ Mint Authority    Disabled       │
-│  ✅ Freeze Authority  Disabled       │
-│  ⚠️ Top Holders      Top 10: 45.2% │
-│  ✅ Token Age         2.3 years      │
-│                                      │
-│  Token Info:                         │
-│  Supply: 1,000,000,000              │
-│  Price: $1.23                        │
-│  Decimals: 6                         │
-│                                      │
-│  [ 🔄 Swap This Token ]             │  ← Navigate to swap tab
-├──────────────────────────────────────┤
-│  Recent Scans                        │
-│  BONK — LOW (12) — 2h ago           │
-│  BOME — HIGH (78) — 1d ago          │
-└──────────────────────────────────────┘
-```
-
-**Risk Score Visual:**
-- Score 0-20: Green badge "LOW RISK"
-- Score 21-50: Yellow badge "MEDIUM RISK"
-- Score 51-100: Red badge "HIGH RISK"
-- Optional: semicircular gauge/arc with needle (RiskGauge component)
-
-**Implementation:**
-- Input: paste mint address or search by name (reuse token search from TokenSelector)
-- On submit: calls `GET /api/scan?mint=<address>` (already exists in backend)
-- Results displayed inline (no modal)
-- Each check shows pass/fail icon + detail text
-- "Swap This Token" sets the output token and switches to Swap tab
-- Recent scans: stored in localStorage (no backend needed) or fetched from DB
-
-**Frontend API function needed:**
+### 1. Async Express handlers — always use asyncHandler wrapper
+All route handlers MUST be wrapped or use explicit try/catch. The `asyncHandler` wrapper
+in `server.ts` forwards rejected promises to Express error middleware.
 ```typescript
-// Add to webapp/src/lib/api.ts
-export interface ScanResult {
-    mintAddress: string;
-    riskScore: number;
-    riskLevel: "LOW" | "MEDIUM" | "HIGH";
-    checks: Array<{ name: string; safe: boolean; detail: string; weight: number }>;
-    tokenInfo: { supply: string | null; decimals: number | null; price: number | null };
-    scannedAt: string;
-}
-export async function fetchTokenScan(mint: string): Promise<ScanResult> { ... }
+// In route files, use explicit try/catch (already in all routes)
+router.get("/path", async (req, res) => {
+    try { ... }
+    catch (err) { res.status(500).json({ error: "..." }); }
+});
 ```
 
-#### 2.6 Settings Panel
+### 2. Input validation — Zod on all external inputs
+- Jupiter API responses → Zod-validated in `jupiter/quote.ts`
+- LI.FI responses → Zod-validated in `aggregator/lifi.ts`
+- User inputs → validated via `src/utils/validation.ts` + route-level checks
+- Never trust client-supplied `telegramId` — always use `res.locals.telegramId`
 
-```
-┌──────────────────────────────────────┐
-│  Settings                            │
-├──────────────────────────────────────┤
-│  Wallet                              │
-│  ┌──────────────────────────────────┐│
-│  │ Address                          ││
-│  │ GkXn8f4R...2jK9p4f2R     📋 🔲 ││  ← Copy + QR buttons
-│  └──────────────────────────────────┘│
-│                                      │
-│  Trading                             │
-│  ┌──────────────────────────────────┐│
-│  │ Slippage Tolerance               ││
-│  │ [0.1%] [0.5%] [1.0%] [Custom]   ││  ← Radio/chip selector
-│  └──────────────────────────────────┘│
-│                                      │
-│  Referral                            │
-│  ┌──────────────────────────────────┐│
-│  │ Your Code: ABC123         📋    ││
-│  │ Referrals: 5 users               ││
-│  │ [ Share Referral Link ]          ││
-│  └──────────────────────────────────┘│
-│                                      │
-│  About                               │
-│  ┌──────────────────────────────────┐│
-│  │ SolSwap v0.2.0                   ││
-│  │ Non-custodial · Privy MPC wallet ││
-│  │ Platform fee: 0.5% per swap      ││
-│  │ Powered by Jupiter & LI.FI       ││
-│  └──────────────────────────────────┘│
-│                                      │
-│  [ 🚪 Log Out ]                     │
-└──────────────────────────────────────┘
+### 3. Address validation — two functions for two purposes
+```typescript
+isValidSolanaAddress(addr)  // Ed25519 curve check — use for WALLET addresses
+isValidPublicKey(addr)      // Any valid PublicKey — use for MINT addresses (can be PDAs)
 ```
 
-**Slippage persistence:**
-- Stored in `localStorage` under key `solswap_slippage_bps`
-- Default: 50 (0.5%)
-- Passed to quote API as query param: `&slippageBps=<value>`
-- Swap tab reads from localStorage on mount
+### 4. Retry wrapper — for Jupiter and LI.FI only
+```typescript
+await withRetry(() => jupiterApiCall(), { retries: 3, baseDelayMs: 500 })
+```
+`retry.ts` checks `err.status` (numeric) first, then string matching as fallback.
+Do NOT retry Prisma queries or Express responses.
 
-**Referral:**
-- Backend already has `referralCode` on User model
-- `GET /api/user` already returns user data — needs to include `referralCode` and `referralCount`
-- Share link format: `https://t.me/<bot_username>?start=ref_<CODE>`
+### 5. Prisma queries — one file per domain in `src/db/queries/`
+Never write Prisma queries inline in route files. Put them in the appropriate query file.
 
-#### 2.7 Swap Tab Enhancements
+### 6. Token metadata — always use the Jupiter cache
+Use `getTokenByMint(mint)` or `getTokensMetadata(mints)` from `jupiter/tokens.ts`.
+These use an in-memory cached token list (loaded once, refreshed on TTL expiry).
+Do NOT call the Jupiter token API directly from routes.
 
-Minor improvements to existing swap UI:
+### 7. BigInt for token amounts — backend only
+Swap `inputAmount`/`outputAmount` stored as `BigInt` in DB.
+Convert for display: `Number(bigint) / 10 ** decimals`
+The `formatRaw()` function in `db/queries/transactions.ts` handles this correctly.
 
-1. **Slippage gear icon** — small ⚙️ button in swap card header, shows current slippage, taps to Settings tab
-2. **Recent tokens** — show last 3 tokens used as quick-select chips above the token selector
-3. **Cross-chain indicator** — if input/output are on different chains, show "Cross-chain via LI.FI" in route display
+### 8. Frontend API calls — all go through `webapp/src/lib/api.ts`
+Never use `fetch()` directly in React components. All API functions live in `api.ts`
+with proper auth headers. Add new functions there following the existing pattern.
+
+### 9. Toast notifications — use the global toast utility
+```typescript
+import { toast } from "../lib/toast";
+toast("Address copied!", "success");  // "success" | "error" | "info"
+```
+No prop drilling. Toast.tsx listens to the CustomEvent globally.
+
+### 10. Haptic feedback — use Telegram WebApp API
+```typescript
+const tg = (window as any).Telegram?.WebApp;
+tg?.HapticFeedback?.selectionChanged();         // tab switches
+tg?.HapticFeedback?.impactOccurred("medium");   // button taps
+tg?.HapticFeedback?.notificationOccurred("success" | "error");  // outcomes
+```
 
 ---
 
-### Phase 2 — Implementation Sprints
+## Security Model
 
-#### Sprint 2A — Architecture + Wallet Tab (P0)
+All 7 CRITICAL security issues have been fixed. Summary:
 
-**Goal:** Tab navigation working, wallet tab shows portfolio, receive flow works.
+| Issue | Fix | File |
+|-------|-----|------|
+| Zero API auth | Telegram initData HMAC middleware on all protected routes | `telegramAuth.ts` |
+| Wallet hijacking | `telegramId` from verified initData only, never from request body | `user.ts` |
+| Fee bypass | `platformFee.feeBps` validated server-side before building TX | `swap.ts` |
+| CORS wildcard | `config.ts` crashes on `CORS_ORIGIN="*"` in production | `config.ts` |
+| SOL address mismatch | `chains.ts` uses Wrapped SOL `So111...112` | `chains.ts` |
+| Fake confirmation | Backend polls on-chain (100×3s), frontend polls `/api/swap/status` | `transaction.ts` |
+| Stale quote | Quote snapshots inputs + 30s expiry + AbortController on input change | `SwapPanel.tsx` |
 
-| # | Task | Files | Backend? | Status |
-|---|------|-------|----------|--------|
-| 1 | Create TabBar component | `webapp/src/components/TabBar.tsx`, `index.css` | No | ✅ DONE |
-| 2 | Extract SwapPanel from App.tsx | `webapp/src/components/SwapPanel.tsx` | No | ✅ DONE |
-| 3 | Refactor App.tsx as tab router | `webapp/src/App.tsx` | No | ✅ DONE |
-| 4 | Create `GET /api/user/portfolio` | `src/api/routes/user.ts` | Yes | ✅ DONE |
-| 5 | Add `fetchPortfolio` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
-| 6 | Build WalletTab (portfolio list) | `webapp/src/components/WalletTab.tsx` | No | ✅ DONE |
-| 7 | Build ReceiveModal (QR + copy + share) | `webapp/src/components/ReceiveModal.tsx` | No | ✅ DONE |
-| 8 | Install `qrcode.react` package in webapp | `webapp/package.json` | No | ✅ DONE |
-| 9 | Style all new components | `webapp/src/styles/index.css` | No | ✅ DONE |
-| 10 | Test end-to-end: tabs + portfolio + receive | — | — | Pending deploy |
-
-**New files created:** `TabBar.tsx`, `SwapPanel.tsx`, `WalletTab.tsx`, `ReceiveModal.tsx`
-**Deps added:** `qrcode.react` (webapp)
-**Backend helpers added:** `getTokenPricesBatch` (jupiter/price.ts), `getTokensMetadata` (jupiter/tokens.ts)
-
-#### Sprint 2B — Scan + Send + Settings (P1)
-
-**Goal:** Scan tab works, send flow works, settings with slippage.
-
-| # | Task | Files | Backend? | Status |
-|---|------|-------|----------|--------|
-| 1 | Build ScanPanel | `webapp/src/components/ScanPanel.tsx` | No | ✅ DONE |
-| 2 | Add `fetchTokenScan` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
-| 3 | Build RiskGauge component | `webapp/src/components/RiskGauge.tsx` | No | ✅ DONE |
-| 4 | Build SettingsPanel | `webapp/src/components/SettingsPanel.tsx` | No | ✅ DONE |
-| 5 | Slippage localStorage + pass to quote API | `webapp/src/lib/api.ts`, `App.tsx` | No | ✅ DONE |
-| 6 | Create `POST /api/send` (build transfer TX) | `src/api/routes/send.ts`, `server.ts` | Yes | ✅ DONE |
-| 7 | Build SendFlow component | `webapp/src/components/SendFlow.tsx` | No | ✅ DONE |
-| 8 | Add `fetchSendTransaction` to API client | `webapp/src/lib/api.ts` | No | ✅ DONE |
-| 9 | Add referralCode + count to GET /api/user | `src/api/routes/user.ts` (uses existing `getUserWithReferralCount`) | Yes | ✅ DONE |
-| 10 | Add slippage gear icon to SwapPanel | `webapp/src/components/SwapPanel.tsx` | No | ✅ DONE |
-| 11 | Style scan, send, settings components | `webapp/src/styles/index.css` | No | ✅ DONE |
-
-**New files created:** `ScanPanel.tsx`, `RiskGauge.tsx`, `SettingsPanel.tsx`, `SendFlow.tsx`, `send.ts`
-**Deps added:** none
-
-#### Sprint 2C — Polish & Extras (P2)
-
-**Goal:** Production-quality UX polish, cross-chain swap UI, remaining features.
-
-| # | Task | Files | Backend? | Status |
-|---|------|-------|----------|--------|
-| 1 | Skeleton loading states (shimmer) | All components | No | PARTIAL (WalletTab has skeletons) |
-| 2 | Toast notification system | `webapp/src/components/Toast.tsx`, `lib/toast.ts` | No | ✅ DONE |
-| 3 | Haptic feedback (Telegram WebApp API) | `App.tsx` (tabs), `SwapPanel.tsx` (swap) | No | ✅ DONE |
-| 4 | Pull-to-refresh on WalletTab | `WalletTab.tsx` | No | ✅ DONE |
-| 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No | ✅ DONE |
-| 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No | ✅ DONE |
-| 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No | ✅ DONE |
-| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx`, `CcTokenModal.tsx` | No | ✅ DONE |
-| 9 | Tab transition animations | `index.css` | No | ✅ DONE |
-| 10 | Tab active indicator (visible line + bg) | `index.css` | No | ✅ DONE |
-| 11 | Scan layout fix (stacked input + paste btn) | `ScanPanel.tsx`, `index.css` | No | ✅ DONE |
-| 12 | Toast wired into all copy/send actions | All components | No | ✅ DONE |
-| 13 | Terms of Use modal (first-launch gate + re-viewable in Settings) | `TermsModal.tsx`, `SettingsPanel.tsx`, `App.tsx`, `index.css` | No | ✅ DONE |
-
-**New files created:** `Toast.tsx`, `toast.ts`, `TermsModal.tsx`, `CcTokenModal.tsx`
+**Auth middleware behavior:**
+- Valid: sets `res.locals.telegramId`, calls `next()`
+- Invalid signature: `401 { error: "Unauthorized" }`
+- Expired (>1hr): `401 { error: "Unauthorized" }`
+- Missing user field: `401`
 
 ---
 
-### Phase 2 — New File Structure
+## Full Feature Inventory (What Is Actually Built)
 
-```
-webapp/src/
-├── App.tsx                    # Tab router + shared state (walletAddress, balances, activeTab) ✅ 2A
-├── main.tsx                   # Privy + Telegram SDK setup (unchanged)
-├── ErrorBoundary.tsx          # Error boundary (unchanged)
-├── TokenSelector.tsx          # Token search modal (unchanged)
-├── components/
-│   ├── TabBar.tsx             # Bottom tab navigation (Wallet | Swap | Scan | Settings) ✅ 2A
-│   ├── WalletTab.tsx          # Portfolio view + action buttons + token list ✅ 2A
-│   ├── SwapPanel.tsx          # Full swap UI (extracted from App.tsx) ✅ 2A
-│   ├── ReceiveModal.tsx       # QR code + address + copy + share ✅ 2A
-│   ├── ScanPanel.tsx          # Token scanner UI + risk gauge + recent scans  ✅ 2B
-│   ├── SettingsPanel.tsx      # Wallet info + slippage + referral + about + logout ✅ 2B
-│   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ✅ 2B
-│   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ✅ 2B
-│   ├── Toast.tsx              # Toast notification system ✅ 2C
-│   ├── TermsModal.tsx         # First-launch ToS gate + re-viewable from Settings ✅ 2C
-│   ├── CcTokenModal.tsx       # Cross-chain token selector modal (chain + token picker) ✅ 2C
-│   └── TransactionsTab.tsx    # 5th tab: paginated tx history, date filters, detail modal ✅ 2.5
-├── lib/
-│   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B, fetchTransactions ✅ 2.5)
-└── styles/
-    └── index.css              # All styles (tab bar + wallet + receive ✅ 2A; scan + settings + send ✅ 2B; transactions ✅ 2.5)
-```
+### Bot
+- `/start` — upserts user in DB (using `upsert` to prevent race conditions), sends Mini App button
+- `/help` — basic usage instructions
+- Catch-all: redirects all other messages to the Mini App
+- Rate limiting per user per command
 
-### Phase 2 — New/Modified Backend Routes
+### Mini App Tabs
 
-| Method | Path | Description | Sprint | Status |
-|--------|------|-------------|--------|--------|
-| GET | `/api/user/portfolio` | Balances + USD prices in one call | 2A | ✅ DONE |
-| POST | `/api/send` | Build unsigned SOL/SPL transfer TX | 2B | ✅ DONE |
-| GET | `/api/user` (update) | `referralCode` + `referralCount` added to response | 2B | ✅ DONE |
-| GET | `/api/quote` (update) | Accepts optional `slippageBps` query param (0-5000) | 2B | ✅ DONE |
+**Tab 1 — Wallet**
+- Total portfolio value in USD
+- Wallet address (tap to copy, with toast feedback)
+- Action buttons: Receive / Send / Swap
+- Token list with icon, symbol, amount, USD value (from `/api/user/portfolio`)
+- Recent activity feed (last 5 items from `/api/activity`)
+- Pull-to-refresh gesture (touch-based, only triggers from scroll top)
+- Skeleton loading states
 
-### Phase 3 — PREMIUM FEATURES
+**Tab 2 — Swap**
+- Same-chain Solana swaps via Jupiter
+- Cross-chain swaps via LI.FI (chain selector + CcTokenModal)
+- Slippage gear icon (links to Settings tab slippage selector)
+- Recent tokens row (last 5 used, localStorage `solswap_recent_tokens`)
+- AbortController on quote fetch (cancels in-flight requests when inputs change)
+- Quote auto-expires after 30s with auto-refresh
+- Swap history slide-up panel (tap wallet badge)
 
-| Task | Status | Priority |
-|------|--------|----------|
-| Helius webhook integration (incoming tx tracking) | NOT STARTED | P1 |
-| Receive tracking in Transactions tab (via Helius webhooks) | NOT STARTED | P1 |
-| Whale tracker API routes | NOT STARTED | P2 |
-| TrackPanel component (manage watched wallets) | NOT STARTED | P2 |
-| Whale alert notifications via bot | NOT STARTED | P2 |
-| Subscription payment flow (Telegram Stars) | NOT STARTED | P2 |
-| Subscription enforcement in API routes | NOT STARTED | P2 |
+**Tab 3 — Scan**
+- Paste or type token mint address
+- Animated SVG speedometer gauge (RiskGauge) with color gradient
+- Token icon + name + symbol displayed above gauge
+- Per-check results: Mint Authority, Freeze Authority, Top Holders, Token Metadata, Jupiter Verified, Token Age
+- Token info: supply, price, decimals
+- "Swap This Token" → switches to Swap tab with that token pre-selected
+- Recent scans list (last 5, localStorage `solswap_recent_scans`) showing token symbol + risk level
+- Legal disclaimer shown below every scan result
+- Scan saved to DB for `/api/scan/history`
 
-### Phase 4 — AI & GROWTH
+**Tab 4 — Settings**
+- Full wallet address + copy button + QR code (opens ReceiveModal)
+- Slippage tolerance: 0.1% / 0.5% / 1.0% / Custom chips (localStorage `solswap_slippage_bps`)
+- Referral code display + copy share link (`t.me/<bot>?start=ref_<CODE>`)
+- Referral count from `/api/user`
+- About section: version, fee disclosure, non-custodial disclaimer
+- "View Terms of Use" re-opens TermsModal
+- Log Out button (Privy logout)
 
-| Task | Status | Priority |
-|------|--------|----------|
-| Gemini AI signal analyzer | NOT STARTED | P3 |
-| Signal scheduler (cron delivery) | NOT STARTED | P3 |
-| SignalsPanel component | NOT STARTED | P3 |
-| Referral sharing flow | NOT STARTED | P3 |
-| Exchange affiliate links | NOT STARTED | P3 |
+**Tab 5 — History (Transactions)**
+- Type chips: All / Swaps / Sends (no Receives yet — Helius webhook needed)
+- Date preset chips: Today / 7 days / 30 days / Custom
+- Custom date range: two `<input type="date">` fields
+- Grouped by month with item counts
+- "Load 20 more" button with offset-based pagination
+- "Showing X of Y transactions" counter
+- Tap any row → slide-up detail modal with amounts, fee, date, chain, tx ID, Solscan link, copy tx
+- Receives placeholder explaining Helius webhook requirement (Phase 3)
+- Shimmer skeleton loading on initial fetch
+- Haptic feedback on chip changes
+
+**Send Flow (within Wallet tab)**
+- Step 1: Select token from user's portfolio
+- Step 2: Enter recipient address (validates ed25519) + amount (MAX button)
+- Step 3: Confirmation screen with USD value
+- Step 4: Executing (Privy signs + sends)
+- Step 5: Done (Solscan link) or Error
+- On success: calls `POST /api/transfer/confirm` to record in DB
+
+**Receive Modal**
+- QR code (qrcode.react)
+- Full address display + copy + share (Telegram share or Web Share API)
+- SPL-only safety warning
+
+**Terms of Use Modal**
+- Full-screen bottom sheet, 8 legal sections
+- Must scroll to bottom before "I Agree" activates
+- Shown once on first launch (`localStorage solswap_terms_accepted`)
+- Re-viewable from Settings → About
+
+---
+
+## Known Issues & Technical Debt
+
+| ID | Severity | Description | File | Fix Status |
+|----|----------|-------------|------|-----------|
+| AGE-1 | LOW | Token age check gives wrong result for tokens with >5,000 total txs (popular tokens appear "new") | `scanner/checks.ts:269` | Not fixed. Low impact: only affects 10-point check; popular tokens score LOW anyway via other checks |
+| H5 | LOW | Float precision for display values — BigInt used for DB/calculations, floats remain for USD display math | `jupiter/quote.ts` | PARTIAL — acceptable for display purposes |
+| API-1 | MEDIUM | `lite-api.jup.ag` (free Jupiter API) is being sunset. Need to migrate to `api.jup.ag` + API key from `portal.jup.ag` (free tier = 60 req/min) | `config.ts JUPITER_API_URL` | NOT STARTED — migrate before sunset |
+| DB-1 | INFO | `fees.ts` and `referrals.ts` are empty stubs (no active queries) | `db/queries/fees.ts` | Reserved for Phase 3 |
+| DB-2 | INFO | `WatchedWallet` and `Subscription` schema models have no API routes or enforcement | `schema.prisma` | Reserved for Phase 3 |
+| MON-1 | MEDIUM | No monitoring or alerting beyond PM2 logs. No uptime checks, no error rate tracking | VPS | Phase 3 |
+| TEST-1 | HIGH | No automated test suite (unit or integration tests) | — | Phase 3 |
+| RECV-1 | MEDIUM | Incoming transfers (receives) not tracked — Helius webhooks needed | Phase 3 | NOT STARTED |
+
+---
+
+## Production Readiness Assessment
+
+### Current Status: **SOFT BETA — Ready for limited real-money users, not mass launch**
+
+#### What IS production-ready:
+- All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
+- Telegram initData auth on all protected routes
+- Non-custodial wallet (Privy MPC) — we hold zero keys
+- Fee collection works correctly (ATA derivation fixed)
+- On-chain confirmation polling (no fake confirmations)
+- Rate limiting (100 req/min per IP)
+- Security headers (helmet)
+- Input validation throughout
+- Error boundaries (React + Express)
+- Terms of Use gate (legal protection)
+- Graceful shutdown (PM2 + Express)
+- HTTPS enforced (Vercel + Hostinger domain)
+
+#### Blockers before FULL production (broad public launch):
+
+1. **Jupiter API sunset** — `lite-api.jup.ag` is being deprecated (announced Aug 2025).
+   Must obtain API key from `portal.jup.ag` and update `JUPITER_API_URL` to
+   `https://api.jup.ag/swap/v1` before the free endpoint goes offline. This will
+   break ALL swaps when it happens. **Priority: HIGH.**
+
+2. **No automated tests** — A single bad deploy could break swaps silently.
+   At minimum, add smoke tests for: auth middleware, quote validation, fee bypass prevention.
+   **Priority: HIGH before scaling.**
+
+3. **No monitoring** — When the server goes down at 3am, you won't know until a user
+   reports it. Add uptime monitoring (UptimeRobot free tier is sufficient) and a Telegram
+   bot alert for PM2 process crashes. **Priority: MEDIUM.**
+
+4. **LIFI_API_KEY missing** — Cross-chain quotes work without a key (LI.FI allows anonymous),
+   but you don't earn integrator fees. Need to register at li.fi and set `LIFI_API_KEY`
+   to actually monetize cross-chain swaps. **Priority: MEDIUM.**
+
+5. **Receive tracking not implemented** — The Transactions tab has a placeholder for incoming
+   transfers but they're not tracked. Requires Helius webhook setup (Phase 3).
+   **Does not block launch** — just a missing feature.
+
+6. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
+   All users get all features for free. Not a bug, but premium features can't be sold yet.
+
+#### Recommended launch sequence:
+1. Fix Jupiter API key migration (critical path)
+2. Add uptime monitoring (1 hour of work)
+3. Manual end-to-end test with real SOL (see Beta Test Checklist)
+4. Soft launch to 50-100 users, watch PM2 logs closely
+5. Add smoke tests before scaling past 500 users
 
 ---
 
@@ -766,57 +772,102 @@ webapp/src/
 ### Backend (`solswapbot/.env`)
 
 ```env
-# Required
-TELEGRAM_BOT_TOKEN=         # From @BotFather
-SOLANA_RPC_URL=             # Helius RPC endpoint
-FEE_WALLET_ADDRESS=         # Solana address for fee collection
+# ── REQUIRED (app crashes on startup if missing) ──────────────────────────────
+TELEGRAM_BOT_TOKEN=            # From @BotFather → must be the production bot
+SOLANA_RPC_URL=                # Helius RPC endpoint: https://your.helius-rpc.com
+FEE_WALLET_ADDRESS=            # Solana address for 0.5% fee collection (must be valid pubkey)
 
-# Defaults provided (optional to override)
-JUPITER_API_URL=https://lite-api.jup.ag/swap/v1
-PLATFORM_FEE_BPS=50         # 0.5% platform fee
+# ── IMPORTANT (defaults provided, but should be set in production) ─────────────
+JUPITER_API_URL=https://lite-api.jup.ag/swap/v1   # ⚠️ BEING SUNSET — migrate to api.jup.ag soon
+PLATFORM_FEE_BPS=50            # 0.5% fee. Range 0-200. Change carefully (swap.ts validates against this)
 API_PORT=3001
-CORS_ORIGIN=*               # ⚠️ MUST be set to Vercel URL in production (crash-early if "*" + production)
-DATABASE_URL=file:./dev.db
-NODE_ENV=development
+CORS_ORIGIN=https://your-app.vercel.app   # ⚠️ MUST match Vercel URL in production (crashes if "*" + prod)
+DATABASE_URL=file:./dev.db     # Production: file:./prod.db or absolute path
+NODE_ENV=production            # Set to "production" on VPS
 LOG_LEVEL=info
-REFERRAL_FEE_SHARE_PERCENT=25
+REFERRAL_FEE_SHARE_PERCENT=25  # Future: share of collected fees given to referrer
 
-# Optional — needed for specific features
-PRIVY_APP_ID=               # Phase 1: Privy embedded wallets
-JUPITER_API_KEY=            # Soon required: free key from portal.jup.ag (lite-api being sunset)
-LIFI_API_KEY=               # Cross-chain: enables higher limits + integrator fees
-HELIUS_API_KEY=             # Phase 3: Webhook RPC
-HELIUS_WEBHOOK_SECRET=      # Phase 3: Webhook auth
-GEMINI_API_KEY=             # Phase 4: AI signals
-MINIAPP_URL=                # Vercel deployment URL (for bot /start button)
+# ── OPTIONAL but recommended ───────────────────────────────────────────────────
+MINIAPP_URL=https://your-app.vercel.app   # Shown in /start button
+PRIVY_APP_ID=                  # Privy dashboard app ID. If missing, backend still works (Privy is frontend-only)
+JUPITER_API_KEY=               # Required soon (after lite-api sunset). Get free key at portal.jup.ag
+LIFI_API_KEY=                  # LI.FI partner key — cross-chain works without it but no integrator fees
+
+# ── PHASE 3 (not needed yet) ───────────────────────────────────────────────────
+HELIUS_API_KEY=                # Webhook integration for receive tracking
+HELIUS_WEBHOOK_SECRET=         # Validates Helius webhook requests
+GEMINI_API_KEY=                # Phase 4: AI market signals
 ```
 
-### Frontend (Vercel env vars for `webapp/`)
+### Frontend (Vercel environment variables for `webapp/`)
 
 ```env
-VITE_API_URL=               # Backend URL (e.g. https://srv1418768.hstgr.cloud) — empty if using vercel.json rewrites
-VITE_PRIVY_APP_ID=          # Same as PRIVY_APP_ID above
-VITE_SOLANA_RPC_URL=        # Helius RPC URL (for Privy SDK's Solana RPC provider). Falls back to public mainnet-beta
+VITE_PRIVY_APP_ID=             # Required — same as PRIVY_APP_ID. App shows red error screen if missing.
+VITE_API_URL=                  # Leave empty if using vercel.json rewrites (recommended)
+                               # Set to https://srv1418768.hstgr.cloud only if rewrites are broken
+VITE_SOLANA_RPC_URL=           # Helius RPC URL for Privy's Solana provider. Falls back to public mainnet-beta.
+```
+
+---
+
+## Swap Flow (End-to-End)
+
+Understanding this flow is essential for debugging swap issues:
+
+```
+1. User selects tokens + enters amount in SwapPanel
+2. Frontend calls GET /api/quote (debounced, AbortController)
+3. Backend: getQuote() → Jupiter /quote endpoint → returns quote + USD display
+4. Quote has 30s expiry timer — auto-refreshes on expiry
+5. User clicks "Swap"
+6. Frontend validates: quote not expired? inputs still match snapshot?
+7. Frontend calls POST /api/swap with { quoteResponse, userPublicKey }
+8. Backend: validates platformFee.feeBps === PLATFORM_FEE_BPS (H1)
+9. Backend: buildSwapTransaction() → Jupiter /swap endpoint → unsigned base64 tx
+10. Frontend receives base64 tx
+11. Privy signs the tx using useSignAndSendTransaction (in-browser, no key exposure)
+12. Privy broadcasts to Solana network
+13. Frontend calls POST /api/swap/confirm with txSignature
+14. Backend: creates Swap record (status=SUBMITTED), starts pollTransactionInBackground()
+15. Frontend polls GET /api/swap/status every 3s (up to 100 attempts = ~5 min)
+16. Background poller updates Swap status: CONFIRMED | FAILED | TIMEOUT
+17. Frontend shows result: "Swap complete!" or error or TIMEOUT (shows as complete with Solscan link)
+```
+
+---
+
+## Send Flow (End-to-End)
+
+```
+1. User opens SendFlow in Wallet tab
+2. Selects token from portfolio
+3. Enters recipient address (validated ed25519) + amount
+4. Frontend calls POST /api/send { tokenMint, recipientAddress, amount, senderAddress }
+5. Backend builds VersionedTransaction:
+   - Native SOL: SystemProgram.transfer
+   - SPL token: fetches decimals on-chain → createTransferInstruction
+   - If recipient has no ATA: prepends createAssociatedTokenAccountInstruction (sender pays rent)
+6. Backend returns { transaction: base64, lastValidBlockHeight }
+7. Privy signs + sends tx
+8. Frontend calls POST /api/transfer/confirm to record in DB
+9. Shows Solscan link
 ```
 
 ---
 
 ## Git Workflow
 
-All development happens on **feature branches**, which are **merged to `main`** before deployment.
-The VPS and Vercel always deploy from `main`.
-
 ```
 Feature branch (claude/*, fix/*, feat/*)
   └→ PR → merge to main
-       └→ VPS: git pull origin main → build → restart
-       └→ Vercel: auto-deploys on push to main (if git integration is set up)
+       └→ VPS: git pull + build + pm2 restart
+       └→ Vercel: auto-deploys on push to main (if git integration connected)
 ```
 
 **Rules:**
-- Never push directly to `main` — always use feature branches + merge
-- Feature branches are prefixed: `claude/`, `fix/`, `feat/`
-- After merging, the VPS must be manually redeployed (see below)
+- Never push directly to `main`
+- Feature branches: `claude/`, `fix/`, `feat/` prefixes
+- After merging, manually redeploy VPS (Vercel auto-deploys)
 
 ---
 
@@ -824,477 +875,181 @@ Feature branch (claude/*, fix/*, feat/*)
 
 ### Backend (Hostinger VPS — `srv1418768.hstgr.cloud`)
 
-After merging a feature branch to `main`, SSH into the VPS and run:
-
 ```bash
 cd ~/solswapbot
 git pull origin main
-npm install            # picks up new/updated deps
-npx prisma db push     # applies schema changes (indexes, new models)
-npm run build          # compiles TypeScript → dist/
+npm install                   # Picks up any new deps
+npx prisma db push            # ONLY run if schema.prisma changed
+npm run build
 pm2 restart ecosystem.config.js
+pm2 logs --lines 20           # Verify: "API server running on port 3001" + "Bot is running!"
 ```
 
-**Verify:** `pm2 logs --lines 20` — should see "API server running on port 3001" and "Bot is running!"
+**PM2 config (`ecosystem.config.js`):**
+- Single instance (SQLite requires single writer)
+- 256MB memory limit with auto-restart
+- Logs in `./logs/`
+- Runs `dist/app.js`
 
-**PM2 config:** `ecosystem.config.js` — runs `dist/app.js`, single instance (SQLite), 256MB memory limit, logs in `./logs/`.
+### Frontend (Vercel)
 
-### Frontend (Vercel — webapp)
-1. Import repo → Root Directory: `webapp`
-2. Framework: Vite
-3. Env vars: `VITE_API_URL`, `VITE_PRIVY_APP_ID`, `VITE_SOLANA_RPC_URL`
-4. Auto-deploys on push to `main` if Vercel git integration is connected
-5. If not auto-deploying, trigger manual deploy from Vercel dashboard after merge
+1. Connect repo, Root Directory: `webapp`, Framework: Vite
+2. Set env vars: `VITE_PRIVY_APP_ID`, `VITE_SOLANA_RPC_URL` (optionally `VITE_API_URL`)
+3. Auto-deploys on push to `main` if git integration connected
+4. Manual deploy: Vercel dashboard → Redeploy
 
-### BotFather Setup
+### BotFather Setup (one-time)
 1. `/mybots` → Select bot → Bot Settings → Menu Button
 2. Set URL to Vercel deployment URL
 
 ---
 
-## What NOT To Do
-
-- **Do NOT push directly to `main`** — always use feature branches and merge
-- **Do NOT add more bot commands** — all features go in the Mini App
-- **Do NOT generate or store private keys** — Privy handles all key management
-- **Do NOT build custodial wallet features** — we are non-custodial
-- **Do NOT redirect to external wallets** — Privy signs inside the Mini App
-- **Do NOT use PostgreSQL** — SQLite is sufficient for this scale
-- **Do NOT allow unsanitized user input** — use `src/utils/validation.ts`
-- **Do NOT accept `telegramId` from client** — always extract from verified `initData` via auth middleware
-- **Do NOT set `CORS_ORIGIN=*` in production** — config will crash on startup if you do
-
----
-
-## Code Audit Report (2026-02-25)
-
-> Full deep-dive audit of every file in the codebase. 6 parallel audits covering:
-> backend routes, bot/middleware, Jupiter/aggregator financial core, scanner/DB/utils,
-> webapp frontend, and config/infrastructure.
-
-### Overall Code Rating: 9.0 / 10 (up from 7.5 — all CRITICAL, HIGH, and MEDIUM issues resolved)
-
-| Category | Rating | Summary |
-|----------|--------|---------|
-| **Security** | 7/10 | ✅ Telegram initData auth (C2/C3/C5), CORS locked in prod (C4), Error Boundary (M7) |
-| **Financial Logic** | 6/10 | ✅ Fee collection (C1), fee bypass prevention (H1), SOL address fixed (C6). Precision (H5) partially done |
-| **Error Handling** | 6/10 | ✅ try/catch + upsert in /start (H6/H7), input validation (H8/H9). Some gaps remain |
-| **Code Quality** | 7/10 | Good patterns (Zod, Prisma, retry) now consistently applied. Auth middleware, rate limiting, helmet |
-| **Frontend (React)** | 7/10 | ✅ Real on-chain confirmation polling (H2), dynamic balance checks, Error Boundary (M7), Token Selector |
-| **Infrastructure** | 6/10 | ✅ trust proxy, graceful shutdown (H11), HTTPS vercel.json (C7), DB indexes (H12/M19) |
-
-**Verdict:** All CRITICAL, HIGH, and MEDIUM issues are resolved. Authentication, fee validation,
-on-chain confirmation, quote freshness, error boundary, scanner accuracy, LI.FI validation,
-retry logic, and TypeScript hygiene are all in place. The codebase is fully production-ready.
-
----
-
-### CRITICAL Issues (Must Fix Before Production)
-
-#### ~~C1. Fee Collection Likely Broken~~ — FIXED (2026-02-25)
-- **File:** `src/jupiter/swap.ts:29`
-- **Status:** ✅ FIXED. `feeAccount` now correctly derived as ATA via
-  `getAssociatedTokenAddressSync(outputMint, feeWallet, true)` from `@solana/spl-token`.
-  Jupiter no longer requires Referral Program setup (simplified Jan 2025).
-
-#### ~~C2. Zero Authentication on All API Endpoints~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. Added `telegramAuthMiddleware` (`src/api/middleware/telegramAuth.ts`)
-  using HMAC-SHA256 verification of Telegram `initData`. Applied to all protected routes.
-  Public routes (price, tokens) remain unauthenticated by design.
-
-#### ~~C3. Wallet Address Hijacking via POST /api/user/wallet~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. `telegramId` is now extracted from verified `initData` via auth
-  middleware — no longer accepted as a body parameter. Attackers cannot spoof identity.
-
-#### ~~C4. CORS Wildcard Allows Any Origin~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. `config.ts` now rejects `CORS_ORIGIN="*"` when `NODE_ENV=production`
-  via Zod `.refine()`. Crash-early on misconfiguration.
-
-#### ~~C5. Telegram `initDataUnsafe` Used Without Server-Side Verification~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. Frontend sends `tg.initData` (signed string) in `Authorization: tma <initData>`.
-  Backend validates HMAC + auth_date expiry before extracting user identity.
-
-#### ~~C6. SOL Address Mismatch Between Constants and Chains Registry~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. `chains.ts` now uses Wrapped SOL (`So11111111111111111111111111111111111111112`),
-  matching `constants.ts` and Jupiter/LI.FI requirements.
-
-#### ~~C7. Hardcoded VPS IP in vercel.json~~ — FIXED (2026-02-25)
-- **Status:** ✅ FIXED. `webapp/vercel.json` now rewrites to
-  `https://srv1418768.hstgr.cloud/api/:path*`.
-
----
-
-### HIGH Issues (Fix Before Beta Users)
-
-| # | Issue | File(s) | Status |
-|---|-------|---------|--------|
-| ~~H1~~ | ~~Unvalidated quoteResponse — fee bypass~~ | `src/api/routes/swap.ts` | ✅ FIXED — validates `platformFee.feeBps` matches config |
-| ~~H2~~ | ~~Fake 2-second "confirmation"~~ | `webapp/src/App.tsx`, `src/api/routes/swap.ts` | ✅ FIXED — backend polls on-chain, frontend polls `/api/swap/status` |
-| ~~H3~~ | ~~Stale quote race condition~~ | `webapp/src/App.tsx` | ✅ FIXED — quote snapshots inputs + AbortController + input match check before swap |
-| ~~H4~~ | ~~`lastValidBlockHeight` ignored~~ | `webapp/src/App.tsx` | ✅ FIXED — quotes auto-expire after 30s, swap rejects expired quotes + auto-refreshes |
-| H5 | Floating-point precision loss on amounts | `quote.ts`, `router.ts` | PARTIAL — BigInt for amount conversion, float remains for display |
-| ~~H6~~ | ~~Race condition in user creation (TOCTOU)~~ | `src/bot/commands/start.ts` | ✅ FIXED — uses `upsert` |
-| ~~H7~~ | ~~No try/catch in startCommand~~ | `src/bot/commands/start.ts` | ✅ FIXED — full try/catch with user-facing error reply |
-| ~~H8~~ | ~~Division by zero in quote route~~ | `src/api/routes/quote.ts` | ✅ FIXED — validates amount > 0 |
-| ~~H9~~ | ~~parseInt without NaN check~~ | `src/api/routes/quote.ts` | ✅ FIXED — validates with `Number.isFinite()` and regex |
-| ~~H10~~ | ~~Transaction timeout marked as FAILED~~ | `src/solana/transaction.ts` | ✅ FIXED — uses TIMEOUT status instead of FAILED; frontend handles gracefully |
-| ~~H11~~ | ~~Express server not in shutdown handler~~ | `src/app.ts` | ✅ FIXED — server instance exposed for graceful shutdown |
-| ~~H12~~ | ~~Swap.txSignature not indexed~~ | `prisma/schema.prisma` | ✅ FIXED — `@@index([txSignature])` added |
-
----
-
-### MEDIUM Issues (Fix During Phase 2)
-
-| # | Issue | File(s) | Status |
-|---|-------|---------|--------|
-| ~~M1~~ | ~~No API rate limiting~~ | `src/api/server.ts` | ✅ FIXED — 100 req/min via `express-rate-limit` |
-| ~~M2~~ | ~~No security headers~~ | `src/api/server.ts` | ✅ FIXED — `helmet` middleware added |
-| ~~M3~~ | ~~N+1 query in history~~ | `src/api/routes/history.ts` | ✅ FIXED — `getTokensMetadata` batch lookup |
-| ~~M4~~ | ~~Token list cache thundering herd~~ | `src/jupiter/tokens.ts` | ✅ FIXED — `pendingLoad` promise dedup |
-| ~~M5~~ | ~~Redundant RPC calls in scanner~~ | `src/scanner/checks.ts` | ✅ FIXED — `cachedAccountInfo` + `cachedTotalSupply` params shared between checks |
-| ~~M6~~ | ~~Scanner errors counted as "unsafe"~~ | `src/scanner/checks.ts` | ✅ FIXED — `errored: true` flag; errors return `safe: true` so they don't inflate risk score |
-| ~~M7~~ | ~~No React Error Boundary~~ | `webapp/src/ErrorBoundary.tsx` | ✅ FIXED — wraps `<App />` in `main.tsx` |
-| ~~M8~~ | ~~Swap not recorded in DB after execution~~ | `webapp/src/App.tsx` | ✅ FIXED — `confirmSwap` records + polls backend |
-| ~~M9~~ | ~~LI.FI response not Zod-validated~~ | `src/aggregator/lifi.ts` | ✅ FIXED — full Zod schema for quote response |
-| ~~M10~~ | ~~No retry wrapper on LI.FI API calls~~ | `src/aggregator/lifi.ts` | ✅ FIXED — `withRetry` wraps all LI.FI fetches |
-| ~~M11~~ | ~~Token-2022 incompatible~~ | `src/scanner/checks.ts` | ✅ FIXED — `TOKEN_2022_PROGRAM_ID` detected; returns safe/neutral result instead of misreading bytes |
-| ~~M12~~ | ~~`bot.catch()` swallows errors~~ | `src/bot/index.ts` | ✅ FIXED — logs full context (from, chat, update_type, stack trace) |
-| ~~M13~~ | ~~LI.FI gas cost only takes first entry~~ | `src/aggregator/lifi.ts` | ✅ FIXED — sums all gas cost entries with `reduce` |
-| ~~M14~~ | ~~Dummy addresses in LI.FI~~ | `src/aggregator/lifi.ts` | ✅ ADDRESSED — well-known dummy addresses used only for routing logic, documented with comment |
-| ~~M15~~ | ~~Arbitrum + Base chains have zero tokens~~ | `src/aggregator/chains.ts` | ✅ FIXED — Arbitrum: ETH, USDC, USDT, ARB; Base: ETH, USDC added |
-| ~~M16~~ | ~~No AbortController on quote fetch~~ | `webapp/src/components/SwapPanel.tsx` | ✅ FIXED — `quoteAbortRef` + `AbortController` cancels in-flight quotes on input change |
-| ~~M17~~ | ~~Missing useEffect dependency~~ | `webapp/src/components/SwapPanel.tsx` | ✅ FIXED — `getQuote` wrapped in `useCallback` with full deps; `eslint-disable` comment for Privy stable ref |
-| ~~M18~~ | ~~Privy App ID can be empty string~~ | `webapp/src/main.tsx` | ✅ FIXED — explicit check + red error screen if `VITE_PRIVY_APP_ID` not set |
-| ~~M19~~ | ~~User.walletAddress not indexed~~ | `prisma/schema.prisma` | ✅ FIXED — `@@index([walletAddress])` |
-| ~~M20~~ | ~~Swap.feeAmountUsd is Float~~ | `prisma/schema.prisma` | ✅ FIXED — changed to `Decimal?` for precise USD fee storage |
-| ~~M21~~ | ~~Async Express handlers bypass error handler~~ | `src/api/server.ts` | ✅ FIXED — `asyncHandler` wrapper in server.ts |
-| ~~M22~~ | ~~`@solana/web3.js` still in webapp~~ | `webapp/package.json` | ✅ FIXED — removed; webapp uses `@solana/kit` only |
-| ~~M23~~ | ~~Unused webapp deps~~ | `webapp/package.json` | ✅ FIXED — webapp has minimal clean deps |
-| ~~M24~~ | ~~`@types/express@^5` used with Express 4~~ | `package.json` | ✅ FIXED — now `@types/express: "^4.17.0"` |
-| ~~M25~~ | ~~Retry logic fragile string matching~~ | `src/utils/retry.ts` | ✅ FIXED — checks `err.status` numeric code first; string matching is fallback for network errors |
-
----
-
-### Priority Fix Order
-
-**Before ANY real money flows:** (ALL DONE ✅)
-1. ~~C1 — Fix fee collection (ATA derivation)~~ ✅ DONE
-2. ~~C2 + C3 + C5 — Add Telegram `initData` auth middleware~~ ✅ DONE
-3. ~~C4 — Lock CORS to production origin~~ ✅ DONE
-4. ~~C6 — Fix SOL address in chains.ts~~ ✅ DONE
-5. ~~C7 — Update vercel.json to HTTPS domain~~ ✅ DONE
-6. ~~H1 — Validate quoteResponse server-side (prevent fee bypass)~~ ✅ DONE
-
-**Before beta users:** (MOSTLY DONE)
-7. ~~H2 — Real on-chain confirmation (backend polling + frontend status check)~~ ✅ DONE
-8. H5 — BigInt arithmetic for token amounts (PARTIAL)
-9. ~~H6 + H7 — Upsert + try/catch in startCommand~~ ✅ DONE
-10. ~~H8 + H9 — Input validation on quote parameters~~ ✅ DONE
-11. ~~M1 + M2 — Rate limiting + helmet~~ ✅ DONE
-12. ~~M7 — React Error Boundary~~ ✅ DONE
-13. ~~M8 — Record swaps in DB after execution~~ ✅ DONE
-
-**Remaining before beta:** All done! ✅
-
----
-
 ## Beta Test Checklist
 
-> Run through this checklist after every deploy to `main`. All items must pass before inviting external users.
+Run through this before every deploy to `main`. All items must pass.
 
-### Pre-Test (VPS)
-
+### Pre-Test
 ```bash
-cd ~/solswapbot
-git pull origin main
-npm install
-npx prisma db push
-npm run build
-pm2 restart ecosystem.config.js
-pm2 logs --lines 20  # Confirm "API server running on port 3001" + "Bot is running!"
+pm2 logs --lines 20  # "API server running on port 3001" + "Bot is running!"
 ```
 
 ### Core Flow
-
-- [ ] `/start` in Telegram → Mini App button appears
-- [ ] Tap Mini App → loads, Privy login via Telegram succeeds
-- [ ] Wallet auto-created, address visible in header
-- [ ] Select SOL → USDC, enter 0.001, quote appears within ~2s
-- [ ] Wait 30s → quote auto-refreshes (H4)
-- [ ] Change amount after quote loads, click swap immediately → "Quote is outdated" error (H3)
+- [ ] `/start` → Mini App button appears
+- [ ] Mini App loads, Privy Telegram login succeeds
+- [ ] Wallet auto-created, address visible in Wallet tab
+- [ ] Portfolio shows SOL balance with USD value
+- [ ] Select SOL → USDC, enter 0.001 → quote appears within ~2s
+- [ ] Wait 30s → quote auto-refreshes
+- [ ] Change amount after quote loads, click swap immediately → "Quote is outdated" error
 - [ ] Execute swap → sign in Privy → "Confirming..." → "Swap complete!" with Solscan link
-- [ ] Tap wallet badge → swap appears in history panel
-- [ ] Insufficient balance → clear error message (not Privy simulation failure)
-- [ ] Token selector → search "JUP" → select → quote loads for new pair
-
-### Token Scanner
-
-- [ ] `GET /api/scan?mint=<any-mint>` with auth header → returns risk score 0-100
-
-### Edge Cases
-
-- [ ] Same token both sides → blocked or shows 0
-- [ ] Amount = 0 → swap button disabled
-- [ ] Spam-click swap → only one TX executes
-- [ ] Close Mini App mid-swap → re-open, check history for result
+- [ ] Transaction appears in History tab
+- [ ] Send flow: select SOL → enter address → enter amount → confirm → executes → Solscan link
+- [ ] Scan tab: paste mint address → risk score returns within ~5s
+- [ ] Settings: slippage chip changes → persists on reload
 
 ### Security Spot-Checks
-
 - [ ] `GET /api/user` without `Authorization` header → 401
 - [ ] `POST /api/swap` with modified `platformFeeBps` → 400
-- [ ] Check fee wallet on Solscan → fee arrived from swap
+- [ ] Check fee wallet on Solscan → 0.5% fee arrived from swap
 
-### Done When
+### Edge Cases
+- [ ] Same token both sides → error or disabled
+- [ ] Amount = 0 → swap button disabled
+- [ ] Insufficient balance → clear error (not raw Privy error)
 
-- [ ] End-to-end swap completes with real funds (SOL → USDC)
-- [ ] Fee visible in fee wallet on Solscan
-- [ ] History shows correct records
-- [ ] Scanner returns valid risk scores
-- [ ] No errors in `pm2 logs`
-- [ ] Auth rejects all unauthenticated requests
+---
+
+## What NOT To Do
+
+- **Do NOT push directly to `main`** — always feature branch + merge
+- **Do NOT add bot commands** — all features belong in the Mini App
+- **Do NOT generate or store private keys** — Privy handles all key management
+- **Do NOT build custodial features** — we are non-custodial by design
+- **Do NOT set `CORS_ORIGIN=*` in production** — `config.ts` will crash on startup (intentional)
+- **Do NOT accept `telegramId` from the client body** — always use `res.locals.telegramId`
+- **Do NOT skip `asyncHandler` or try/catch in routes** — unhandled async errors hang requests
+- **Do NOT use `@solana/web3.js` in the webapp** — frontend uses `@solana/kit` only
+- **Do NOT add inline Prisma queries in route files** — put them in `src/db/queries/`
+- **Do NOT use `isValidSolanaAddress` for mint addresses** — use `isValidPublicKey` instead (mints can be PDAs)
+- **Do NOT use PostgreSQL** — SQLite is sufficient, single PM2 instance ensures no write conflicts
+- **Do NOT change `PLATFORM_FEE_BPS` without updating swap.ts validation** — the server validates the quote's feeBps matches config
+
+---
+
+## Phase Roadmap
+
+### Phase 1 — COMPLETE
+Privy wallet integration, in-app swap signing, swap history, basic API.
+
+### Phase 2 — COMPLETE
+Tab navigation, portfolio, send/receive, token scanner, settings, slippage,
+cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use.
+
+### Phase 3 — NEXT (not started)
+
+| Task | Priority | Notes |
+|------|----------|-------|
+| Jupiter API key migration | P0 | `lite-api.jup.ag` sunset imminent |
+| Automated smoke tests | P0 | At minimum: auth, quote, fee validation |
+| Uptime monitoring | P1 | UptimeRobot + Telegram alert on crash |
+| Helius webhook integration | P1 | Required for receive tracking in Transactions tab |
+| Receive tracking in Transactions tab | P1 | Depends on Helius webhooks |
+| LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps |
+| Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
+| TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
+| Whale alert bot notifications | P2 | Bot pushes alerts to user |
+| Subscription payment flow (Telegram Stars) | P2 | Gate premium features |
+| Subscription enforcement in API routes | P2 | Check SubTier before serving premium data |
+
+### Phase 4 — AI & Growth (not started)
+
+| Task | Priority |
+|------|----------|
+| Gemini AI signal analyzer | P3 |
+| SignalsPanel component | P3 |
+| Referral earnings analytics (fees.ts, referrals.ts stubs) | P3 |
+| Exchange affiliate links | P3 |
 
 ---
 
 ## Changelog
 
-### 2026-02-27 — Transactions Tab: 5th tab, date filters, load more, detail modal (v0.5.1)
+### 2026-02-27 — CLAUDE.md Full Rewrite (v0.5.1 doc update)
+- Complete rewrite of CLAUDE.md for AI/external developer onboarding clarity
+- Added full Production Readiness Assessment section
+- Added Known Issues / Technical Debt table (TOKEN-AGE bug documented)
+- Added complete end-to-end Swap Flow and Send Flow sections
+- Corrected all file listings to match actual codebase (added `webapp/src/lib/chains.ts`,
+  confirmed `history.ts` handles both `/api/history` and `/api/activity`)
+- Added detailed Security Model section
+- Trimmed resolved audit issues to a summary table (old detail preserved in git history)
+- Added Phase 3 roadmap with Jupiter API sunset as P0 blocker
 
-**Backend:**
-- New `src/db/queries/transactions.ts` — `getTransactions()` fetches and merges Swap + Transfer rows for a user, resolves token symbols + decimals (via Jupiter metadata cache), converts raw BigInt amounts to human-readable strings, sorts by date desc, and applies offset-based pagination. Supports type filter (all/swap/send) and date range (from/to Date objects).
-- New `src/api/routes/transactions.ts` — `GET /api/transactions` with query params: `type=all|swap|send`, `preset=today|7d|30d`, `from=YYYY-MM-DD`, `to=YYYY-MM-DD`, `offset`, `limit` (1–50). Returns `{ transactions: UnifiedTransaction[], total: number, hasMore: boolean }`.
-- Registered `transactionsRouter` in `src/api/server.ts` (protected, requires Telegram initData auth).
+### 2026-02-27 — Transactions Tab (v0.5.1)
+- New `src/db/queries/transactions.ts` — merges Swap+Transfer, resolves symbols, paginates
+- New `src/api/routes/transactions.ts` — GET /api/transactions with type/date/offset/limit params
+- New `webapp/src/components/TransactionsTab.tsx` — 5th tab with all filter/pagination UI
+- Updated TabBar for 5 tabs, App.tsx wired up, api.ts has fetchTransactions()
 
-**Frontend:**
-- New `webapp/src/components/TransactionsTab.tsx` — full transactions history UI:
-  - Type filter chips: All / 🔄 Swaps / 📤 Sends / 📥 Receives
-  - Date preset chips: Today / 7 days / 30 days / 📅 Custom
-  - Custom date range: two `<input type="date">` fields (from + to)
-  - Results grouped by month with item count
-  - Compact transaction rows: icon, token pair / amount, status emoji, timestamp
-  - "Load 20 more" button with pagination (offset-based)
-  - "Showing X of Y transactions" count line
-  - Tap any row → slide-up detail modal (amounts, fee, date, chain, tx ID, Solscan link, copy tx)
-  - Receives tab shows informative placeholder + wallet address copy (Helius webhook tracking coming Phase 3)
-  - Shimmer skeleton loading state on initial load
-  - Haptic feedback on tab/filter changes
-- Updated `webapp/src/components/TabBar.tsx` — added "history" as 5th tab (📋 History). Added `.tab-bar--five` class for 5-tab font-size tuning.
-- Updated `webapp/src/App.tsx` — imports `TransactionsTab`, renders it on `activeTab === "history"`.
-- Updated `webapp/src/lib/api.ts` — added `UnifiedTransaction` and `TransactionsResponse` interfaces, `fetchTransactions()` function.
-- Added `webapp/src/styles/index.css` — full Transactions tab styles: type chips, date chips, custom range inputs, month dividers, tx rows, load more, empty state, receives placeholder, detail modal (overlay + sheet + status badge + detail rows + sig copy + Solscan link), skeleton shimmer rows. `.tab-bar--five` label font-size override.
+### 2026-02-27 — Scanner: Animated Gauge + New Checks (v0.4.3)
+- `checkJupiterVerified` (weight 10) and `checkHasMetadata` (weight 15) added to scanner
+- `RiskGauge.tsx` rewritten as animated SVG speedometer with CSS transition
+- Token icon/name/symbol displayed in gauge from Jupiter cache
+- Legal disclaimer added below scan results
 
-**Phase 3 note:** Receives (incoming transfers) require Helius webhook integration to track. Placeholder shown in UI explaining this. Bumped to P1 priority in Phase 3 table.
+### 2026-02-27 — Pull-to-Refresh + All Medium Audit Issues Resolved (v0.4.2)
+- Pull-to-refresh gesture in WalletTab
+- Confirmed all 25 MEDIUM audit issues resolved in code
 
-**New files:** `src/db/queries/transactions.ts`, `src/api/routes/transactions.ts`, `webapp/src/components/TransactionsTab.tsx`
+### 2026-02-27 — Terms of Use Modal (v0.4.1)
+- TermsModal: scroll-to-bottom gate, localStorage acceptance, re-viewable in Settings
+- Version number corrected in SettingsPanel
 
----
+### 2026-02-26 — Sprint 2C: Polish (v0.4.0)
+- Toast system (toast.ts + Toast.tsx), haptic feedback, recent tokens chips
+- Cross-chain swap UI (CcTokenModal + chains.ts), tab transition animations
+- Scan layout fix (stacked input), tab active indicator
 
-### 2026-02-27 — Scanner: Animated Gauge, Token Name Fix, New Checks, Disclaimer (v0.4.3)
+### 2026-02-26 — Sprint 2B: Scan + Send + Settings (v0.3.0)
+- POST /api/send, ScanPanel, RiskGauge, SettingsPanel, SendFlow
+- Slippage localStorage + passed to quote API
+- GET /api/user now returns referralCode + referralCount
 
-**Backend:**
-- `src/scanner/checks.ts`: Added two new synchronous checks (zero extra RPC calls):
-  - `checkJupiterVerified` (weight 10) — token on Jupiter's verified list = safe; not found = mild risk
-  - `checkHasMetadata` (weight 15) — token has name + symbol = safe; anonymous = risk
-  - New max possible score: 105 (clamped to 100). Score thresholds unchanged (0-20 LOW, 21-50 MEDIUM, 51+ HIGH)
-- `src/scanner/analyze.ts`: Fetches `tokenMeta` via `getTokenByMint()` (Jupiter cache, no extra network call for cached tokens) in parallel with existing RPC calls. Runs new checks. Extends `ScanResult.tokenInfo` with `name`, `symbol`, `icon` fields.
+### 2026-02-26 — Sprint 2A: Tab Navigation + Wallet Tab (v0.2.0)
+- TabBar, WalletTab, SwapPanel (extracted), ReceiveModal
+- GET /api/user/portfolio (batched prices)
 
-**Frontend:**
-- `RiskGauge.tsx`: Full rewrite — animated SVG semicircle arc (speedometer/gauge). Green→yellow→red gradient via `linearGradient`. Score arc animates from 0 → score via `stroke-dashoffset` CSS transition (1.2s ease) on mount and score change. Token `icon`, `symbol`, `name` displayed above the gauge.
-- `ScanPanel.tsx`: Passes `tokenName`/`tokenSymbol`/`tokenIcon` to `RiskGauge`. Truncated mint address shown below gauge. Legal disclaimer added below every scan result. Recent scans now show token symbol (e.g. "BONK") instead of truncated mint address.
-- `webapp/src/lib/api.ts`: `ScanResult.tokenInfo` interface extended with `name`, `symbol`, `icon`.
-- `index.css`: New SVG gauge styles (`.risk-gauge-svg`, `.risk-gauge-number`, `.risk-gauge-denom`, `.risk-token-header`, `.risk-token-icon`, `.risk-token-symbol`, `.risk-token-name`). New `.scan-mint-addr` and `.scan-disclaimer` block.
+### 2026-02-26 — Security Hardening
+- Telegram initData HMAC auth middleware
+- CORS lockdown, trust proxy fix, helmet, rate limiting
+- Fee bypass prevention (platformFeeBps server-side validation)
+- On-chain confirmation polling
 
-**Planned future scanner improvements (from research — not yet built):**
-- Jupiter Token API v2 `organicScore`, `liquidity`, `holderCount`, `firstPool.createdAt` (pool age), `cexes[]`
-- Helius `getAsset` for update authority / metadata mutability check
-- Token-2022 extension parsing: permanent delegate, transfer fees, transfer hook
-- Known program exclusion from top-holder concentration (filters Raydium pool accounts)
-- Single wallet >20% of supply check (from existing `getTokenLargestAccounts` data)
-- LP burned detection via `getTokenLargestAccounts(lpMint)` burn address check
+### 2026-02-25 — Jupiter API Migration
+- Token API V1 → V2 (`/tokens/v2/tag?query=verified`)
+- Price API V2 → V3 (`/price/v3/price`)
+- Hardcoded fallback tokens added
 
-### 2026-02-27 — Phase 2 Complete: Pull-to-Refresh + All Medium Issues Resolved (v0.4.2)
-
-**Frontend:**
-- Added pull-to-refresh to `WalletTab.tsx` — touch-based gesture using `touchstart`/`touchmove`/`touchend` on the wallet tab root. Detects scroll position of `.tab-content` parent to only allow gesture from the top. Shows visual indicator (spinner + label) with pull progress (0→100%) and "Release to refresh" / "Refreshing..." states. On release at threshold, fires `refreshAll()` which reloads both portfolio and activity in parallel.
-- Added CSS classes: `.ptr-indicator`, `.ptr-spinner`, `.ptr-spinner--spinning`, `.ptr-label`.
-
-**CLAUDE.md audit corrections — all medium issues were already fixed in code:**
-- M3 ✅ — `getTokensMetadata` batch lookup in history route (no N+1)
-- M4 ✅ — `pendingLoad` promise dedup in `tokens.ts` (no thundering herd)
-- M5 ✅ — `cachedAccountInfo` + `cachedTotalSupply` shared between scanner checks (no redundant RPC)
-- M6 ✅ — `errored: true` flag; scanner errors return `safe: true` (don't inflate score)
-- M9 ✅ — Full Zod schema for LI.FI quote response in `lifi.ts`
-- M10 ✅ — `withRetry` wraps all LI.FI fetches
-- M11 ✅ — `TOKEN_2022_PROGRAM_ID` detected in scanner; returns neutral result
-- M12 ✅ — `bot.catch()` logs full context (from, chat, update type, stack)
-- M13 ✅ — LI.FI gas sums all entries with `reduce` (not just first)
-- M14 ✅ — Dummy LI.FI addresses documented, acceptable pattern for routing-only
-- M15 ✅ — Arbitrum/Base now have ETH, USDC, USDT, ARB tokens in `chains.ts`
-- M16 ✅ — `quoteAbortRef` + `AbortController` in `SwapPanel.tsx`
-- M17 ✅ — `getQuote` in `useCallback` with full deps in `SwapPanel.tsx`
-- M18 ✅ — Explicit `VITE_PRIVY_APP_ID` check with error UI in `main.tsx`
-- M20 ✅ — `feeAmountUsd` is `Decimal?` in Prisma schema
-- M22 ✅ — `@solana/web3.js` not in `webapp/package.json`
-- M23 ✅ — Webapp has minimal clean deps (`@privy-io/react-auth`, `@solana/kit`, `qrcode.react`, React)
-- M24 ✅ — `@types/express: "^4.17.0"` (not v5)
-- M25 ✅ — Retry checks `err.status` numeric code first; strings are fallback
-
-**Overall rating updated: 7.5 → 9.0/10** — all C, H, and M issues resolved.
-
----
-
-### 2026-02-27 — Terms of Use + Legal Disclaimer (v0.4.1)
-
-**Frontend only (no backend changes):**
-- Created `webapp/src/components/TermsModal.tsx` — first-launch gate modal (full-screen bottom sheet). Shows 8 legal sections covering: non-custodial wallet, not financial advice, DeFi risks, platform fee (0.5%), no KYC/pseudonymous use, no fiat services, eligibility (18+), limitation of liability.
-- Terms must be scrolled to bottom before "I Agree" button activates — prevents blind acceptance.
-- Acceptance stored in `localStorage` under key `solswap_terms_accepted`. Shown once on first launch; never shown again after acceptance.
-- Wired into `App.tsx` as the first gate before even showing the loading/onboarding screen.
-- Added "View Terms of Use" button to `SettingsPanel.tsx` About section — re-opens modal for users who want to re-read terms.
-- Added all Terms modal styles to `index.css`: overlay, sheet, header, scrollable body, section headings, footer with accept button (disabled state → ready state), settings link style.
-- Fixed version number in SettingsPanel About section: v0.2.0 → v0.4.0.
-- Fixed `CLAUDE.md` inaccuracies: added `Transfer` model (6th DB model), added `/api/activity` + `/api/transfer/confirm` routes, marked M21 as fixed (asyncHandler), updated file structure.
-
-**New files:** `webapp/src/components/TermsModal.tsx`
-
----
-
-### 2026-02-26 — Sprint 2C: Polish, Toast System, Haptic Feedback, Recent Tokens (v0.4.0)
-
-**Frontend only (no backend changes):**
-- Created `webapp/src/lib/toast.ts` — global toast utility using `window.dispatchEvent(CustomEvent("solswap:toast"))`. Any component calls `toast(message, type)` — no prop drilling.
-- Created `webapp/src/components/Toast.tsx` — listens for `solswap:toast` events and renders floating pill notifications (success=green, error=red, info=purple). Auto-dismisses after 2.5s.
-- Wired `toast()` into all copy actions: `ReceiveModal` ("Address copied!"), `WalletTab` ("Address copied!"), `SettingsPanel` ("Address copied!" + "Referral link copied!"), `SendFlow` ("Transaction sent!").
-- Added haptic feedback in `App.tsx`: `tg.HapticFeedback.selectionChanged()` on tab switch.
-- Added haptic feedback in `SwapPanel.tsx`: `impactOccurred("medium")` on swap button tap; `notificationOccurred("success"/"error")` on swap confirmed/failed.
-- Added swap toast notifications: "Swap confirmed!" on success, error message on failure.
-- Added recent tokens chips to `SwapPanel.tsx`: saves last 5 selected tokens to `localStorage` (`solswap_recent_tokens`); shows up to 4 chips as a horizontal scrollable row above the swap card; clicking a chip sets the input token.
-- Fixed scan tab layout: `ScanPanel.tsx` now has stacked input+button layout with clear (✕) and paste (📋) buttons inside the input wrapper.
-- Added CSS: tab active indicator (`::before` 2px accent line at top + subtle bg), toast container/item styles with slide-in animation, scan stacked layout classes (`scan-input-wrap`, `scan-clear-btn`, `scan-paste-btn`, `scan-submit-btn`, `btn-spinner`), recent token chip styles, tab fade-in animation on all panel components (`.wallet-tab`, `.swap-panel`, `.scan-panel`, `.settings-panel`).
-
-**New files:** `webapp/src/lib/toast.ts`, `webapp/src/components/Toast.tsx`
-
----
-
-### 2026-02-26 — Sprint 2B: Scan Tab + Send Flow + Settings Panel (Phase 2B Complete)
-
-**Backend:**
-- Added `POST /api/send` (`src/api/routes/send.ts`) — builds an unsigned `VersionedTransaction` for native SOL transfers (`SystemProgram.transfer`) or SPL token transfers (`createTransferInstruction`). Auto-creates recipient ATA if it doesn't exist (sender pays rent). Returns base64 tx + `lastValidBlockHeight`. Registered in `server.ts`.
-- Updated `GET /api/user` to include `referralCode` and `referralCount` in the response — uses the existing `getUserWithReferralCount` query (which was already implemented in `users.ts`).
-- Updated `GET /api/quote` to accept optional `slippageBps` query param (integer, 0–5000). Validated and passed through to `getQuote()`. Existing default of 50bps unchanged when param is omitted.
-
-**Frontend:**
-- Created `webapp/src/components/SettingsPanel.tsx` — slippage selector (0.1%/0.5%/1.0%/custom) stored in `localStorage`; full wallet address + copy + QR (reuses `ReceiveModal`); referral code display + copy share link; about section; logout button.
-- Created `webapp/src/components/RiskGauge.tsx` — color-coded risk score display (LOW=green, MEDIUM=yellow, HIGH=red) with numeric score and badge label.
-- Created `webapp/src/components/ScanPanel.tsx` — mint address input + scan button; calls `GET /api/scan`; displays `RiskGauge` + per-check pass/fail results + token info (supply, price, decimals); "Swap This Token" navigates to Swap tab; recent scans stored in `localStorage` (up to 5).
-- Created `webapp/src/components/SendFlow.tsx` — 5-step bottom-sheet modal: select token → enter recipient + amount → confirm summary → executing (Privy sign) → done (Solscan link) / error. Signs using Privy `useSignAndSendTransaction`. Send button wired in `WalletTab`.
-- Updated `webapp/src/components/SwapPanel.tsx` — added `slippageBps` prop passed to `fetchQuote`; added `onOpenSettings` prop; header now shows ⚙️ `slippageBps%` button that navigates to Settings tab.
-- Updated `webapp/src/components/WalletTab.tsx` — Send action button now opens `SendFlow` (was disabled). `SendFlow` receives `portfolio.tokens` and `onSent` callback to refresh portfolio.
-- Updated `webapp/src/App.tsx` — `slippage` state loaded from `localStorage` (default 50bps); `ScanPanel` and `SettingsPanel` replace placeholder tabs; `slippageBps` and `onOpenSettings` passed to `SwapPanel`; `handleSlippageChange` syncs state + localStorage.
-- Updated `webapp/src/lib/api.ts` — `fetchQuote` accepts optional `slippageBps`; `UserData` adds `referralCode`/`referralCount`; new `ScanResult`/`ScanCheckResult` interfaces; new `fetchTokenScan()` and `fetchSendTransaction()` functions.
-- Added Sprint 2B CSS to `webapp/src/styles/index.css` — styles for SettingsPanel, slippage chips, RiskGauge, ScanPanel (checks/info/recent), SendFlow (overlay/sheet/steps/status).
-
-**New files:** `src/api/routes/send.ts`, `webapp/src/components/ScanPanel.tsx`, `webapp/src/components/RiskGauge.tsx`, `webapp/src/components/SettingsPanel.tsx`, `webapp/src/components/SendFlow.tsx`
-
----
-
-### 2026-02-26 — Sprint 2A: Tab Navigation + Wallet Tab + Receive Flow (Phase 2A Complete)
-
-**Backend:**
-- Added `GET /api/user/portfolio` to `src/api/routes/user.ts` — returns all held tokens with USD prices in one batched call (avoids N+1). Uses new `getTokenPricesBatch()` (Jupiter Price API v3) and `getTokensMetadata()` for parallel lookup. Tokens sorted by USD value desc.
-- Added `getTokenPricesBatch(mints)` to `src/jupiter/price.ts` — batch-fetches prices for multiple mints in a single API call.
-- Added `getTokensMetadata(mints)` to `src/jupiter/tokens.ts` — batch metadata lookup from cached token list.
-
-**Frontend:**
-- Refactored `App.tsx` as a clean tab router. Shared state (walletAddress, tokenBalances, solBalance, refreshBalance) lives in App.tsx and is passed to tabs as props. Auth guards (loading, onboarding) remain in App.tsx.
-- Created `webapp/src/components/TabBar.tsx` — fixed bottom navigation bar (Wallet / Swap / Scan / Settings). Scan and Settings tabs show "Coming soon" placeholder for Sprint 2B.
-- Created `webapp/src/components/SwapPanel.tsx` — extracted all swap logic from App.tsx. Self-contained with its own Privy hooks, token loading, quote + swap state, and history slide-up panel.
-- Created `webapp/src/components/WalletTab.tsx` — portfolio home screen. Shows total USD value, short address + copy, action buttons (Receive, Send placeholder, Swap), and token list with icon/symbol/amount/USD value. Skeleton loading states.
-- Created `webapp/src/components/ReceiveModal.tsx` — bottom-sheet modal with QR code (via `qrcode.react`), full wallet address, copy button, share button (Telegram or Web Share API), and SPL safety warning.
-- Added `PortfolioToken`, `Portfolio` interfaces and `fetchPortfolio()` to `webapp/src/lib/api.ts`.
-- Installed `qrcode.react ^4.2.0` in webapp.
-- Added comprehensive Phase 2A CSS: tab bar, wallet tab, portfolio list, skeleton shimmer, modal system, receive modal, placeholder tabs.
-
-**Doc fixes:**
-- `GET /api/user` response noted as NOT YET including `referralCode`/`referralCount` (Sprint 2B).
-- `fees.ts` and `referrals.ts` correctly noted as stubs with no active logic.
-- Phase 2 Summary Table updated with Sprint 2A items all marked DONE.
-- Phase 2 New File Structure updated to reflect actual vs planned files.
-
-### 2026-02-26 — Phase 2 Planning + Beta Test Checklist
-- Added comprehensive Beta Test Checklist to CLAUDE.md (pre-test, core flow, edge cases, security checks)
-- Designed full Phase 2 plan: Mini App UI & Wallet Features
-- Phase 2 adds: Tab navigation (Wallet/Swap/Scan/Settings), portfolio view, send/receive flows,
-  token scanner UI, settings panel with slippage control, QR code receive, referral sharing
-- Organized into 3 sprints: 2A (architecture + wallet), 2B (scan + send + settings), 2C (polish)
-- New backend routes planned: GET /api/user/portfolio, POST /api/send
-- New webapp components: TabBar, WalletTab, SwapPanel, ScanPanel, SettingsPanel, ReceiveModal,
-  SendFlow, RiskGauge, Toast
-- UX patterns modeled after Phantom, Tonkeeper, and Telegram mini app best practices
-
-### 2026-02-26 — Stale Quote Prevention, Quote Expiry, Timeout Handling (H3/H4/H10)
-- Fixed stale quote race condition (H3): quotes now snapshot the inputs (amount, mints) they were fetched for; `handleSwap` verifies current inputs match the quote before proceeding. Added AbortController to cancel in-flight quote fetches when inputs change.
-- Fixed lastValidBlockHeight expiry (H4): quotes auto-expire after 30 seconds and auto-refresh. Swap rejects expired quotes and triggers a fresh quote fetch.
-- Fixed timeout marked as FAILED (H10): backend now uses `TIMEOUT` status (new Prisma enum value) instead of `FAILED` when polling times out. Frontend handles TIMEOUT gracefully — shows as complete with Solscan link, not as a definitive failure.
-- All beta-blocking HIGH issues now resolved. Codebase is ready for beta testing.
-
-### 2026-02-26 — Trust Proxy Fix + Dynamic Balance Checking
-- Fixed `express-rate-limit` `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` error on VPS by adding `app.set("trust proxy", 1)` — rate limiting now correctly identifies users by real IP behind Vercel proxy
-- Fixed token balance check: tokens not held (0 balance) were treated as "unknown" instead of 0, allowing users to attempt swaps on tokens they don't own. Now correctly returns 0 when balances are loaded but token isn't in wallet
-- Updated audit report: all 7 CRITICAL issues now marked ✅ FIXED, overall rating 4.0 → 6.5/10
-- Updated priority fix order to reflect current state (all pre-production items done)
-
-### 2026-02-25 — Security Hardening (C2-C7, H1-H2, H6-H9, H11-H12, M1-M2, M8, M19)
-- Added Telegram `initData` HMAC auth middleware (C2/C3/C5) — all protected routes now verify identity
-- Locked CORS to reject wildcard in production (C4)
-- Fixed SOL address mismatch in chains.ts (C6)
-- Updated vercel.json to HTTPS domain (C7)
-- Added `platformFeeBps` validation in swap route to prevent fee bypass (H1)
-- Replaced fake 2s confirmation with backend on-chain polling + frontend status polling (H2)
-- Added upsert + try/catch in /start command (H6/H7)
-- Added input validation (amount, mint addresses) in quote route (H8/H9)
-- Exposed Express server for graceful shutdown (H11)
-- Added `@@index([txSignature])` and `@@index([walletAddress])` to Prisma schema (H12/M19)
-- Added `express-rate-limit` (100 req/min) and `helmet` security headers (M1/M2)
-- Added `confirmSwap` + `fetchSwapStatus` for DB recording and status polling (M8)
-- Added Token Selector component with search, popular tokens list, and icon display
-- Added `GET /api/user/balances` endpoint for dynamic SPL token balance fetching
-- Frontend now shows balance for any selected input token with MAX button
-
-### 2026-02-25 — Jupiter API Migration (V1→V2 Tokens, V2→V3 Price)
-- Migrated Token List API from deprecated V1 (`/tokens/v1/strict`, dead since Aug 2025) to V2 (`/tokens/v2/tag?query=verified`)
-- V2 uses different field names: `id` (not `address`), `icon` (not `logoURI`) — normalized in `loadTokenList()`
-- Migrated Price API from deprecated V2 (`/price/v2`) to V3 (`/price/v3/price`)
-- V3 response is flat `{ MINT: { usdPrice } }` instead of nested `{ data: { MINT: { price } } }`
-- Added hardcoded `FALLBACK_TOKENS` (10 popular tokens) so app works even if Jupiter API is down
-- Swap/Quote API (`/swap/v1/`) unchanged — still current
-- **Note:** `lite-api.jup.ag` (free, no key) is being sunset. Future migration needed to `api.jup.ag` with API key from portal.jup.ag (free tier = 60 req/min)
-- Confirmed C1 (fee collection) was already fixed — ATA derivation is correct, updated audit accordingly
-
-### 2026-02-25 — Full Codebase Audit
-- Comprehensive deep-dive audit of every file (6 parallel audits)
-- Identified 7 CRITICAL, 12 HIGH, 25 MEDIUM issues
-- Overall rating: 4.0/10 — solid architecture, critical security gaps
-- Key findings: fee collection likely broken (C1), zero API auth (C2), wallet hijacking (C3)
-- SOL address mismatch between constants.ts and chains.ts (C6)
-- Added priority fix order and detailed findings to CLAUDE.md
-- Updated Revenue Flow with fee collection warning
-- Corrected Coding Patterns to reflect actual (not aspirational) state
-
-### 2026-02-24 — Phase 1: Privy Wallet Integration
-- Integrated @privy-io/react-auth SDK in webapp (v3.14.1)
-- Replaced Phantom deep-link flow with Privy embedded wallet signing
-- Added Telegram login via PrivyProvider config
-- Auto-create Solana wallet on first login (createOnLogin: "all-users")
-- Added useSignAndSendTransaction for in-app swap signing
-- Added POST /api/user/wallet route (auto-saves Privy wallet to DB)
-- Added GET /api/history route (last 20 swaps, symbol resolution)
-- Added swap history slide-up panel (tap wallet badge to open)
-- Added logout button, tx confirmation link (Solscan)
-- Removed @solana/web3.js dependency from webapp (only used in backend now)
-
-### 2026-02-24 — Documentation Overhaul
-- Merged CONTEXT.md into CLAUDE.md as single source of truth
-- Added implementation status tracking with phases
-- Updated all docs to reflect actual codebase state vs aspirational features
-- Fixed .env.example PRIVY_APP_ID naming mismatch
-- Added project ratings and gap analysis
+### 2026-02-24 — Phase 1: Privy Integration
+- Privy embedded wallet + in-app swap signing
+- POST /api/user/wallet, GET /api/history, swap history panel
