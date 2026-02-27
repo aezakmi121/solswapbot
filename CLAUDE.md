@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **This is the single source of truth for the SolSwap project.**
-> Updated: 2026-02-27 | Version: 0.4.3 (Scanner: animated gauge, token name fix, new checks, disclaimer)
+> Updated: 2026-02-27 | Version: 0.5.0 (Phase 2 complete: scan history DB, cross-chain swap UI)
 > Read this file FIRST before making any changes.
 
 ---
@@ -322,17 +322,17 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | Receive flow (address + QR code + copy + share) | DONE | P0 | 2A |
 | Send flow (token select → address → amount → confirm → send) | DONE | P1 | 2B |
 | GET /api/user/portfolio endpoint (balances + USD prices) | DONE | P0 | 2A |
-| Transaction history (all types, not just swaps) | NOT STARTED | P1 | 2B |
-| Pull-to-refresh on portfolio | NOT STARTED | P2 | 2C |
+| Transaction history (all types, not just swaps) | DONE | P1 | 2B |
+| Pull-to-refresh on portfolio | DONE | P2 | 2C |
 | **Scan Tab** | | | |
 | ScanPanel — mint address input + search | DONE | P1 | 2B |
 | Risk score gauge (0-100, color-coded arc) | DONE | P1 | 2B |
 | Individual check results (pass/fail with details) | DONE | P1 | 2B |
 | Token info display (supply, price, age) | DONE | P1 | 2B |
-| "Swap this token" quick action → navigates to Swap tab | NOT STARTED | P2 | 2C |
-| Recent scans list (from DB) | NOT STARTED | P2 | 2C |
-| GET /api/scan/history endpoint | NOT STARTED | P2 | 2C |
-| Frontend `fetchScan` API function | NOT STARTED | P1 | 2B |
+| "Swap this token" quick action → navigates to Swap tab | DONE | P2 | 2C |
+| Recent scans list (localStorage + DB history) | DONE | P2 | 2C |
+| GET /api/scan/history endpoint | DONE | P2 | 2C |
+| Frontend `fetchScanHistory` API function | DONE | P1 | 2B |
 | **Settings Tab** | | | |
 | View full wallet address + copy button | DONE | P1 | 2B |
 | Show wallet QR code | DONE | P1 | 2B |
@@ -343,7 +343,7 @@ All routes are served from Express on port 3001. Vercel rewrites `/api/*` to the
 | **Swap Tab Enhancements** | | | |
 | Slippage settings gear icon (uses Settings value) | DONE | P1 | 2B |
 | Recent/favorite tokens shortcut | DONE | P2 | 2C |
-| Cross-chain swap UI (chain selector for LI.FI) | NOT STARTED | P2 | 2C |
+| Cross-chain swap UI (chain selector for LI.FI) | DONE | P2 | 2C |
 | **UI/UX Polish** | | | |
 | Skeleton loading states (shimmer placeholders) | PARTIAL | P2 | 2C |
 | Toast notifications (copy, send, errors) | DONE | P2 | 2C |
@@ -688,7 +688,7 @@ Minor improvements to existing swap UI:
 | 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No | ✅ DONE |
 | 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No | ✅ DONE |
 | 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No | ✅ DONE |
-| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No | NOT STARTED |
+| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No | ✅ DONE |
 | 9 | Tab transition animations | `index.css` | No | ✅ DONE |
 | 10 | Tab active indicator (visible line + bg) | `index.css` | No | ✅ DONE |
 | 11 | Scan layout fix (stacked input + paste btn) | `ScanPanel.tsx`, `index.css` | No | ✅ DONE |

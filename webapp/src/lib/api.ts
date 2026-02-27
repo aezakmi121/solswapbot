@@ -357,3 +357,70 @@ export async function fetchSendTransaction(params: {
     }
     return res.json();
 }
+
+// ─── Scan History ──────────────────────────────────────────────────────────────
+
+export interface ScanHistoryItem {
+    id: string;
+    mintAddress: string;
+    tokenName: string | null;
+    tokenSymbol: string | null;
+    riskScore: number;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    createdAt: string;
+}
+
+/** Fetch the user's last 10 token scans from the DB */
+export async function fetchScanHistory(): Promise<ScanHistoryItem[]> {
+    const res = await fetch(`${API_BASE}/api/scan/history`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch scan history");
+    }
+    const data = await res.json();
+    return data.scans;
+}
+
+// ─── Cross-Chain ───────────────────────────────────────────────────────────────
+
+export interface CrossChainQuoteResult {
+    provider: "jupiter" | "lifi";
+    isCrossChain: boolean;
+    inputChain: string;
+    outputChain: string;
+    inputAmount: string;
+    outputAmount: string;
+    outputAmountUsd: string;
+    feeUsd: string;
+    estimatedTimeSeconds: number;
+    error: string | null;
+}
+
+/** Get a cross-chain or same-chain quote via the smart router (Jupiter or LI.FI) */
+export async function fetchCrossChainQuote(params: {
+    inputToken: string;
+    outputToken: string;
+    inputChain: string;
+    outputChain: string;
+    amount: string;
+    slippageBps?: number;
+}): Promise<CrossChainQuoteResult> {
+    const searchParams = new URLSearchParams({
+        inputToken: params.inputToken,
+        outputToken: params.outputToken,
+        inputChain: params.inputChain,
+        outputChain: params.outputChain,
+        amount: params.amount,
+    });
+    if (params.slippageBps !== undefined) {
+        searchParams.set("slippageBps", String(params.slippageBps));
+    }
+    const res = await fetch(`${API_BASE}/api/cross-chain/quote?${searchParams}`, {
+        headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to get cross-chain quote");
+    return data;
+}
