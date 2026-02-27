@@ -265,6 +265,9 @@ export interface ScanResult {
         supply: string | null;
         decimals: number | null;
         price: number | null;
+        name: string | null;
+        symbol: string | null;
+        icon: string | null;
     };
     scannedAt: string;
 }

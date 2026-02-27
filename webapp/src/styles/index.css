@@ -1776,32 +1776,70 @@ body {
   opacity: 0.85;
 }
 
-/* ── Risk Gauge ── */
+/* ── Risk Gauge (SVG arc speedometer) ── */
 .risk-gauge {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 0 16px;
-  gap: 10px;
+  padding: 20px 0 12px;
+  gap: 8px;
 }
 
-.risk-gauge-score {
+/* Token identity row above the gauge */
+.risk-token-header {
   display: flex;
-  align-items: baseline;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.risk-score-number {
-  font-size: 3rem;
+.risk-token-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.risk-token-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-token-symbol {
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: -1px;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.risk-score-denom {
-  font-size: 1.1rem;
-  color: var(--text-muted);
+.risk-token-name {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+/* SVG arc */
+.risk-gauge-svg {
+  width: 220px;
+  height: auto;
+  overflow: visible;
+}
+
+/* SVG text nodes — rendered inside the SVG */
+.risk-gauge-number {
+  font-size: 42px;
+  font-weight: 700;
+  fill: var(--text-primary);
+  font-family: var(--font);
+  letter-spacing: -2px;
+}
+
+.risk-gauge-denom {
+  font-size: 13px;
+  fill: var(--text-muted);
   font-weight: 500;
+  font-family: var(--font);
 }
 
 .risk-badge {
@@ -2005,6 +2043,45 @@ body {
   width: 100%;
   margin-top: 4px;
   margin-bottom: 12px;
+}
+
+/* Truncated mint address shown below the gauge */
+.scan-mint-addr {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: monospace;
+  letter-spacing: 0.3px;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+/* Disclaimer block */
+.scan-disclaimer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(251, 191, 36, 0.07);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+
+.scan-disclaimer-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+.scan-disclaimer-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.scan-disclaimer-text strong {
+  color: var(--warning);
 }
 
 .scan-recent {
