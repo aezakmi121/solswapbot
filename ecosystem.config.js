@@ -19,6 +19,7 @@ module.exports = {
       exp_backoff_restart_delay: 1000, // Exponential backoff on crashes
       max_restarts: 50,
       min_uptime: "10s", // Consider "started" after 10s uptime
+      kill_timeout: 10000, // Give shutdown handler 10s to drain in-flight requests before SIGKILL
     },
   ],
 };

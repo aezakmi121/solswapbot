@@ -1,4 +1,5 @@
 import { withRetry } from "../utils/retry";
+import { config } from "../config";
 
 /** Token info from Jupiter Token API */
 export interface JupiterToken {
@@ -45,8 +46,11 @@ const FALLBACK_TOKENS: JupiterToken[] = [
   { address: "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",  symbol: "RENDER", name: "Render Token",  decimals: 8,  logoURI: null },
 ];
 
-/** Jupiter Tokens API V2 (V1 was deprecated August 2025) */
-const JUPITER_TOKEN_LIST_URL = "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
+/** Jupiter Tokens API V2 — derives base from JUPITER_API_URL (e.g. https://api.jup.ag) */
+function getTokenListUrl(): string {
+  const base = config.JUPITER_API_URL.replace(/\/swap\/v1\/?$/, "");
+  return `${base}/tokens/v2/tag?query=verified`;
+}
 
 /** Raw shape returned by Jupiter Tokens API V2 */
 interface JupiterTokenV2 {
@@ -70,7 +74,9 @@ async function loadTokenList(): Promise<JupiterToken[]> {
   pendingLoad = (async () => {
     try {
       const raw = await withRetry(async () => {
-        const res = await fetch(JUPITER_TOKEN_LIST_URL);
+        const headers: Record<string, string> = {};
+        if (config.JUPITER_API_KEY) headers["x-api-key"] = config.JUPITER_API_KEY;
+        const res = await fetch(getTokenListUrl(), { headers });
         if (!res.ok) {
           throw new Error(`Jupiter token list failed (${res.status})`);
         }

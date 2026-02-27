@@ -58,7 +58,9 @@ export async function getQuote(params: {
     });
 
     const url = `${config.JUPITER_API_URL}/quote?${searchParams}`;
-    const response = await fetch(url);
+    const headers: Record<string, string> = {};
+    if (config.JUPITER_API_KEY) headers["x-api-key"] = config.JUPITER_API_KEY;
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       const body = await response.text();
