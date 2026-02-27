@@ -52,7 +52,7 @@ resp=$(curl -sf "$BASE_URL/api/price/So11111111111111111111111111111111111111112
 check_body "GET /api/price/:mint returns priceUsd" '"priceUsd"' "$resp"
 
 resp=$(curl -sf "$BASE_URL/api/tokens" 2>/dev/null || echo "CURL_FAILED")
-check_body "GET /api/tokens returns token list" '"address"' "$resp"
+check_body "GET /api/tokens returns token list" '"mint"' "$resp"
 
 resp=$(curl -sf "$BASE_URL/api/tokens/search?query=SOL" 2>/dev/null || echo "CURL_FAILED")
 check_body "GET /api/tokens/search?query=SOL returns results" '"symbol"' "$resp"
