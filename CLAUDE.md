@@ -688,14 +688,14 @@ Minor improvements to existing swap UI:
 | 5 | Recent scans list (localStorage) | `ScanPanel.tsx` | No | ✅ DONE |
 | 6 | "Swap this token" cross-tab navigation | `ScanPanel.tsx`, `App.tsx` | No | ✅ DONE |
 | 7 | Recent/favorite tokens in SwapPanel | `SwapPanel.tsx` | No | ✅ DONE |
-| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx` | No | ✅ DONE |
+| 8 | Cross-chain swap UI (chain selector) | `SwapPanel.tsx`, `CcTokenModal.tsx` | No | ✅ DONE |
 | 9 | Tab transition animations | `index.css` | No | ✅ DONE |
 | 10 | Tab active indicator (visible line + bg) | `index.css` | No | ✅ DONE |
 | 11 | Scan layout fix (stacked input + paste btn) | `ScanPanel.tsx`, `index.css` | No | ✅ DONE |
 | 12 | Toast wired into all copy/send actions | All components | No | ✅ DONE |
 | 13 | Terms of Use modal (first-launch gate + re-viewable in Settings) | `TermsModal.tsx`, `SettingsPanel.tsx`, `App.tsx`, `index.css` | No | ✅ DONE |
 
-**New files created:** `Toast.tsx`, `toast.ts`, `TermsModal.tsx`
+**New files created:** `Toast.tsx`, `toast.ts`, `TermsModal.tsx`, `CcTokenModal.tsx`
 
 ---
 
@@ -717,7 +717,8 @@ webapp/src/
 │   ├── SendFlow.tsx           # Multi-step send (select token → address → amount → confirm) ✅ 2B
 │   ├── RiskGauge.tsx          # Visual risk score display (color-coded) ✅ 2B
 │   ├── Toast.tsx              # Toast notification system ✅ 2C
-│   └── TermsModal.tsx         # First-launch ToS gate + re-viewable from Settings ✅ 2C
+│   ├── TermsModal.tsx         # First-launch ToS gate + re-viewable from Settings ✅ 2C
+│   └── CcTokenModal.tsx       # Cross-chain token selector modal (chain + token picker) ✅ 2C
 ├── lib/
 │   └── api.ts                 # API client (fetchPortfolio ✅ 2A, fetchTokenScan ✅ 2B, fetchSendTransaction ✅ 2B)
 └── styles/
