@@ -20,7 +20,8 @@ const envSchema = z.object({
   JUPITER_API_URL: z
     .string()
     .url()
-    .default("https://lite-api.jup.ag/swap/v1"),
+    .default("https://api.jup.ag/swap/v1"),
+  JUPITER_API_KEY: z.string().optional(), // Get free key at portal.jup.ag — required after lite-api sunset
   PLATFORM_FEE_BPS: z.coerce
     .number()
     .int()

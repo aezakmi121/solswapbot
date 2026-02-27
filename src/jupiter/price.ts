@@ -1,5 +1,14 @@
-/** Jupiter Price API V3 (V2 deprecated — see dev.jup.ag/docs/price/v3) */
-const JUPITER_PRICE_URL = "https://lite-api.jup.ag/price/v3/price";
+import { config } from "../config";
+
+/** Jupiter Price API V3 — derives base from JUPITER_API_URL (e.g. https://api.jup.ag) */
+function getPriceUrl(): string {
+  const base = config.JUPITER_API_URL.replace(/\/swap\/v1\/?$/, "");
+  return `${base}/price/v3/price`;
+}
+
+function jupiterHeaders(): Record<string, string> {
+  return config.JUPITER_API_KEY ? { "x-api-key": config.JUPITER_API_KEY } : {};
+}
 
 interface JupiterPriceV3Entry {
   usdPrice: number;
@@ -16,7 +25,7 @@ type JupiterPriceV3Response = Record<string, JupiterPriceV3Entry | undefined>;
  */
 export async function getTokenPriceUsd(mintAddress: string): Promise<number | null> {
   try {
-    const response = await fetch(`${JUPITER_PRICE_URL}?ids=${mintAddress}`);
+    const response = await fetch(`${getPriceUrl()}?ids=${mintAddress}`, { headers: jupiterHeaders() });
     if (!response.ok) return null;
 
     const json = (await response.json()) as JupiterPriceV3Response;
@@ -39,7 +48,7 @@ export async function getTokenPricesBatch(
   if (mints.length === 0) return {};
   try {
     const ids = mints.join(",");
-    const response = await fetch(`${JUPITER_PRICE_URL}?ids=${ids}`);
+    const response = await fetch(`${getPriceUrl()}?ids=${ids}`, { headers: jupiterHeaders() });
     if (!response.ok) {
       return Object.fromEntries(mints.map((m) => [m, null]));
     }

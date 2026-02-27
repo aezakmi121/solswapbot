@@ -28,9 +28,12 @@ export async function buildSwapTransaction(params: {
     const feeWallet = new PublicKey(config.FEE_WALLET_ADDRESS);
     const feeAccount = getAssociatedTokenAddressSync(outputMint, feeWallet, true);
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (config.JUPITER_API_KEY) headers["x-api-key"] = config.JUPITER_API_KEY;
+
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         quoteResponse: params.quoteResponse,
         userPublicKey: params.userPublicKey,
