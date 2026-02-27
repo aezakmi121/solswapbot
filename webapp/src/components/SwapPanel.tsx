@@ -14,54 +14,10 @@ import {
     fetchCrossChainQuote,
     CrossChainQuoteResult,
 } from "../lib/api";
+import { CC_CHAINS, CC_TOKENS, TOKEN_META, ChainId } from "../lib/chains";
 import { TokenSelector } from "../TokenSelector";
+import { CcTokenModal } from "./CcTokenModal";
 import { toast } from "../lib/toast";
-
-// ─── Cross-chain registry (mirrors backend chains.ts) ─────────────────────────
-const CC_CHAINS = [
-    { id: "solana",   name: "Solana",    icon: "🟣" },
-    { id: "ethereum", name: "Ethereum",  icon: "🔷" },
-    { id: "bsc",      name: "BNB Chain", icon: "🟡" },
-    { id: "polygon",  name: "Polygon",   icon: "🟣" },
-    { id: "arbitrum", name: "Arbitrum",  icon: "🔵" },
-    { id: "base",     name: "Base",      icon: "🔵" },
-] as const;
-
-type ChainId = typeof CC_CHAINS[number]["id"];
-
-const CC_TOKENS: Record<ChainId, Array<{ symbol: string; address: string; decimals: number }>> = {
-    solana:   [
-        { symbol: "SOL",  address: "So11111111111111111111111111111111111111112", decimals: 9 },
-        { symbol: "USDC", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
-        { symbol: "USDT", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 },
-        { symbol: "BONK", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5 },
-        { symbol: "JUP",  address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",  decimals: 6 },
-    ],
-    ethereum: [
-        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-        { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
-        { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
-        { symbol: "WETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18 },
-    ],
-    bsc: [
-        { symbol: "BNB",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-        { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
-        { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
-    ],
-    polygon: [
-        { symbol: "MATIC", address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-        { symbol: "USDC",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-    ],
-    arbitrum: [
-        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-        { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
-        { symbol: "ARB",  address: "0x912CE59144191C1204E64559FE8253a0e49E6548", decimals: 18 },
-    ],
-    base: [
-        { symbol: "ETH",  address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-        { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
-    ],
-};
 
 const tg = (window as any).Telegram?.WebApp;
 
@@ -132,6 +88,7 @@ export function SwapPanel({
     const [ccQuote, setCcQuote] = useState<CrossChainQuoteResult | null>(null);
     const [ccLoading, setCcLoading] = useState(false);
     const [ccError, setCcError] = useState("");
+    const [ccTokenModalSide, setCcTokenModalSide] = useState<"input" | "output" | null>(null);
 
     // Token loading
     const [tokensLoaded, setTokensLoaded] = useState(false);
@@ -564,18 +521,17 @@ export function SwapPanel({
                                 }}
                             >
                                 {CC_CHAINS.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                                    <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
                                 ))}
                             </select>
-                            <select
-                                className="cc-token-select"
-                                value={ccInputSymbol}
-                                onChange={(e) => { setCcInputSymbol(e.target.value); setCcQuote(null); }}
+                            <button
+                                className="cc-token-btn"
+                                onClick={() => setCcTokenModalSide("input")}
                             >
-                                {CC_TOKENS[ccInputChain].map((t) => (
-                                    <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
-                                ))}
-                            </select>
+                                <span className="cc-token-btn-emoji">{TOKEN_META[ccInputSymbol]?.emoji ?? "🪙"}</span>
+                                <span className="cc-token-btn-symbol">{ccInputSymbol}</span>
+                                <span className="cc-token-btn-arrow">▼</span>
+                            </button>
                         </div>
                         <input
                             className="cc-amount-input"
@@ -622,18 +578,17 @@ export function SwapPanel({
                                 }}
                             >
                                 {CC_CHAINS.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                                    <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
                                 ))}
                             </select>
-                            <select
-                                className="cc-token-select"
-                                value={ccOutputSymbol}
-                                onChange={(e) => { setCcOutputSymbol(e.target.value); setCcQuote(null); }}
+                            <button
+                                className="cc-token-btn"
+                                onClick={() => setCcTokenModalSide("output")}
                             >
-                                {CC_TOKENS[ccOutputChain].map((t) => (
-                                    <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
-                                ))}
-                            </select>
+                                <span className="cc-token-btn-emoji">{TOKEN_META[ccOutputSymbol]?.emoji ?? "🪙"}</span>
+                                <span className="cc-token-btn-symbol">{ccOutputSymbol}</span>
+                                <span className="cc-token-btn-arrow">▼</span>
+                            </button>
                         </div>
                         <div className="cc-output-display">
                             {ccLoading ? (
@@ -889,6 +844,25 @@ export function SwapPanel({
                     </div>
                 )}
             </div>}
+
+            {/* ── Cross-chain Token Modal ── */}
+            <CcTokenModal
+                open={ccTokenModalSide !== null}
+                onClose={() => setCcTokenModalSide(null)}
+                onSelect={(chain, symbol) => {
+                    if (ccTokenModalSide === "input") {
+                        setCcInputChain(chain);
+                        setCcInputSymbol(symbol);
+                    } else {
+                        setCcOutputChain(chain);
+                        setCcOutputSymbol(symbol);
+                    }
+                    setCcQuote(null);
+                    setCcTokenModalSide(null);
+                }}
+                currentChain={ccTokenModalSide === "input" ? ccInputChain : ccOutputChain}
+                currentSymbol={ccTokenModalSide === "input" ? ccInputSymbol : ccOutputSymbol}
+            />
 
             {/* ── Token Selector Modal ── */}
             <TokenSelector
