@@ -199,6 +199,60 @@ export async function getTokenSupplyInfo(mintAddress: string): Promise<{
     }
 }
 
+// ─── Jupiter Verified ─────────────────────────────────────────────────
+/**
+ * Check if the token appears on Jupiter's verified token list.
+ * Jupiter-verified tokens have passed basic curation for legitimacy.
+ * Not being verified is a mild risk signal (many real tokens aren't listed).
+ *
+ * Accepts pre-fetched token metadata — no RPC call needed.
+ */
+export function checkJupiterVerified(
+    tokenMeta: { name?: string; symbol?: string } | null | undefined
+): CheckResult {
+    if (tokenMeta) {
+        return {
+            name: "Jupiter Verified",
+            safe: true,
+            detail: "Listed on Jupiter's verified token list",
+            weight: 10,
+        };
+    }
+    return {
+        name: "Jupiter Verified",
+        safe: false,
+        detail: "Not found on Jupiter's verified list",
+        weight: 10,
+    };
+}
+
+// ─── Token Metadata Present ───────────────────────────────────────────
+/**
+ * Check if the token has a recognized name and symbol.
+ * Anonymous tokens with no on-chain metadata are a common rug indicator —
+ * legitimate projects almost always register a name and ticker.
+ *
+ * Accepts pre-fetched token metadata — no RPC call needed.
+ */
+export function checkHasMetadata(
+    tokenMeta: { name?: string; symbol?: string } | null | undefined
+): CheckResult {
+    if (tokenMeta?.name && tokenMeta?.symbol) {
+        return {
+            name: "Token Metadata",
+            safe: true,
+            detail: `${tokenMeta.symbol} — name & symbol present`,
+            weight: 15,
+        };
+    }
+    return {
+        name: "Token Metadata",
+        safe: false,
+        detail: "No verified name or symbol found",
+        weight: 15,
+    };
+}
+
 // ─── Token Age ───────────────────────────────────────────────────────
 /**
  * Estimate token age by looking at first signatures on the mint account.

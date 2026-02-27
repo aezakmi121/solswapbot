@@ -4,11 +4,12 @@ import { RiskGauge } from "./RiskGauge";
 import { toast } from "../lib/toast";
 
 interface ScanPanelProps {
-    onNavigateToSwap?: () => void;
+    onNavigateToSwap?: (mint?: string) => void;
 }
 
 interface RecentScan {
     mint: string;
+    symbol: string | null;
     score: number;
     level: string;
     ts: number;
@@ -58,7 +59,13 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
         try {
             const data = await fetchTokenScan(target);
             setResult(data);
-            saveRecent({ mint: data.mintAddress, score: data.riskScore, level: data.riskLevel, ts: Date.now() });
+            saveRecent({
+                mint: data.mintAddress,
+                symbol: data.tokenInfo.symbol,
+                score: data.riskScore,
+                level: data.riskLevel,
+                ts: Date.now(),
+            });
             setRecentScans(loadRecent());
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to scan token";
@@ -115,11 +122,23 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
             {/* ── Results ── */}
             {result && (
                 <div className="scan-result">
-                    <RiskGauge score={result.riskScore} level={result.riskLevel} />
+                    {/* Gauge with token identity */}
+                    <RiskGauge
+                        score={result.riskScore}
+                        level={result.riskLevel}
+                        tokenName={result.tokenInfo.name}
+                        tokenSymbol={result.tokenInfo.symbol}
+                        tokenIcon={result.tokenInfo.icon}
+                    />
+
+                    {/* Mint address (always shown below gauge) */}
+                    <div className="scan-mint-addr">
+                        {result.mintAddress.slice(0, 8)}...{result.mintAddress.slice(-6)}
+                    </div>
 
                     {/* Checks */}
                     <div className="scan-section">
-                        <div className="scan-section-title">Checks</div>
+                        <div className="scan-section-title">Safety Checks</div>
                         {result.checks.map((check, i) => (
                             <div key={i} className="scan-check-row">
                                 <span className={`scan-check-icon ${check.safe ? "scan-check-safe" : "scan-check-warn"}`}>
@@ -158,10 +177,25 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
 
                     {/* Swap action */}
                     {onNavigateToSwap && (
-                        <button className="scan-swap-btn swap-btn" onClick={onNavigateToSwap}>
+                        <button
+                            className="scan-swap-btn swap-btn"
+                            onClick={() => onNavigateToSwap(result.mintAddress)}
+                        >
                             🔄 Swap This Token
                         </button>
                     )}
+
+                    {/* Disclaimer */}
+                    <div className="scan-disclaimer">
+                        <span className="scan-disclaimer-icon">⚠️</span>
+                        <div className="scan-disclaimer-text">
+                            <strong>Disclaimer:</strong> Results are based on automated on-chain data only.
+                            This scanner cannot detect team malice, off-chain agreements, social engineering,
+                            or future actions. A <strong>LOW RISK</strong> score is not an endorsement or
+                            guarantee of safety. Always do your own research. Never invest more than you
+                            can afford to lose. SolSwap is not liable for losses on tokens rated safe.
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -179,7 +213,9 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                                 {s.level}
                             </span>
                             <span className="scan-recent-score">{s.score}</span>
-                            <span className="scan-recent-addr">{s.mint.slice(0, 8)}...</span>
+                            <span className="scan-recent-addr">
+                                {s.symbol ? s.symbol : `${s.mint.slice(0, 6)}...`}
+                            </span>
                             <span className="scan-recent-time">{timeAgo(s.ts)}</span>
                         </button>
                     ))}
