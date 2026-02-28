@@ -13,6 +13,9 @@ import {
     SwapRecord,
     fetchCrossChainQuote,
     CrossChainQuoteResult,
+    executeCrossChain,
+    confirmCrossChainSwap,
+    getCrossChainBridgeStatus,
 } from "../lib/api";
 import { CC_CHAINS, CC_TOKENS, TOKEN_META, ChainId } from "../lib/chains";
 import { TokenSelector } from "../TokenSelector";
@@ -54,6 +57,22 @@ function uint8ToBase58(bytes: Uint8Array): string {
         else break;
     }
     return str;
+}
+
+/** Map raw Jupiter / LI.FI error strings to user-friendly messages. */
+function friendlySwapError(raw: string): string {
+    const r = raw.toLowerCase();
+    if (/same.*mint|circular|arbitrage.*disabled/.test(r))
+        return "Select two different tokens to swap";
+    if (/no.*route|no liquidity|insufficient liquidity|no.*available/.test(r))
+        return "No swap route found for this token pair";
+    if (/slippage|price.*moved|price impact/.test(r))
+        return "Price moved — try increasing your slippage tolerance";
+    if (/insufficient.*balance|not enough/.test(r))
+        return "Insufficient balance for this swap";
+    if (/transaction.*expired|blockhash/.test(r))
+        return "Transaction expired — please try again";
+    return "Swap failed — please try again";
 }
 
 interface SwapPanelProps {
@@ -119,6 +138,13 @@ export function SwapPanel({
     const [ccError, setCcError] = useState("");
     const [ccTokenModalSide, setCcTokenModalSide] = useState<"input" | "output" | null>(null);
 
+    // Bridge execution state
+    const [bridgeStatus, setBridgeStatus] = useState<"idle" | "building" | "signing" | "bridging" | "done" | "error">("idle");
+    const [bridgeError, setBridgeError] = useState("");
+    const [bridgeTxSig, setBridgeTxSig] = useState<string | null>(null);
+    const [bridgeToAddress, setBridgeToAddress] = useState("");
+    const bridgePollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+
     // Token loading
     const [tokensLoaded, setTokensLoaded] = useState(false);
     const [inputToken, setInputToken] = useState<TokenInfo | null>(null);
@@ -180,6 +206,15 @@ export function SwapPanel({
 
         if (!inputToken || !outputToken || !amount || Number(amount) <= 0) {
             setQuote(null);
+            setQuoteError("");
+            return;
+        }
+
+        // Same-token guard: Jupiter rejects circular swaps with a raw error; catch it early.
+        if (inputToken.mint === outputToken.mint) {
+            setQuoteError("Select two different tokens to swap");
+            setQuote(null);
+            setQuoteLoading(false);
             return;
         }
 
@@ -213,7 +248,8 @@ export function SwapPanel({
             });
         } catch (err) {
             if (controller.signal.aborted) return;
-            setQuoteError(err instanceof Error ? err.message : "Failed to get quote");
+            const raw = err instanceof Error ? err.message : "Failed to get quote";
+            setQuoteError(friendlySwapError(raw));
             setQuote(null);
         } finally {
             if (!controller.signal.aborted) {
@@ -301,6 +337,7 @@ export function SwapPanel({
     useEffect(() => {
         return () => {
             if (confirmPollRef.current) clearInterval(confirmPollRef.current);
+            if (bridgePollRef.current) clearInterval(bridgePollRef.current);
             ccAbortRef.current?.abort();
         };
     }, []);
@@ -425,7 +462,8 @@ export function SwapPanel({
             }
         } catch (err) {
             console.error("Swap error:", err);
-            const errMsg = err instanceof Error ? err.message : "Transaction failed";
+            const raw = err instanceof Error ? err.message : "Transaction failed";
+            const errMsg = friendlySwapError(raw);
             setSwapError(errMsg);
             setSwapStatus("error");
             tg?.HapticFeedback?.notificationOccurred("error");
@@ -441,6 +479,96 @@ export function SwapPanel({
             setShowHistory(true);
         } catch (err) {
             console.error("Failed to load history:", err);
+        }
+    };
+
+    // Execute a cross-chain bridge swap via LI.FI
+    const handleBridgeExecute = async () => {
+        if (!walletAddress || !ccQuote || !embeddedWallet) return;
+        tg?.HapticFeedback?.impactOccurred("medium");
+
+        const toAddr = ccOutputChain === "solana" ? walletAddress : bridgeToAddress.trim();
+        if (ccOutputChain !== "solana" && !/^0x[a-fA-F0-9]{40}$/.test(toAddr)) {
+            setBridgeError("Enter a valid EVM wallet address (starts with 0x)");
+            return;
+        }
+
+        try {
+            setBridgeStatus("building");
+            setBridgeError("");
+            setBridgeTxSig(null);
+
+            const { transactionData, outputAmount, outputAmountUsd } = await executeCrossChain({
+                inputToken: ccInputSymbol,
+                outputToken: ccOutputSymbol,
+                inputChain: ccInputChain,
+                outputChain: ccOutputChain,
+                amount: ccAmount,
+                slippageBps,
+                fromAddress: walletAddress,
+                toAddress: toAddr,
+            });
+
+            setBridgeStatus("signing");
+            const txBytes = Uint8Array.from(atob(transactionData), (c) => c.charCodeAt(0));
+            const { signature } = await signAndSendTransaction({
+                transaction: txBytes,
+                wallet: embeddedWallet,
+                chain: "solana:mainnet",
+            });
+
+            const sigStr = uint8ToBase58(signature);
+            setBridgeTxSig(sigStr);
+            setBridgeStatus("bridging");
+            tg?.HapticFeedback?.notificationOccurred("success");
+            toast("Bridge transaction submitted!", "info");
+
+            // Record in DB (non-fatal if it fails)
+            try {
+                await confirmCrossChainSwap({
+                    txSignature: sigStr,
+                    inputToken: ccInputSymbol,
+                    outputToken: ccOutputSymbol,
+                    inputChain: ccInputChain,
+                    outputChain: ccOutputChain,
+                    inputAmount: ccAmount,
+                    outputAmount: outputAmount,
+                    feeAmountUsd: Number(outputAmountUsd) > 0 ? null : null,
+                });
+            } catch { /* non-fatal */ }
+
+            // Poll LI.FI status every 5 s, give up after 60 attempts (~5 min)
+            let polls = 0;
+            bridgePollRef.current = setInterval(async () => {
+                polls++;
+                try {
+                    const st = await getCrossChainBridgeStatus(sigStr, ccInputChain, ccOutputChain);
+                    if (st.status === "DONE") {
+                        clearInterval(bridgePollRef.current);
+                        setBridgeStatus("done");
+                        refreshBalance();
+                        tg?.HapticFeedback?.notificationOccurred("success");
+                        toast("Bridge complete! Funds arriving at destination.", "success");
+                    } else if (st.status === "FAILED") {
+                        clearInterval(bridgePollRef.current);
+                        setBridgeError("Bridge transaction failed on-chain");
+                        setBridgeStatus("error");
+                        tg?.HapticFeedback?.notificationOccurred("error");
+                    }
+                } catch { /* keep polling on transient errors */ }
+                if (polls >= 60) {
+                    clearInterval(bridgePollRef.current);
+                    // Show as done with explorer link — bridge is slow but likely in progress
+                    setBridgeStatus("done");
+                    refreshBalance();
+                }
+            }, 5000);
+        } catch (err) {
+            console.error("Bridge error:", err);
+            const raw = err instanceof Error ? err.message : "Bridge failed";
+            setBridgeError(raw);
+            setBridgeStatus("error");
+            tg?.HapticFeedback?.notificationOccurred("error");
         }
     };
 
@@ -707,10 +835,33 @@ export function SwapPanel({
                         </div>
                     </div>
 
+                    {/* Destination address input for EVM output chains */}
+                    {ccOutputChain !== "solana" && bridgeStatus === "idle" && (
+                        <div className="cc-to-address-row">
+                            <label className="cc-to-address-label">Receive at (your EVM address)</label>
+                            <input
+                                className="cc-to-address-input"
+                                type="text"
+                                placeholder="0x..."
+                                value={bridgeToAddress}
+                                onChange={(e) => { setBridgeToAddress(e.target.value); setBridgeError(""); }}
+                                spellCheck={false}
+                                autoComplete="off"
+                            />
+                        </div>
+                    )}
+
+                    {/* EVM-origin guard */}
+                    {ccInputChain !== "solana" && (
+                        <div className="cc-evm-origin-warning">
+                            Bridging from EVM chains is coming soon. Switch the <strong>You Pay</strong> side to a Solana token to bridge out.
+                        </div>
+                    )}
+
                     {ccError && <div className="cc-error">{ccError}</div>}
 
                     {/* Quote breakdown */}
-                    {ccQuote && !ccQuote.error && (
+                    {ccQuote && !ccQuote.error && bridgeStatus === "idle" && (
                         <div className="cc-breakdown">
                             {ccQuote.outputAmountUsd && Number(ccQuote.outputAmountUsd) > 0 && (
                                 <div className="cc-breakdown-row">
@@ -741,25 +892,78 @@ export function SwapPanel({
                     )}
 
                     {/* Bridge button */}
-                    <button
-                        className="swap-btn"
-                        disabled={
-                            !ccQuote || ccLoading || !ccAmount ||
-                            (ccInputChain === ccOutputChain && ccInputChain !== "solana")
-                        }
-                        onClick={() => toast("Cross-chain execution coming in Phase 3 — live quote shown above.", "info")}
-                    >
-                        {ccLoading
-                            ? "Getting quote…"
-                            : !ccAmount || Number(ccAmount) <= 0
-                                ? "Enter an amount to get a quote"
-                                : ccQuote
-                                    ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol}`
-                                    : "Enter an amount to get a quote"}
-                    </button>
-                    <div className="cc-phase-note">
-                        ℹ️ Bridge execution launches in Phase 3. Quote is live &amp; accurate.
-                    </div>
+                    {bridgeStatus !== "done" && (
+                        <button
+                            className="swap-btn"
+                            disabled={
+                                !ccQuote || ccLoading || !ccAmount ||
+                                ccInputChain !== "solana" ||
+                                (ccInputChain === ccOutputChain && ccInputChain !== "solana") ||
+                                bridgeStatus === "building" || bridgeStatus === "signing" || bridgeStatus === "bridging" ||
+                                (ccOutputChain !== "solana" && !/^0x[a-fA-F0-9]{40}$/.test(bridgeToAddress.trim()))
+                            }
+                            onClick={handleBridgeExecute}
+                        >
+                            {bridgeStatus === "building"
+                                ? "Building bridge transaction..."
+                                : bridgeStatus === "signing"
+                                    ? "Approve in wallet..."
+                                    : bridgeStatus === "bridging"
+                                        ? "Bridging — tracking status..."
+                                        : bridgeStatus === "error"
+                                            ? "Failed — Try Again"
+                                            : ccLoading
+                                                ? "Getting quote…"
+                                                : !ccAmount || Number(ccAmount) <= 0
+                                                    ? "Enter an amount to get a quote"
+                                                    : ccInputChain !== "solana"
+                                                        ? "EVM-origin bridges coming soon"
+                                                        : ccQuote
+                                                            ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol}`
+                                                            : "Enter an amount to get a quote"}
+                        </button>
+                    )}
+
+                    {/* Bridge done state */}
+                    {bridgeStatus === "done" && bridgeTxSig && (
+                        <div className="sign-hint">
+                            <p>Bridge transaction submitted. Funds will arrive at the destination chain shortly.</p>
+                            <a
+                                className="tx-link"
+                                href={`https://solscan.io/tx/${bridgeTxSig}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                View source tx on Solscan
+                            </a>
+                            <button
+                                className="reset-btn"
+                                onClick={() => {
+                                    setBridgeStatus("idle");
+                                    setBridgeError("");
+                                    setBridgeTxSig(null);
+                                    setBridgeToAddress("");
+                                    setCcAmount("");
+                                    setCcQuote(null);
+                                }}
+                            >
+                                New Bridge
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Bridge error state */}
+                    {bridgeStatus === "error" && (
+                        <div className="error-msg">
+                            {bridgeError || "Bridge transaction failed"}
+                            <button
+                                className="reset-btn"
+                                onClick={() => { setBridgeStatus("idle"); setBridgeError(""); }}
+                            >
+                                Try Again
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
