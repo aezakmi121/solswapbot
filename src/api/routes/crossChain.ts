@@ -28,13 +28,23 @@ crossChainRouter.get("/cross-chain/quote", async (req: Request, res: Response) =
             return;
         }
 
+        // M2: Validate slippageBps range (matching same-chain /api/quote validation)
+        let parsedSlippageBps: number | undefined;
+        if (slippageBps) {
+            parsedSlippageBps = parseInt(slippageBps as string, 10);
+            if (!Number.isInteger(parsedSlippageBps) || parsedSlippageBps < 0 || parsedSlippageBps > 5000) {
+                res.status(400).json({ error: "Invalid slippageBps: must be 0\u20135000" });
+                return;
+            }
+        }
+
         const result = await getSmartQuote({
             inputToken: inputToken as string,
             outputToken: outputToken as string,
             inputChain: inputChain as string,
             outputChain: outputChain as string,
             amount: amount as string,
-            slippageBps: slippageBps ? parseInt(slippageBps as string) : undefined,
+            slippageBps: parsedSlippageBps,
         });
 
         if (result.error) {

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getTokenPriceUsd } from "../../jupiter/price";
+import { isValidPublicKey } from "../../utils/validation";
 
 export const priceRouter = Router();
 
@@ -11,7 +12,8 @@ priceRouter.get("/price/:mint", async (req: Request, res: Response) => {
     try {
         const mint = req.params.mint as string;
 
-        if (!mint || mint.length < 32) {
+        // M1: Use proper Solana public key validation (not just length check)
+        if (!mint || !isValidPublicKey(mint)) {
             res.status(400).json({ error: "Invalid mint address" });
             return;
         }

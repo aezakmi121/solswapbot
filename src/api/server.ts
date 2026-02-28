@@ -51,7 +51,7 @@ export function createApiServer(): express.Express {
     app.use(
         cors({
             origin: config.CORS_ORIGIN,
-            methods: ["GET", "POST"],
+            methods: ["GET", "POST", "DELETE"],
         })
     );
 
