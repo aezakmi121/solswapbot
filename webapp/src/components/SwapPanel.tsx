@@ -19,6 +19,13 @@ import { TokenSelector } from "../TokenSelector";
 import { CcTokenModal } from "./CcTokenModal";
 import { toast } from "../lib/toast";
 
+const SLIPPAGE_KEY = "solswap_slippage_bps";
+const SLIPPAGE_OPTIONS = [
+    { label: "0.1%", value: 10 },
+    { label: "0.5%", value: 50 },
+    { label: "1.0%", value: 100 },
+];
+
 const tg = (window as any).Telegram?.WebApp;
 
 const RECENT_TOKENS_KEY = "solswap_recent_tokens";
@@ -55,7 +62,7 @@ interface SwapPanelProps {
     balancesLoaded: boolean;
     refreshBalance: () => void;
     slippageBps: number;
-    onOpenSettings: () => void;
+    onSlippageChange: (bps: number) => void;
 }
 
 /** Max age for a quote before we force a re-fetch (H3/H4) */
@@ -67,7 +74,7 @@ export function SwapPanel({
     balancesLoaded,
     refreshBalance,
     slippageBps,
-    onOpenSettings,
+    onSlippageChange,
 }: SwapPanelProps) {
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -77,6 +84,42 @@ export function SwapPanel({
     const confirmPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
     const quoteAbortRef = useRef<AbortController | null>(null);
     const ccAbortRef = useRef<AbortController | null>(null);
+
+    // Inline slippage popup
+    const [showSlippagePopup, setShowSlippagePopup] = useState(false);
+    const [slippageCustomInput, setSlippageCustomInput] = useState("");
+    const [showSlippageCustom, setShowSlippageCustom] = useState(false);
+    const slippagePopupRef = useRef<HTMLDivElement>(null);
+
+    // Close slippage popup when clicking outside
+    useEffect(() => {
+        if (!showSlippagePopup) return;
+        const handler = (e: MouseEvent) => {
+            if (slippagePopupRef.current && !slippagePopupRef.current.contains(e.target as Node)) {
+                setShowSlippagePopup(false);
+                setShowSlippageCustom(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [showSlippagePopup]);
+
+    const handleSlippageSelect = (bps: number) => {
+        onSlippageChange(bps);
+        localStorage.setItem(SLIPPAGE_KEY, String(bps));
+        setShowSlippageCustom(false);
+        setSlippageCustomInput("");
+        setShowSlippagePopup(false);
+    };
+
+    const handleCustomSlippage = () => {
+        const val = parseFloat(slippageCustomInput);
+        if (!isNaN(val) && val > 0 && val <= 50) {
+            handleSlippageSelect(Math.round(val * 100));
+        }
+    };
+
+    const isSlippagePreset = SLIPPAGE_OPTIONS.some((o) => o.value === slippageBps);
 
     // Cross-chain mode state
     const [crossChainMode, setCrossChainMode] = useState(false);
@@ -447,9 +490,59 @@ export function SwapPanel({
             <div className="panel-header">
                 <h2 className="panel-title">Swap</h2>
                 <div className="panel-header-right">
-                    <button className="slippage-indicator" onClick={onOpenSettings} title="Adjust slippage in Settings">
-                        ⚙️ {(slippageBps / 100).toFixed(1)}%
-                    </button>
+                    {/* ── Inline Slippage Popup ── */}
+                    <div className="slippage-popup-anchor" ref={slippagePopupRef}>
+                        <button
+                            className="slippage-indicator"
+                            onClick={() => {
+                                setShowSlippagePopup((v) => !v);
+                                setShowSlippageCustom(false);
+                            }}
+                            title="Set slippage tolerance"
+                        >
+                            ⚙️ {(slippageBps / 100).toFixed(1)}%
+                        </button>
+                        {showSlippagePopup && (
+                            <div className="slippage-popup">
+                                <div className="slippage-popup-title">Slippage Tolerance</div>
+                                <div className="slippage-chips">
+                                    {SLIPPAGE_OPTIONS.map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            className={`slippage-chip${slippageBps === opt.value ? " slippage-chip--active" : ""}`}
+                                            onClick={() => handleSlippageSelect(opt.value)}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                    <button
+                                        className={`slippage-chip${!isSlippagePreset || showSlippageCustom ? " slippage-chip--active" : ""}`}
+                                        onClick={() => setShowSlippageCustom((v) => !v)}
+                                    >
+                                        {isSlippagePreset ? "Custom" : `${(slippageBps / 100).toFixed(2)}%`}
+                                    </button>
+                                </div>
+                                {showSlippageCustom && (
+                                    <div className="slippage-custom-row">
+                                        <input
+                                            className="slippage-custom-input"
+                                            type="number"
+                                            placeholder="e.g. 2.5"
+                                            min="0.01"
+                                            max="50"
+                                            step="0.1"
+                                            value={slippageCustomInput}
+                                            onChange={(e) => setSlippageCustomInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && handleCustomSlippage()}
+                                            autoFocus
+                                        />
+                                        <span className="slippage-pct-label">%</span>
+                                        <button className="slippage-set-btn" onClick={handleCustomSlippage}>Set</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     <button
                         className={`cc-toggle-btn${crossChainMode ? " cc-toggle-btn--active" : ""}`}
                         onClick={() => {
@@ -503,40 +596,37 @@ export function SwapPanel({
                     {/* Banner */}
                     <div className="cc-banner">
                         <span className="cc-banner-title">🌉 Cross-Chain Bridge</span>
-                        <span className="cc-banner-sub">Bridge tokens across blockchains via LI.FI</span>
+                        <span className="cc-banner-sub">Select tokens, enter amount, and get a live quote</span>
                     </div>
 
                     {/* You Pay section */}
                     <div className="cc-section">
-                        <span className="cc-section-label">You Pay</span>
-                        <div className="cc-pickers-row">
-                            <select
-                                className="cc-chain-select"
-                                value={ccInputChain}
-                                onChange={(e) => {
-                                    const chain = e.target.value as ChainId;
-                                    setCcInputChain(chain);
-                                    setCcInputSymbol(CC_TOKENS[chain][0].symbol);
-                                    setCcQuote(null);
-                                }}
-                            >
-                                {CC_CHAINS.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
-                                ))}
-                            </select>
-                            <button
-                                className="cc-token-btn"
-                                onClick={() => setCcTokenModalSide("input")}
-                            >
-                                <span className="cc-token-btn-emoji">{TOKEN_META[ccInputSymbol]?.emoji ?? "🪙"}</span>
-                                <span className="cc-token-btn-symbol">{ccInputSymbol}</span>
-                                <span className="cc-token-btn-arrow">▼</span>
-                            </button>
+                        <div className="cc-section-header">
+                            <span className="cc-section-label">You Pay</span>
+                            <span className="cc-section-hint">Tap to choose token &amp; network</span>
                         </div>
+                        {/* Single full-width token+chain button */}
+                        <button
+                            className="cc-token-btn cc-token-btn--full"
+                            onClick={() => setCcTokenModalSide("input")}
+                        >
+                            <span className="cc-token-btn-chain-emoji">
+                                {CC_CHAINS.find((c) => c.id === ccInputChain)?.emoji ?? "🔗"}
+                            </span>
+                            <div className="cc-token-btn-body">
+                                <span className="cc-token-btn-symbol">
+                                    {TOKEN_META[ccInputSymbol]?.emoji ?? "🪙"} {ccInputSymbol}
+                                </span>
+                                <span className="cc-token-btn-chain-name">
+                                    on {CC_CHAINS.find((c) => c.id === ccInputChain)?.name ?? ccInputChain}
+                                </span>
+                            </div>
+                            <span className="cc-token-btn-arrow">▼</span>
+                        </button>
                         <input
                             className="cc-amount-input"
                             type="number"
-                            placeholder="0.0"
+                            placeholder="Enter amount to bridge"
                             value={ccAmount}
                             onChange={(e) => { setCcAmount(e.target.value); setCcQuote(null); }}
                             min="0"
@@ -545,54 +635,55 @@ export function SwapPanel({
                         />
                     </div>
 
-                    {/* Flip chains */}
-                    <button
-                        className="cc-flip-btn"
-                        onClick={() => {
-                            const tempChain = ccInputChain;
-                            const tempSymbol = ccInputSymbol;
-                            setCcInputChain(ccOutputChain);
-                            setCcInputSymbol(ccOutputSymbol);
-                            setCcOutputChain(tempChain);
-                            setCcOutputSymbol(tempSymbol);
-                            setCcAmount("");
-                            setCcQuote(null);
-                        }}
-                        aria-label="Flip chains"
-                    >
-                        ⇅
-                    </button>
+                    {/* Bridge direction arrow + flip */}
+                    <div className="cc-bridge-arrow">
+                        <button
+                            className="cc-flip-btn"
+                            onClick={() => {
+                                const tempChain = ccInputChain;
+                                const tempSymbol = ccInputSymbol;
+                                setCcInputChain(ccOutputChain);
+                                setCcInputSymbol(ccOutputSymbol);
+                                setCcOutputChain(tempChain);
+                                setCcOutputSymbol(tempSymbol);
+                                setCcAmount("");
+                                setCcQuote(null);
+                            }}
+                            aria-label="Flip chains"
+                            title="Flip direction"
+                        >
+                            ⇅
+                        </button>
+                        <span className="cc-bridge-arrow-label">Bridge</span>
+                    </div>
 
                     {/* You Receive section */}
                     <div className="cc-section">
-                        <span className="cc-section-label">You Receive</span>
-                        <div className="cc-pickers-row">
-                            <select
-                                className="cc-chain-select"
-                                value={ccOutputChain}
-                                onChange={(e) => {
-                                    const chain = e.target.value as ChainId;
-                                    setCcOutputChain(chain);
-                                    setCcOutputSymbol(CC_TOKENS[chain][0].symbol);
-                                    setCcQuote(null);
-                                }}
-                            >
-                                {CC_CHAINS.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
-                                ))}
-                            </select>
-                            <button
-                                className="cc-token-btn"
-                                onClick={() => setCcTokenModalSide("output")}
-                            >
-                                <span className="cc-token-btn-emoji">{TOKEN_META[ccOutputSymbol]?.emoji ?? "🪙"}</span>
-                                <span className="cc-token-btn-symbol">{ccOutputSymbol}</span>
-                                <span className="cc-token-btn-arrow">▼</span>
-                            </button>
+                        <div className="cc-section-header">
+                            <span className="cc-section-label">You Receive</span>
+                            <span className="cc-section-hint">Tap to choose destination</span>
                         </div>
+                        {/* Single full-width token+chain button */}
+                        <button
+                            className="cc-token-btn cc-token-btn--full"
+                            onClick={() => setCcTokenModalSide("output")}
+                        >
+                            <span className="cc-token-btn-chain-emoji">
+                                {CC_CHAINS.find((c) => c.id === ccOutputChain)?.emoji ?? "🔗"}
+                            </span>
+                            <div className="cc-token-btn-body">
+                                <span className="cc-token-btn-symbol">
+                                    {TOKEN_META[ccOutputSymbol]?.emoji ?? "🪙"} {ccOutputSymbol}
+                                </span>
+                                <span className="cc-token-btn-chain-name">
+                                    on {CC_CHAINS.find((c) => c.id === ccOutputChain)?.name ?? ccOutputChain}
+                                </span>
+                            </div>
+                            <span className="cc-token-btn-arrow">▼</span>
+                        </button>
                         <div className="cc-output-display">
                             {ccLoading ? (
-                                <span className="pulse">Fetching...</span>
+                                <span className="pulse">Fetching quote…</span>
                             ) : ccQuote ? (
                                 (() => {
                                     const outDecimals = CC_TOKENS[ccOutputChain].find(
@@ -603,7 +694,9 @@ export function SwapPanel({
                                     return human > 0 ? human.toPrecision(6) : "—";
                                 })()
                             ) : (
-                                <span style={{ color: "var(--text-muted)" }}>—</span>
+                                <span className="cc-output-placeholder">
+                                    {ccAmount && Number(ccAmount) > 0 ? "Getting quote…" : "Enter amount above"}
+                                </span>
                             )}
                         </div>
                     </div>
@@ -645,21 +738,19 @@ export function SwapPanel({
                     <button
                         className="swap-btn"
                         disabled={!ccQuote || ccLoading || !ccAmount}
-                        onClick={() => toast("Cross-chain bridging execution coming in Phase 3. Quote shown above.", "info")}
+                        onClick={() => toast("Cross-chain execution coming in Phase 3 — live quote shown above.", "info")}
                     >
                         {ccLoading
-                            ? "Getting quote..."
+                            ? "Getting quote…"
                             : !ccAmount || Number(ccAmount) <= 0
-                                ? "Enter an amount"
+                                ? "Enter an amount to get a quote"
                                 : ccQuote
-                                    ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol} (Phase 3)`
-                                    : "Enter an amount"}
+                                    ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol}`
+                                    : "Enter an amount to get a quote"}
                     </button>
-                    {ccQuote && (
-                        <div className="cc-phase-note">
-                            ℹ️ Cross-chain bridging execution arrives in Phase 3. Quote shown for reference.
-                        </div>
-                    )}
+                    <div className="cc-phase-note">
+                        ℹ️ Bridge execution launches in Phase 3. Quote is live &amp; accurate.
+                    </div>
                 </div>
             )}
 

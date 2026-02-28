@@ -196,7 +196,7 @@ export function App() {
                         balancesLoaded={balancesLoaded}
                         refreshBalance={refreshBalance}
                         slippageBps={slippageBps}
-                        onOpenSettings={() => setActiveTab("settings")}
+                        onSlippageChange={handleSlippageChange}
                     />
                 )}
                 {activeTab === "scan" && (
