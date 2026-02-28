@@ -3669,3 +3669,111 @@ body {
   border-radius: 6px;
   flex-shrink: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   INLINE SLIPPAGE POPUP (SwapPanel gear icon → no Settings redirect)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.slippage-popup-anchor {
+  position: relative;
+}
+
+.slippage-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 200;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 230px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  animation: fadeInDown 0.15s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.slippage-popup-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CROSS-CHAIN UX IMPROVEMENTS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Section header: label + hint on same row */
+.cc-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.cc-section-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Full-width token+chain button (replaces chain select + token btn row) */
+.cc-token-btn--full {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 10px;
+}
+
+.cc-token-btn-chain-emoji {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cc-token-btn-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.cc-token-btn-chain-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* Bridge direction row (arrow + label between sections) */
+.cc-bridge-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: -4px 0;
+}
+
+.cc-bridge-arrow-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Muted placeholder in output area */
+.cc-output-placeholder {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}

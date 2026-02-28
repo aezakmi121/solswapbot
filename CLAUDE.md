@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-28 | Version: 0.6.0
+> Updated: 2026-02-28 | Version: 0.6.1
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -675,7 +675,13 @@ All 7 CRITICAL security issues have been fixed. Summary:
 **Tab 2 — Swap**
 - Same-chain Solana swaps via Jupiter
 - Cross-chain swaps via LI.FI (chain selector + CcTokenModal)
-- Slippage gear icon (links to Settings tab slippage selector)
+- Slippage gear icon → **inline popup** (0.1% / 0.5% / 1.0% / Custom) — no Settings redirect
+  - Popup closes on outside click; Custom input accepts 0.01–50%
+  - SlippagePanel prop changed from `onOpenSettings` to `onSlippageChange` (v0.6.1)
+- Cross-chain UX: single full-width token+chain button per side (shows "ETH on Ethereum")
+  - Raw `<select>` chain dropdowns removed; chain selection is inside CcTokenModal
+  - Bridge direction row with flip button + "Bridge" label between sections
+  - Output placeholder shows contextual hints ("Enter amount above" / "Getting quote…")
 - Recent tokens row (last 5 used, localStorage `solswap_recent_tokens`)
 - AbortController on quote fetch (cancels in-flight requests when inputs change)
 - Quote auto-expires after 30s with auto-refresh
@@ -1035,6 +1041,21 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-02-28 — Inline Slippage Popup + Cross-Chain UX (v0.6.1)
+- **Slippage (#1 FIXED):** Gear icon in SwapPanel now opens an inline popup instead of redirecting to Settings tab
+  - Popup contains preset chips (0.1% / 0.5% / 1.0%) + Custom input (0.01–50%)
+  - Closes on outside click; selection persists to `localStorage solswap_slippage_bps`
+  - `SwapPanelProps.onOpenSettings` replaced by `onSlippageChange: (bps: number) => void`
+  - `App.tsx` now passes `handleSlippageChange` directly to `SwapPanel`; Settings tab slippage section unchanged
+- **Cross-chain UX (#2 IMPROVED):** Bridge panel redesigned for clarity
+  - Removed raw `<select>` dropdowns for chain — chain is now selected inside `CcTokenModal`
+  - Each side (You Pay / You Receive) has a single full-width button showing token + network context: e.g. "🟣 SOL on Solana"
+  - `cc-section-header` row with label + italic hint ("Tap to choose token & network")
+  - Bridge direction row with circular flip button + "Bridge" label between sections
+  - Output display shows contextual placeholders instead of blank dashes
+  - Bridge button text cleaned up (no "(Phase 3)" suffix — Phase 3 note moved to footer)
+- New CSS classes: `.slippage-popup-anchor`, `.slippage-popup`, `.cc-section-header`, `.cc-section-hint`, `.cc-token-btn--full`, `.cc-token-btn-chain-emoji`, `.cc-token-btn-body`, `.cc-token-btn-chain-name`, `.cc-bridge-arrow`, `.cc-bridge-arrow-label`, `.cc-output-placeholder`
 
 ### 2026-02-28 — Helius Webhook Receive Tracking (v0.6.0)
 - **RECV-1 FIXED:** Incoming transfers (SOL + SPL) now tracked via Helius enhanced transaction webhooks
