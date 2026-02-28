@@ -86,7 +86,12 @@ quoteRouter.get("/quote", async (req: Request, res: Response) => {
             getTokenPriceUsd(outputMint),
         ]);
 
-        const outputTokens = Number(quote.outAmount) / 10 ** outputDecimals;
+        // M3: Use BigInt division to avoid precision loss for values > 2^53
+        const outBig = BigInt(quote.outAmount);
+        const divisor = BigInt(10 ** outputDecimals);
+        const intPart = outBig / divisor;
+        const fracPart = outBig % divisor;
+        const outputTokens = Number(intPart) + Number(fracPart) / Number(divisor);
         const inputUsdValue = inputPriceUsd !== null ? humanAmountNum * inputPriceUsd : null;
         const outputUsdValue = outputPriceUsd !== null ? outputTokens * outputPriceUsd : null;
         const exchangeRate = humanAmountNum > 0 ? outputTokens / humanAmountNum : 0;

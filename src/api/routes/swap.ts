@@ -5,6 +5,9 @@ import { prisma } from "../../db/client";
 import { pollTransactionInBackground } from "../../solana/transaction";
 import { config } from "../../config";
 
+/** Regex: non-negative integer string (for BigInt validation) */
+const BIGINT_RE = /^(0|[1-9]\d*)$/;
+
 export const swapRouter = Router();
 
 /**
@@ -64,6 +67,12 @@ swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
             return;
         }
 
+        // H2: Validate BigInt inputs before conversion to prevent crash on malformed strings
+        if (!BIGINT_RE.test(String(inputAmount)) || !BIGINT_RE.test(String(outputAmount))) {
+            res.status(400).json({ error: "Invalid amount: must be a non-negative integer string" });
+            return;
+        }
+
         const user = await findUserByTelegramId(telegramId);
         if (!user) {
             res.status(404).json({ error: "User not found" });
@@ -99,9 +108,11 @@ swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
 /**
  * GET /api/swap/status?swapId=<ID>
  * Returns the current confirmation status of a swap.
+ * H1: Enforces user ownership — users can only query their own swaps.
  */
 swapRouter.get("/swap/status", async (req: Request, res: Response) => {
     try {
+        const telegramId = res.locals.telegramId as string;
         const swapId = req.query.swapId as string;
 
         if (!swapId) {
@@ -109,8 +120,15 @@ swapRouter.get("/swap/status", async (req: Request, res: Response) => {
             return;
         }
 
-        const swap = await prisma.swap.findUnique({
-            where: { id: swapId },
+        const user = await findUserByTelegramId(telegramId);
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        // H1: Only return swaps owned by the authenticated user
+        const swap = await prisma.swap.findFirst({
+            where: { id: swapId, userId: user.id },
             select: { id: true, status: true, txSignature: true },
         });
 

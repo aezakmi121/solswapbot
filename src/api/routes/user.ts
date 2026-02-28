@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { findUserByTelegramId, updateUserWallet, getUserWithReferralCount } from "../../db/queries/users";
+import { findUserByTelegramId, updateUserWallet, getUserWithReferralCount, deleteUserAndData } from "../../db/queries/users";
 import { connection } from "../../solana/connection";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
@@ -243,5 +243,28 @@ userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
     } catch (err) {
         console.error("Portfolio API error:", err);
         res.status(500).json({ error: "Failed to fetch portfolio" });
+    }
+});
+
+/**
+ * DELETE /api/user
+ * H3: GDPR Right to Erasure — deletes the user and all associated data.
+ * Cascade-deletes: Swaps, Transfers, TokenScans, WatchedWallets, Subscription.
+ * Unlinks (but does not delete) any users referred by this user.
+ */
+userRouter.delete("/user", async (_req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+
+        const deleted = await deleteUserAndData(telegramId);
+        if (!deleted) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        res.json({ success: true, message: "Account and all associated data deleted" });
+    } catch (err) {
+        console.error("User deletion error:", err);
+        res.status(500).json({ error: "Failed to delete user data" });
     }
 });

@@ -45,7 +45,13 @@ transactionsRouter.get("/transactions", async (req: Request, res: Response) => {
         let to: Date | undefined;
 
         const preset = req.query.preset as string | undefined;
+        const VALID_PRESETS = ["today", "7d", "30d"];
         if (preset) {
+            // L2: Reject unknown preset values instead of silently returning all
+            if (!VALID_PRESETS.includes(preset)) {
+                res.status(400).json({ error: "Invalid preset. Use: today, 7d, 30d" });
+                return;
+            }
             const now = new Date();
             to = now;
             if (preset === "today") {
@@ -55,7 +61,6 @@ transactionsRouter.get("/transactions", async (req: Request, res: Response) => {
             } else if (preset === "30d") {
                 from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             }
-            // unknown preset → no date filter (returns all)
         } else {
             if (req.query.from) {
                 const d = new Date(String(req.query.from));

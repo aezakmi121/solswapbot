@@ -68,3 +68,31 @@ export async function getUserWithReferralCount(telegramId: string) {
   });
   return user;
 }
+
+/**
+ * Delete a user and all their related data (GDPR Right to Erasure).
+ * Uses a transaction to ensure atomicity — either everything is deleted or nothing.
+ * Unlinks referrals (sets referredById to null) rather than cascade-deleting referred users.
+ */
+export async function deleteUserAndData(telegramId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return false;
+
+  await prisma.$transaction([
+    // Unlink users who were referred by this user (don't delete them)
+    prisma.user.updateMany({
+      where: { referredById: user.id },
+      data: { referredById: null },
+    }),
+    // Delete all owned records
+    prisma.swap.deleteMany({ where: { userId: user.id } }),
+    prisma.transfer.deleteMany({ where: { userId: user.id } }),
+    prisma.tokenScan.deleteMany({ where: { userId: user.id } }),
+    prisma.watchedWallet.deleteMany({ where: { userId: user.id } }),
+    prisma.subscription.deleteMany({ where: { userId: user.id } }),
+    // Delete the user last
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
+
+  return true;
+}
