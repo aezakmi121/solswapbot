@@ -6,10 +6,10 @@ export const transactionsRouter = Router();
 
 /**
  * GET /api/transactions
- * Returns paginated, filtered transaction history (swaps + sends) for the authenticated user.
+ * Returns paginated, filtered transaction history (swaps + sends + receives) for the authenticated user.
  *
  * Query params:
- *   type    — "all" | "swap" | "send"  (default: "all")
+ *   type    — "all" | "swap" | "send" | "receive"  (default: "all")
  *   preset  — "today" | "7d" | "30d"   (optional; overrides from/to)
  *   from    — ISO date, e.g. "2026-01-01"  (optional; ignored when preset is set)
  *   to      — ISO date, e.g. "2026-02-28"  (optional; inclusive end-of-day)
@@ -31,8 +31,8 @@ transactionsRouter.get("/transactions", async (req: Request, res: Response) => {
 
         // ── type ──────────────────────────────────────────────────────
         const type = String(req.query.type ?? "all");
-        if (!["all", "swap", "send"].includes(type)) {
-            res.status(400).json({ error: "Invalid type. Use: all, swap, send" });
+        if (!["all", "swap", "send", "receive"].includes(type)) {
+            res.status(400).json({ error: "Invalid type. Use: all, swap, send, receive" });
             return;
         }
 
@@ -77,7 +77,7 @@ transactionsRouter.get("/transactions", async (req: Request, res: Response) => {
 
         const result = await getTransactions({
             userId: user.id,
-            type: type as "all" | "swap" | "send",
+            type: type as "all" | "swap" | "send" | "receive",
             from,
             to,
             offset,

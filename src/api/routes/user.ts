@@ -6,6 +6,7 @@ import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isValidSolanaAddress } from "../../utils/validation";
 import { getTokenPricesBatch } from "../../jupiter/price";
 import { getTokensMetadata } from "../../jupiter/tokens";
+import { addAddressToWebhook } from "../../helius/client";
 
 export const userRouter = Router();
 
@@ -93,6 +94,11 @@ userRouter.post("/user/wallet", async (req: Request, res: Response) => {
         // Only update if wallet is not already set or is different
         if (user.walletAddress !== walletAddress) {
             await updateUserWallet(telegramId, walletAddress);
+
+            // Register address with Helius webhook for receive tracking (non-blocking)
+            addAddressToWebhook(walletAddress).catch((err) => {
+                console.error("Helius address registration failed (non-fatal):", err);
+            });
         }
 
         res.json({ success: true });

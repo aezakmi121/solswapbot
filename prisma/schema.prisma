@@ -57,7 +57,7 @@ enum SwapStatus {
   TIMEOUT
 }
 
-// ─── Transfers (outbound sends) ─────────────────────────
+// ─── Transfers (outbound sends + inbound receives) ──────
 model Transfer {
   id               String   @id @default(cuid())
   userId           String
@@ -66,6 +66,8 @@ model Transfer {
   tokenSymbol      String?
   humanAmount      String   // human-readable e.g. "0.5"
   recipientAddress String
+  senderAddress    String?  // For receives: who sent the tokens
+  direction        String   @default("SEND") // "SEND" or "RECEIVE"
   txSignature      String?
   status           String   @default("CONFIRMED")
   createdAt        DateTime @default(now())

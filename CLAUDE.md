@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-28 | Version: 0.5.3
+> Updated: 2026-02-28 | Version: 0.6.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -178,8 +178,9 @@ solswapbot/
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
-│   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends)
+│   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
+│   │       ├── webhook.ts        # POST /api/webhook/helius  (Helius enhanced tx webhook receiver)
 │   │       └── user.ts           # GET /api/user + POST /api/user/wallet + GET /api/user/balances + GET /api/user/portfolio
 │   │
 │   ├── bot/
@@ -205,6 +206,10 @@ solswapbot/
 │   │   ├── analyze.ts            # analyzeToken(): orchestrates all checks, computes risk score 0-100
 │   │   └── checks.ts             # Individual checks: mintAuthority, freezeAuthority, topHolders,
 │   │                             #   tokenAge, jupiterVerified, hasMetadata
+│   │
+│   ├── helius/
+│   │   ├── client.ts             # Helius webhook API client: init, create, addAddress
+│   │   └── parser.ts             # Parse enhanced tx events into IncomingTransfer records
 │   │
 │   ├── solana/
 │   │   ├── connection.ts         # Helius RPC connection singleton
@@ -329,6 +334,8 @@ model Transfer {
   tokenSymbol      String?
   humanAmount      String           // human-readable e.g. "0.5" (not raw units)
   recipientAddress String
+  senderAddress    String?          // For receives: who sent the tokens
+  direction        String   @default("SEND")  // "SEND" or "RECEIVE"
   txSignature      String?
   status           String   @default("CONFIRMED")  // string not enum
   createdAt        DateTime @default(now())
@@ -372,6 +379,8 @@ enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
 **Important notes:**
 - `Swap.inputAmount` / `outputAmount` are `BigInt` (raw token units). Divide by `10^decimals` for display.
 - `Transfer.humanAmount` is already a human-readable string (e.g. "0.5"), NOT raw units.
+- `Transfer.direction` is `"SEND"` (user sent tokens) or `"RECEIVE"` (incoming via Helius webhook).
+- `Transfer.senderAddress` is only set for receives (who sent the tokens to the user).
 - `Swap.status` uses the `SwapStatus` enum; `Transfer.status` uses a plain `String`.
 - `fees.ts` and `referrals.ts` in `db/queries/` are stubs with no active logic.
 - `WatchedWallet` and `Subscription` are schema-only — no enforcement anywhere in the codebase.
@@ -424,6 +433,12 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | GET | `/api/tokens` | Popular token list (Jupiter V2, cached in memory, 1h TTL) |
 | GET | `/api/tokens/search?query=<q>` | Search by symbol, name, or mint (≥2 chars) |
 
+### Webhook Routes (secret-authenticated, no Telegram auth)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/webhook/helius` | `Authorization: <HELIUS_WEBHOOK_SECRET>` | Receives Helius enhanced transaction events. Records incoming transfers as `Transfer` with `direction="RECEIVE"`. Deduplicates by txSignature+userId+mint. Skips user's own swaps. Returns 200 always (prevents Helius retry storms). |
+
 ### Protected Routes
 
 | Method | Path | Request | Response |
@@ -449,7 +464,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | DELETE | `/api/user` | — | `{ success: true, message }` — GDPR data deletion (cascade-deletes all user records) |
 
 #### `/api/transactions` query params in detail
-- `type`: `all` (default) | `swap` | `send`
+- `type`: `all` (default) | `swap` | `send` | `receive`
 - `preset`: `today` | `7d` | `30d` (overrides `from`/`to`)
 - `from`: ISO date `YYYY-MM-DD` (inclusive)
 - `to`: ISO date `YYYY-MM-DD` (inclusive, padded to end of day)
@@ -628,6 +643,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | Swap status info disclosure | `/api/swap/status` now enforces user ownership check | `swap.ts` |
 | BigInt crash vector | `inputAmount`/`outputAmount` validated as integer strings before `BigInt()` | `swap.ts` |
 | GDPR data deletion | `DELETE /api/user` cascade-deletes all user records (transactional) | `user.ts` |
+| Webhook auth | `POST /api/webhook/helius` validates `Authorization` header against `HELIUS_WEBHOOK_SECRET` | `webhook.ts` |
 
 **Auth middleware behavior:**
 - Valid: sets `res.locals.telegramId`, calls `next()`
@@ -686,14 +702,14 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Log Out button (Privy logout)
 
 **Tab 5 — History (Transactions)**
-- Type chips: All / Swaps / Sends (no Receives yet — Helius webhook needed)
+- Type chips: All / Swaps / Sends / Receives (via Helius webhook)
 - Date preset chips: Today / 7 days / 30 days / Custom
 - Custom date range: two `<input type="date">` fields
 - Grouped by month with item counts
 - "Load 20 more" button with offset-based pagination
 - "Showing X of Y transactions" counter
 - Tap any row → slide-up detail modal with amounts, fee, date, chain, tx ID, Solscan link, copy tx
-- Receives placeholder explaining Helius webhook requirement (Phase 3)
+- Receives tracked via Helius enhanced transaction webhooks (auto-records incoming SOL + SPL transfers)
 - Shimmer skeleton loading on initial fetch
 - Haptic feedback on chip changes
 
@@ -734,15 +750,15 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | AUD-L2 | ~~LOW~~ **FIXED** | `/api/transactions` silently accepted unknown preset values | `api/routes/transactions.ts` | **DONE** — v0.5.3 audit fix |
 | DB-1 | INFO | `fees.ts` and `referrals.ts` are stubs with Phase 3 query logic but no route wiring | `db/queries/fees.ts` | Reserved for Phase 3 |
 | DB-2 | INFO | `WatchedWallet` and `Subscription` schema models have no API routes or enforcement | `schema.prisma` | Reserved for Phase 3 |
-| MON-1 | MEDIUM | No monitoring or alerting beyond PM2 logs. No uptime checks, no error rate tracking | VPS | Phase 3 |
+| MON-1 | ~~MEDIUM~~ **FIXED** | Uptime monitoring configured (UptimeRobot) | VPS | **DONE** — user configured externally |
 | TEST-1 | ~~HIGH~~ **PARTIAL** | Unit test suite exists (`npm test`, 23 tests: auth, fee bypass, address validation). Integration smoke tests exist (`npm run test:live`, 13 tests). No end-to-end Privy/swap signing tests. | `src/__tests__/smoke.test.ts`, `scripts/smoke-test.sh` | Unit + integration done. E2E pending Phase 3. |
-| RECV-1 | MEDIUM | Incoming transfers (receives) not tracked — Helius webhooks needed | Phase 3 | NOT STARTED |
+| RECV-1 | ~~MEDIUM~~ **FIXED** | Incoming transfers now tracked via Helius enhanced transaction webhooks. `POST /api/webhook/helius` creates Transfer records with `direction="RECEIVE"`. | `helius/client.ts`, `helius/parser.ts`, `api/routes/webhook.ts` | **DONE** — v0.6.0 |
 
 ---
 
 ## Production Readiness Assessment
 
-### Current Status: **SOFT BETA → NEAR v1.0 — Audit score 82→92/100 after v0.5.3 fixes**
+### Current Status: **v1.0 READY — Audit score 82→92/100 (v0.5.3) + Helius webhook receive tracking (v0.6.0)**
 
 #### What IS production-ready:
 - All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
@@ -771,27 +787,25 @@ All 7 CRITICAL security issues have been fixed. Summary:
    (`npm run test:live`) now exist and pass. Missing: true end-to-end Privy signing tests
    (require real Telegram session + wallet). **Priority: LOW for launch, MEDIUM before scaling.**
 
-3. **No monitoring** — When the server goes down at 3am, you won't know until a user
-   reports it. Add uptime monitoring (UptimeRobot free tier is sufficient) and a Telegram
-   bot alert for PM2 process crashes. **Priority: MEDIUM.**
+3. ~~**No monitoring**~~ **DONE** — Uptime monitoring configured (UptimeRobot).
 
 4. **LIFI_API_KEY missing** — Cross-chain quotes work without a key (LI.FI allows anonymous),
    but you don't earn integrator fees. Need to register at li.fi and set `LIFI_API_KEY`
-   to actually monetize cross-chain swaps. **Priority: MEDIUM.**
+   to actually monetize cross-chain swaps. **Priority: LOW — only needed at ~200-500 active users.**
 
-5. **Receive tracking not implemented** — The Transactions tab has a placeholder for incoming
-   transfers but they're not tracked. Requires Helius webhook setup (Phase 3).
-   **Does not block launch** — just a missing feature.
+5. ~~**Receive tracking not implemented**~~ **DONE** — Helius enhanced transaction webhooks
+   integrated (v0.6.0). Incoming SOL + SPL transfers automatically recorded as `Transfer`
+   with `direction="RECEIVE"`. Requires `HELIUS_API_KEY` + `HELIUS_WEBHOOK_SECRET` in `.env`.
 
 6. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
    All users get all features for free. Not a bug, but premium features can't be sold yet.
 
 #### Recommended launch sequence:
-1. Add uptime monitoring (1 hour of work)
-2. Manual end-to-end test with real SOL (see Beta Test Checklist)
-3. Soft launch to 50-100 users, watch PM2 logs closely
-4. Register `JUPITER_API_KEY` + `LIFI_API_KEY` for production rate limits and integrator fees
-5. Add Helius webhooks + receive tracking before scaling past 500 users
+1. ~~Add uptime monitoring~~ **DONE**
+2. Deploy Helius webhook changes (see Deployment section — requires `npx prisma db push`)
+3. Manual end-to-end test with real SOL (see Beta Test Checklist)
+4. Soft launch to 50-100 users, watch PM2 logs closely
+5. Register `LIFI_API_KEY` for integrator fees when cross-chain volume justifies it
 
 ---
 
@@ -820,10 +834,10 @@ MINIAPP_URL=https://your-app.vercel.app   # Shown in /start button
 PRIVY_APP_ID=                  # Privy dashboard app ID. If missing, backend still works (Privy is frontend-only)
 JUPITER_API_KEY=               # Required soon (after lite-api sunset). Get free key at portal.jup.ag
 LIFI_API_KEY=                  # LI.FI partner key — cross-chain works without it but no integrator fees
+HELIUS_API_KEY=                # Required for receive tracking. Extract from SOLANA_RPC_URL or set separately.
+HELIUS_WEBHOOK_SECRET=         # Random string to authenticate Helius webhook requests. Required for receive tracking.
 
-# ── PHASE 3 (not needed yet) ───────────────────────────────────────────────────
-HELIUS_API_KEY=                # Webhook integration for receive tracking
-HELIUS_WEBHOOK_SECRET=         # Validates Helius webhook requests
+# ── PHASE 4 (not needed yet) ───────────────────────────────────────────────────
 GEMINI_API_KEY=                # Phase 4: AI market signals
 ```
 
@@ -993,16 +1007,16 @@ Privy wallet integration, in-app swap signing, swap history, basic API.
 Tab navigation, portfolio, send/receive, token scanner, settings, slippage,
 cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use.
 
-### Phase 3 — NEXT (not started)
+### Phase 3 — IN PROGRESS
 
 | Task | Priority | Notes |
 |------|----------|-------|
 | ~~Jupiter API key migration~~ | ~~P0~~ **DONE** | Default now `api.jup.ag/swap/v1`. Get `JUPITER_API_KEY` from portal.jup.ag for rate limits. |
 | ~~Automated smoke tests~~ | ~~P0~~ **DONE** | 23 unit tests (`npm test`) + 13 integration tests (`npm run test:live`). |
-| Uptime monitoring | P1 | UptimeRobot + Telegram alert on crash |
-| Helius webhook integration | P1 | Required for receive tracking in Transactions tab |
-| Receive tracking in Transactions tab | P1 | Depends on Helius webhooks |
-| LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps |
+| ~~Uptime monitoring~~ | ~~P1~~ **DONE** | Configured externally (UptimeRobot). |
+| ~~Helius webhook integration~~ | ~~P1~~ **DONE** | `helius/client.ts` + `helius/parser.ts` + `api/routes/webhook.ts`. Auto-creates webhook on startup, registers wallets on connect. |
+| ~~Receive tracking in Transactions tab~~ | ~~P1~~ **DONE** | `transactions.ts` query now supports 3-way merge (swaps+sends+receives). Transfer model has `direction` + `senderAddress` fields. |
+| LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps. Not needed until ~200-500 active users. |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
 | Whale alert bot notifications | P2 | Bot pushes alerts to user |
@@ -1021,6 +1035,21 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-02-28 — Helius Webhook Receive Tracking (v0.6.0)
+- **RECV-1 FIXED:** Incoming transfers (SOL + SPL) now tracked via Helius enhanced transaction webhooks
+- New `src/helius/client.ts` — webhook API client: `isHeliusEnabled()`, `initHeliusWebhook()`, `addAddressToWebhook()`
+- New `src/helius/parser.ts` — parses enhanced tx events into `IncomingTransfer` records (dedupes, skips dust/self-transfers)
+- New `src/api/routes/webhook.ts` — `POST /api/webhook/helius` endpoint (secret-authenticated, deduplicates, skips own swaps)
+- `prisma/schema.prisma` — Added `direction` (default "SEND") and `senderAddress` (nullable) to Transfer model
+- `src/api/server.ts` — Mounted webhook router (public, no Telegram auth — uses webhook secret)
+- `src/app.ts` — Auto-initializes Helius webhook on startup (non-fatal if disabled)
+- `src/api/routes/user.ts` — Registers wallet address with Helius webhook on `POST /api/user/wallet`
+- `src/db/queries/transactions.ts` — 3-way parallel query: swaps + sends (direction=SEND) + receives (direction=RECEIVE)
+- `src/api/routes/transactions.ts` — Added "receive" to valid transaction types
+- **Requires VPS redeployment:** `npx prisma db push` (new Transfer columns) + `npm run build` + `pm2 restart`
+- **New .env vars:** `HELIUS_API_KEY` + `HELIUS_WEBHOOK_SECRET` (optional — feature disabled if not set)
+- **MON-1 CLOSED:** Uptime monitoring configured externally (UptimeRobot)
 
 ### 2026-02-28 — v1.0 Pre-Launch Audit Fixes (v0.5.3)
 - **H1 FIXED:** `/api/swap/status` now enforces user ownership — `findFirst` with `userId` filter (`swap.ts`)

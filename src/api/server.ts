@@ -29,6 +29,7 @@ import { historyRouter } from "./routes/history";
 import { sendRouter } from "./routes/send";
 import { transferRouter } from "./routes/transfer";
 import { transactionsRouter } from "./routes/transactions";
+import { webhookRouter } from "./routes/webhook";
 
 /**
  * Creates and configures the Express API server.
@@ -73,6 +74,9 @@ export function createApiServer(): express.Express {
     // Public routes — no auth needed (read-only token/price data)
     app.use("/api", priceRouter);
     app.use("/api", tokensRouter);
+
+    // Webhook routes — auth via HELIUS_WEBHOOK_SECRET, not Telegram initData
+    app.use("/api", webhookRouter);
 
     // Protected routes — require valid Telegram initData (C2/C3/C5)
     app.use("/api", telegramAuthMiddleware, quoteRouter);

@@ -1,10 +1,10 @@
 import { prisma } from "../client";
 import { getTokensMetadata } from "../../jupiter/tokens";
 
-export type TxType = "swap" | "send";
+export type TxType = "swap" | "send" | "receive";
 
 export interface UnifiedTransaction {
-    id: string;          // "swap_<cuid>" or "send_<cuid>"
+    id: string;          // "swap_<cuid>" or "send_<cuid>" or "receive_<cuid>"
     type: TxType;
     status: string;
     // swap-specific
@@ -15,10 +15,11 @@ export interface UnifiedTransaction {
     inputChain?: string;
     outputChain?: string;
     feeAmountUsd?: number | null;
-    // send-specific
+    // send/receive-specific
     tokenSymbol?: string;
     humanAmount?: string;
     recipientAddress?: string;
+    senderAddress?: string;
     // shared
     txSignature: string | null;
     createdAt: string;
@@ -26,7 +27,7 @@ export interface UnifiedTransaction {
 
 interface GetTransactionsParams {
     userId: string;
-    type?: "all" | "swap" | "send";
+    type?: "all" | "swap" | "send" | "receive";
     from?: Date;
     to?: Date;
     offset?: number;
@@ -45,7 +46,7 @@ function formatRaw(raw: bigint, decimals: number): string {
 
 /**
  * Fetch, merge, sort, and paginate swaps + transfers for a user.
- * Supports type filter (all/swap/send) and date range.
+ * Supports type filter (all/swap/send/receive) and date range.
  * Uses offset-based pagination — suitable for typical user volumes (<1000 txs).
  */
 export async function getTransactions(params: GetTransactionsParams): Promise<{
@@ -66,29 +67,47 @@ export async function getTransactions(params: GetTransactionsParams): Promise<{
             : undefined;
 
     const baseSwapWhere = { userId: params.userId, ...(createdAt ? { createdAt } : {}) };
-    const baseTransferWhere = { userId: params.userId, ...(createdAt ? { createdAt } : {}) };
 
-    // Fetch both tables in parallel, skip whichever the type filter excludes
-    const [swaps, transfers] = await Promise.all([
-        params.type === "send"
-            ? ([] as Awaited<ReturnType<typeof prisma.swap.findMany>>)
-            : prisma.swap.findMany({ where: baseSwapWhere, orderBy: { createdAt: "desc" } }),
-        params.type === "swap"
-            ? ([] as Awaited<ReturnType<typeof prisma.transfer.findMany>>)
-            : prisma.transfer.findMany({ where: baseTransferWhere, orderBy: { createdAt: "desc" } }),
+    // Transfer queries need direction filtering for send vs receive
+    const sendWhere = {
+        userId: params.userId,
+        direction: "SEND",
+        ...(createdAt ? { createdAt } : {}),
+    };
+    const receiveWhere = {
+        userId: params.userId,
+        direction: "RECEIVE",
+        ...(createdAt ? { createdAt } : {}),
+    };
+
+    // Determine which tables to query based on type filter
+    const wantSwaps = !params.type || params.type === "all" || params.type === "swap";
+    const wantSends = !params.type || params.type === "all" || params.type === "send";
+    const wantReceives = !params.type || params.type === "all" || params.type === "receive";
+
+    const [swaps, sends, receives] = await Promise.all([
+        wantSwaps
+            ? prisma.swap.findMany({ where: baseSwapWhere, orderBy: { createdAt: "desc" } })
+            : ([] as Awaited<ReturnType<typeof prisma.swap.findMany>>),
+        wantSends
+            ? prisma.transfer.findMany({ where: sendWhere, orderBy: { createdAt: "desc" } })
+            : ([] as Awaited<ReturnType<typeof prisma.transfer.findMany>>),
+        wantReceives
+            ? prisma.transfer.findMany({ where: receiveWhere, orderBy: { createdAt: "desc" } })
+            : ([] as Awaited<ReturnType<typeof prisma.transfer.findMany>>),
     ]);
 
     // Batch-resolve token metadata (symbol + decimals) for all swap mints
-    const uniqueMints = [...new Set(swaps.flatMap((s) => [s.inputMint, s.outputMint]))];
+    const uniqueMints = [...new Set(swaps.flatMap((s: any) => [s.inputMint, s.outputMint]))];
     const metadata = uniqueMints.length > 0 ? await getTokensMetadata(uniqueMints) : {};
 
     const mintSymbol = (mint: string) =>
         metadata[mint]?.symbol ?? mint.slice(0, 6) + "...";
     const mintDecimals = (mint: string) => metadata[mint]?.decimals ?? 9;
 
-    const swapItems: UnifiedTransaction[] = swaps.map((s) => ({
+    const swapItems: UnifiedTransaction[] = swaps.map((s: any) => ({
         id: `swap_${s.id}`,
-        type: "swap",
+        type: "swap" as const,
         status: s.status,
         inputSymbol: mintSymbol(s.inputMint),
         outputSymbol: mintSymbol(s.outputMint),
@@ -101,9 +120,9 @@ export async function getTransactions(params: GetTransactionsParams): Promise<{
         createdAt: s.createdAt.toISOString(),
     }));
 
-    const sendItems: UnifiedTransaction[] = transfers.map((t) => ({
+    const sendItems: UnifiedTransaction[] = sends.map((t: any) => ({
         id: `send_${t.id}`,
-        type: "send",
+        type: "send" as const,
         status: t.status,
         tokenSymbol: t.tokenSymbol ?? t.tokenMint.slice(0, 6) + "...",
         humanAmount: t.humanAmount,
@@ -112,8 +131,20 @@ export async function getTransactions(params: GetTransactionsParams): Promise<{
         createdAt: t.createdAt.toISOString(),
     }));
 
+    const receiveItems: UnifiedTransaction[] = receives.map((t: any) => ({
+        id: `receive_${t.id}`,
+        type: "receive" as const,
+        status: t.status,
+        tokenSymbol: t.tokenSymbol ?? t.tokenMint.slice(0, 6) + "...",
+        humanAmount: t.humanAmount,
+        senderAddress: t.senderAddress ?? undefined,
+        recipientAddress: t.recipientAddress,
+        txSignature: t.txSignature ?? null,
+        createdAt: t.createdAt.toISOString(),
+    }));
+
     // Merge and sort all transactions by date desc
-    const all = [...swapItems, ...sendItems].sort(
+    const all = [...swapItems, ...sendItems, ...receiveItems].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 

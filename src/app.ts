@@ -3,6 +3,7 @@ import { prisma } from "./db/client";
 import { createBot } from "./bot";
 import { startApiServer } from "./api/server";
 import { pollTransactionInBackground } from "./solana/transaction";
+import { initHeliusWebhook, isHeliusEnabled } from "./helius/client";
 
 async function main(): Promise<void> {
   console.log(`Starting SolSwap Bot (${config.NODE_ENV})...`);
@@ -30,6 +31,14 @@ async function main(): Promise<void> {
   // Start the API server for Mini App — capture app so we can close the HTTP
   // server cleanly on shutdown (otherwise in-flight requests are hard-killed).
   const app = startApiServer();
+
+  // Initialize Helius webhook for receive tracking (non-blocking, optional)
+  if (isHeliusEnabled()) {
+    const vpsUrl = config.CORS_ORIGIN; // VPS is proxied through the same origin
+    initHeliusWebhook(vpsUrl).catch((err) => {
+      console.error("Helius webhook init failed (non-fatal):", err);
+    });
+  }
 
   // Create and start the bot
   const bot = createBot();
