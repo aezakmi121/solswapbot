@@ -70,6 +70,24 @@ export async function getSmartQuote(req: RouteQuoteRequest): Promise<RouteQuoteR
 
 // ─── Same-Chain (Jupiter) ───────────────────────────────────────────
 async function getSameChainQuote(req: RouteQuoteRequest): Promise<RouteQuoteResult> {
+    // Jupiter only handles Solana mints. Same-chain EVM pairs must not reach here.
+    if (req.inputChain.toLowerCase() !== "solana") {
+        const chainName = req.inputChain.charAt(0).toUpperCase() + req.inputChain.slice(1);
+        return {
+            provider: "jupiter",
+            isCrossChain: false,
+            inputChain: req.inputChain,
+            outputChain: req.outputChain,
+            inputAmount: req.amount,
+            outputAmount: "0",
+            outputAmountUsd: "0",
+            feeUsd: "0",
+            estimatedTimeSeconds: 0,
+            rawQuote: null,
+            error: `Same-chain swaps on ${chainName} are not yet supported. Select different source and destination networks to bridge.`,
+        };
+    }
+
     try {
         const inputTokenInfo = findToken(req.inputToken, req.inputChain);
         const outputTokenInfo = findToken(req.outputToken, req.outputChain);
