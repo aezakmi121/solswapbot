@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-28 | Version: 0.6.1
+> Updated: 2026-02-28 | Version: 0.6.2
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -1041,6 +1041,23 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-02-28 — Bridge UX Polish: Modal Labels, Same-Chain Guard, Slippage Fix (v0.6.2)
+- **Slippage popup out-of-bounds (#3 FIXED):** Replaced `position: absolute` floating popup with an in-document-flow inline section
+  - Gear icon now toggles a `.slippage-inline` card that expands directly below the panel header
+  - No `position: absolute`, no overflow risk on any screen size
+  - `slippagePopupRef` and click-outside `useEffect` removed; `showSlippagePopup` → `showSlippageInline`
+  - Gear button gets `slippage-indicator--active` highlight class when section is open
+- **CcTokenModal UX (#1 FIXED):** Added step labels so the two-step flow is immediately obvious
+  - Header renamed "Select Token" → "Select Network & Token"
+  - "1. Choose Network" label above chain chips — clarifies the pills are network selectors
+  - "2. Choose Token · on [Chain Name]" label above search — dynamically updates as chain changes
+  - New CSS: `.cc-modal-section-label`, `.cc-modal-section-sub`
+- **Same-chain non-Solana error (#2 FIXED):** BNB→USDT on BNB Chain no longer hits Jupiter
+  - **Frontend:** `getCrossChainQuote` bails early when `inputChain === outputChain && chain !== "solana"`; bridge button disabled in same state
+  - **Frontend:** Yellow warning banner in cc-panel: "Both sides are on BNB Chain — select different networks to bridge." with inline "Solana swap" link
+  - **Backend (`aggregator/router.ts`):** `getSameChainQuote` returns friendly error if chain ≠ `"solana"` — defensive layer prevents raw Jupiter 400 from surfacing
+  - New CSS: `.cc-same-chain-warning`, `.cc-same-chain-link`
 
 ### 2026-02-28 — Inline Slippage Popup + Cross-Chain UX (v0.6.1)
 - **Slippage (#1 FIXED):** Gear icon in SwapPanel now opens an inline popup instead of redirecting to Settings tab

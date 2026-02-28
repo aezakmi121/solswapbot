@@ -37,11 +37,12 @@ export function CcTokenModal({ open, onClose, onSelect, currentChain, currentSym
             <div className="modal-panel cc-token-modal" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="modal-header">
-                    <h3>Select Token</h3>
+                    <h3>Select Network &amp; Token</h3>
                     <button className="modal-close" onClick={onClose}>×</button>
                 </div>
 
-                {/* Chain chips */}
+                {/* Step 1 — Network */}
+                <div className="cc-modal-section-label">1. Choose Network</div>
                 <div className="cc-chain-chips">
                     {CC_CHAINS.map((c) => (
                         <button
@@ -54,7 +55,13 @@ export function CcTokenModal({ open, onClose, onSelect, currentChain, currentSym
                     ))}
                 </div>
 
-                {/* Search */}
+                {/* Step 2 — Token */}
+                <div className="cc-modal-section-label">
+                    2. Choose Token
+                    <span className="cc-modal-section-sub">
+                        on {CC_CHAINS.find(c => c.id === activeChain)?.name ?? activeChain}
+                    </span>
+                </div>
                 <div className="cc-token-search-wrap">
                     <span className="cc-token-search-icon">🔍</span>
                     <input

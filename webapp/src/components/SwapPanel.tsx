@@ -85,31 +85,17 @@ export function SwapPanel({
     const quoteAbortRef = useRef<AbortController | null>(null);
     const ccAbortRef = useRef<AbortController | null>(null);
 
-    // Inline slippage popup
-    const [showSlippagePopup, setShowSlippagePopup] = useState(false);
+    // Inline slippage section (expands below header, no absolute positioning)
+    const [showSlippageInline, setShowSlippageInline] = useState(false);
     const [slippageCustomInput, setSlippageCustomInput] = useState("");
     const [showSlippageCustom, setShowSlippageCustom] = useState(false);
-    const slippagePopupRef = useRef<HTMLDivElement>(null);
-
-    // Close slippage popup when clicking outside
-    useEffect(() => {
-        if (!showSlippagePopup) return;
-        const handler = (e: MouseEvent) => {
-            if (slippagePopupRef.current && !slippagePopupRef.current.contains(e.target as Node)) {
-                setShowSlippagePopup(false);
-                setShowSlippageCustom(false);
-            }
-        };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, [showSlippagePopup]);
 
     const handleSlippageSelect = (bps: number) => {
         onSlippageChange(bps);
         localStorage.setItem(SLIPPAGE_KEY, String(bps));
         setShowSlippageCustom(false);
         setSlippageCustomInput("");
-        setShowSlippagePopup(false);
+        setShowSlippageInline(false);
     };
 
     const handleCustomSlippage = () => {
@@ -257,6 +243,12 @@ export function SwapPanel({
     // Cross-chain quote fetch (debounced, with AbortController)
     const getCrossChainQuote = useCallback(async () => {
         ccAbortRef.current?.abort();
+        // Block same-chain non-Solana pairs — Jupiter can't handle EVM addresses
+        if (ccInputChain === ccOutputChain && ccInputChain !== "solana") {
+            setCcQuote(null);
+            setCcError("");
+            return;
+        }
         if (!ccAmount || Number(ccAmount) <= 0) {
             setCcQuote(null);
             return;
@@ -490,59 +482,16 @@ export function SwapPanel({
             <div className="panel-header">
                 <h2 className="panel-title">Swap</h2>
                 <div className="panel-header-right">
-                    {/* ── Inline Slippage Popup ── */}
-                    <div className="slippage-popup-anchor" ref={slippagePopupRef}>
-                        <button
-                            className="slippage-indicator"
-                            onClick={() => {
-                                setShowSlippagePopup((v) => !v);
-                                setShowSlippageCustom(false);
-                            }}
-                            title="Set slippage tolerance"
-                        >
-                            ⚙️ {(slippageBps / 100).toFixed(1)}%
-                        </button>
-                        {showSlippagePopup && (
-                            <div className="slippage-popup">
-                                <div className="slippage-popup-title">Slippage Tolerance</div>
-                                <div className="slippage-chips">
-                                    {SLIPPAGE_OPTIONS.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            className={`slippage-chip${slippageBps === opt.value ? " slippage-chip--active" : ""}`}
-                                            onClick={() => handleSlippageSelect(opt.value)}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                    <button
-                                        className={`slippage-chip${!isSlippagePreset || showSlippageCustom ? " slippage-chip--active" : ""}`}
-                                        onClick={() => setShowSlippageCustom((v) => !v)}
-                                    >
-                                        {isSlippagePreset ? "Custom" : `${(slippageBps / 100).toFixed(2)}%`}
-                                    </button>
-                                </div>
-                                {showSlippageCustom && (
-                                    <div className="slippage-custom-row">
-                                        <input
-                                            className="slippage-custom-input"
-                                            type="number"
-                                            placeholder="e.g. 2.5"
-                                            min="0.01"
-                                            max="50"
-                                            step="0.1"
-                                            value={slippageCustomInput}
-                                            onChange={(e) => setSlippageCustomInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && handleCustomSlippage()}
-                                            autoFocus
-                                        />
-                                        <span className="slippage-pct-label">%</span>
-                                        <button className="slippage-set-btn" onClick={handleCustomSlippage}>Set</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                    <button
+                        className={`slippage-indicator${showSlippageInline ? " slippage-indicator--active" : ""}`}
+                        onClick={() => {
+                            setShowSlippageInline((v) => !v);
+                            setShowSlippageCustom(false);
+                        }}
+                        title="Set slippage tolerance"
+                    >
+                        ⚙️ {(slippageBps / 100).toFixed(1)}%
+                    </button>
                     <button
                         className={`cc-toggle-btn${crossChainMode ? " cc-toggle-btn--active" : ""}`}
                         onClick={() => {
@@ -559,6 +508,48 @@ export function SwapPanel({
                     </button>
                 </div>
             </div>
+
+            {/* ── Inline Slippage Section (in document flow — no overflow risk) ── */}
+            {showSlippageInline && (
+                <div className="slippage-inline">
+                    <span className="slippage-inline-label">Slippage Tolerance</span>
+                    <div className="slippage-chips">
+                        {SLIPPAGE_OPTIONS.map((opt) => (
+                            <button
+                                key={opt.value}
+                                className={`slippage-chip${slippageBps === opt.value ? " slippage-chip--active" : ""}`}
+                                onClick={() => handleSlippageSelect(opt.value)}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                        <button
+                            className={`slippage-chip${!isSlippagePreset || showSlippageCustom ? " slippage-chip--active" : ""}`}
+                            onClick={() => setShowSlippageCustom((v) => !v)}
+                        >
+                            {isSlippagePreset ? "Custom" : `${(slippageBps / 100).toFixed(2)}%`}
+                        </button>
+                    </div>
+                    {showSlippageCustom && (
+                        <div className="slippage-custom-row">
+                            <input
+                                className="slippage-custom-input"
+                                type="number"
+                                placeholder="e.g. 2.5"
+                                min="0.01"
+                                max="50"
+                                step="0.1"
+                                value={slippageCustomInput}
+                                onChange={(e) => setSlippageCustomInput(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && handleCustomSlippage()}
+                                autoFocus
+                            />
+                            <span className="slippage-pct-label">%</span>
+                            <button className="slippage-set-btn" onClick={handleCustomSlippage}>Set</button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* ── Recent Tokens ── */}
             {recentTokens.length > 0 && (
@@ -598,6 +589,21 @@ export function SwapPanel({
                         <span className="cc-banner-title">🌉 Cross-Chain Bridge</span>
                         <span className="cc-banner-sub">Select tokens, enter amount, and get a live quote</span>
                     </div>
+
+                    {/* Same-chain guard: block non-Solana same-chain pairs before making any API call */}
+                    {ccInputChain === ccOutputChain && ccInputChain !== "solana" && (
+                        <div className="cc-same-chain-warning">
+                            ⚠️ Both sides are on <strong>{CC_CHAINS.find(c => c.id === ccInputChain)?.name ?? ccInputChain}</strong>.
+                            {" "}Select a different destination network to bridge, or use the{" "}
+                            <button
+                                className="cc-same-chain-link"
+                                onClick={() => setCrossChainMode(false)}
+                            >
+                                Solana swap
+                            </button>
+                            {" "}tab for same-chain swaps.
+                        </div>
+                    )}
 
                     {/* You Pay section */}
                     <div className="cc-section">
@@ -737,7 +743,10 @@ export function SwapPanel({
                     {/* Bridge button */}
                     <button
                         className="swap-btn"
-                        disabled={!ccQuote || ccLoading || !ccAmount}
+                        disabled={
+                            !ccQuote || ccLoading || !ccAmount ||
+                            (ccInputChain === ccOutputChain && ccInputChain !== "solana")
+                        }
                         onClick={() => toast("Cross-chain execution coming in Phase 3 — live quote shown above.", "info")}
                     >
                         {ccLoading
