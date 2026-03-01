@@ -1251,6 +1251,15 @@ body {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.portfolio-chain-badge {
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 .portfolio-token-name {
@@ -1610,6 +1619,13 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.settings-evm-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
   padding: 0 2px;
 }
 

@@ -39,6 +39,9 @@ const envSchema = z.object({
   HELIUS_API_KEY: z.string().optional(),
   HELIUS_WEBHOOK_SECRET: z.string().optional(),
 
+  // Moralis (EVM token balances — free tier: 120K CUs/month)
+  MORALIS_API_KEY: z.string().optional(),
+
   // AI Signals
   GEMINI_API_KEY: z.string().optional(),
 

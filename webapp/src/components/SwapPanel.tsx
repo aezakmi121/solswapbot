@@ -77,6 +77,7 @@ function friendlySwapError(raw: string): string {
 
 interface SwapPanelProps {
     walletAddress: string;
+    evmWalletAddress?: string | null;
     tokenBalances: TokenBalance[];
     balancesLoaded: boolean;
     refreshBalance: () => void;
@@ -89,6 +90,7 @@ const QUOTE_MAX_AGE_MS = 30_000;
 
 export function SwapPanel({
     walletAddress,
+    evmWalletAddress,
     tokenBalances,
     balancesLoaded,
     refreshBalance,
@@ -144,6 +146,16 @@ export function SwapPanel({
     const [bridgeTxSig, setBridgeTxSig] = useState<string | null>(null);
     const [bridgeToAddress, setBridgeToAddress] = useState("");
     const bridgePollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+
+    // Auto-fill bridge destination from user's EVM wallet when switching to a non-Solana output chain
+    useEffect(() => {
+        if (ccOutputChain === "solana") {
+            setBridgeToAddress("");
+        } else if (evmWalletAddress && bridgeStatus === "idle") {
+            setBridgeToAddress(evmWalletAddress);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ccOutputChain, evmWalletAddress]);
 
     // Token loading
     const [tokensLoaded, setTokensLoaded] = useState(false);
@@ -838,7 +850,12 @@ export function SwapPanel({
                     {/* Destination address input for EVM output chains */}
                     {ccOutputChain !== "solana" && bridgeStatus === "idle" && (
                         <div className="cc-to-address-row">
-                            <label className="cc-to-address-label">Receive at (your EVM address)</label>
+                            <label className="cc-to-address-label">
+                                Receive at
+                                {evmWalletAddress && bridgeToAddress === evmWalletAddress
+                                    ? " (your EVM wallet)"
+                                    : " (EVM address)"}
+                            </label>
                             <input
                                 className="cc-to-address-input"
                                 type="text"

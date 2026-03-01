@@ -216,9 +216,85 @@ Get or create user by Telegram initData.
 
 | Header | Description |
 |--------|-------------|
-| `x-telegram-init-data` | Telegram WebApp initData string |
+| `Authorization` | `tma <tg.initData>` |
 
-**Response:** `{ "user": { "telegramId": "123", "walletAddress": "...", "referralCode": "..." }, "solBalance": 1.5 }`
+**Response:**
+```json
+{
+  "telegramId": "123456789",
+  "walletAddress": "GsbwXf...",
+  "evmWalletAddress": "0x742d35Cc...",
+  "solBalance": 1.5,
+  "referralCode": "abc123",
+  "referralCount": 3
+}
+```
+
+---
+
+### `POST /api/user/wallet`
+Register the user's Privy-managed Solana wallet address.
+
+**Body:** `{ "walletAddress": "GsbwXf..." }`
+
+**Response:** `{ "success": true }`
+
+---
+
+### `POST /api/user/evm-wallet`
+Register the user's Privy-managed EVM wallet address. Called automatically by the Mini App when Privy creates the embedded Ethereum wallet on first login.
+
+**Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `evmWalletAddress` | string | Yes | EVM address (`0x` + 40 hex chars) |
+
+**Response:** `{ "success": true }`
+
+**Errors:**
+- `400` — Missing or invalid EVM address format
+
+---
+
+### `GET /api/user/portfolio`
+Get combined Solana + EVM token portfolio with USD values.
+
+**Response:**
+```json
+{
+  "totalValueUsd": 234.56,
+  "walletAddress": "GsbwXf...",
+  "evmWalletAddress": "0x742d35Cc...",
+  "tokens": [
+    {
+      "chain": "solana",
+      "mint": "So11111111111111111111111111111111111111112",
+      "symbol": "SOL",
+      "name": "Solana",
+      "icon": "https://...",
+      "amount": 1.5,
+      "decimals": 9,
+      "priceUsd": 148.50,
+      "valueUsd": 222.75
+    },
+    {
+      "chain": "ethereum",
+      "mint": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "icon": "https://...",
+      "amount": 11.81,
+      "decimals": 6,
+      "priceUsd": 1.0,
+      "valueUsd": 11.81
+    }
+  ]
+}
+```
+
+Token `chain` values: `"solana"` | `"ethereum"` | `"bsc"` | `"polygon"` | `"arbitrum"` | `"base"`
+
+EVM tokens only appear if `MORALIS_API_KEY` is set and the user has an EVM wallet with non-zero balances.
 
 ---
 
@@ -228,6 +304,4 @@ The following endpoints are planned but do not exist yet:
 
 | Endpoint | Phase | Description |
 |----------|-------|-------------|
-| `GET /api/history` | Phase 1 | User's swap history (last 10) |
-| `POST /api/webhooks/helius` | Phase 3 | Helius webhook receiver for whale tracking |
 | `POST /api/subscribe` | Phase 3 | Telegram Stars subscription purchase |

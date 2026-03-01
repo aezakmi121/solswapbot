@@ -87,8 +87,19 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     );
 }
 
+/** Emoji badge for each supported chain */
+const CHAIN_BADGE: Record<string, string> = {
+    solana:   "🟣",
+    ethereum: "🔷",
+    bsc:      "🟡",
+    polygon:  "🟪",
+    arbitrum: "🔵",
+    base:     "🔵",
+};
+
 function TokenRow({ token }: { token: PortfolioToken }) {
     const [iconError, setIconError] = useState(false);
+    const chainBadge = CHAIN_BADGE[token.chain] ?? null;
 
     return (
         <div className="portfolio-token-row">
@@ -107,7 +118,10 @@ function TokenRow({ token }: { token: PortfolioToken }) {
                 )}
             </div>
             <div className="portfolio-token-info">
-                <span className="portfolio-token-symbol">{token.symbol}</span>
+                <span className="portfolio-token-symbol">
+                    {token.symbol}
+                    {chainBadge && <span className="portfolio-chain-badge">{chainBadge}</span>}
+                </span>
                 <span className="portfolio-token-name">{token.name}</span>
             </div>
             <div className="portfolio-token-values">
