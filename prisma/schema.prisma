@@ -12,7 +12,8 @@ model User {
   id               String         @id @default(cuid())
   telegramId       String         @unique
   telegramUsername  String?
-  walletAddress    String?        // Privy-managed embedded wallet address
+  walletAddress    String?        // Privy-managed Solana embedded wallet address
+  evmWalletAddress String?        // Privy-managed EVM embedded wallet address
   referralCode     String         @unique @default(cuid())
   referredById     String?
   referredBy       User?          @relation("Referrals", fields: [referredById], references: [id])

@@ -47,6 +47,7 @@ export interface QuoteResponse {
 export interface UserData {
     telegramId: string;
     walletAddress: string | null;
+    evmWalletAddress?: string | null;
     solBalance: number | null;
     referralCode?: string;
     referralCount?: number;
@@ -161,6 +162,19 @@ export async function saveWalletAddress(
     }
 }
 
+/** Save a Privy-managed EVM wallet address to the user's account */
+export async function registerEvmWallet(evmWalletAddress: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/user/evm-wallet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ evmWalletAddress }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to save EVM wallet");
+    }
+}
+
 /** Fetch swap history for a user */
 export async function fetchHistory(): Promise<SwapRecord[]> {
     const res = await fetch(`${API_BASE}/api/history`, {
@@ -210,7 +224,8 @@ export async function fetchSwapStatus(
 }
 
 export interface PortfolioToken {
-    mint: string;
+    chain: string;      // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
+    mint: string;       // Solana mint address, EVM token contract address, or "native"
     symbol: string;
     name: string;
     icon: string | null;
@@ -224,6 +239,7 @@ export interface Portfolio {
     totalValueUsd: number;
     tokens: PortfolioToken[];
     walletAddress: string | null;
+    evmWalletAddress?: string | null;
 }
 
 /** Fetch full portfolio — balances + USD prices in one batched call */

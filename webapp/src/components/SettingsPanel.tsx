@@ -15,14 +15,16 @@ const SLIPPAGE_OPTIONS = [
 
 interface SettingsPanelProps {
     walletAddress: string;
+    evmWalletAddress?: string | null;
     slippageBps: number;
     onSlippageChange: (bps: number) => void;
 }
 
-export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: SettingsPanelProps) {
+export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, onSlippageChange }: SettingsPanelProps) {
     const { logout } = usePrivy();
     const [userData, setUserData] = useState<UserData | null>(null);
     const [addrCopied, setAddrCopied] = useState(false);
+    const [evmAddrCopied, setEvmAddrCopied] = useState(false);
     const [refCopied, setRefCopied] = useState(false);
     const [customSlippage, setCustomSlippage] = useState("");
     const [showCustom, setShowCustom] = useState(false);
@@ -37,7 +39,16 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
         navigator.clipboard.writeText(walletAddress).then(() => {
             setAddrCopied(true);
             setTimeout(() => setAddrCopied(false), 2000);
-            toast("Address copied!");
+            toast("Solana address copied!");
+        }).catch(() => {});
+    };
+
+    const handleCopyEvmAddr = () => {
+        if (!evmWalletAddress) return;
+        navigator.clipboard.writeText(evmWalletAddress).then(() => {
+            setEvmAddrCopied(true);
+            setTimeout(() => setEvmAddrCopied(false), 2000);
+            toast("EVM address copied!");
         }).catch(() => {});
     };
 
@@ -79,11 +90,12 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
             <div className="settings-section">
                 <div className="settings-section-title">Wallet</div>
                 <div className="settings-card">
+                    {/* Solana wallet */}
                     <div className="settings-row">
-                        <span className="settings-label">Address</span>
+                        <span className="settings-label">🟣 Solana</span>
                         <div className="settings-addr-row">
                             <span className="settings-addr">{shortAddr(walletAddress)}</span>
-                            <button className="settings-icon-btn" onClick={handleCopyAddr} title="Copy address">
+                            <button className="settings-icon-btn" onClick={handleCopyAddr} title="Copy Solana address">
                                 {addrCopied ? "✓" : "📋"}
                             </button>
                             <button className="settings-icon-btn" onClick={() => setShowQr(true)} title="Show QR code">
@@ -91,7 +103,25 @@ export function SettingsPanel({ walletAddress, slippageBps, onSlippageChange }: 
                             </button>
                         </div>
                     </div>
+
+                    {/* EVM wallet (shown when Privy has created one) */}
+                    {evmWalletAddress && (
+                        <div className="settings-row">
+                            <span className="settings-label">🔷 EVM</span>
+                            <div className="settings-addr-row">
+                                <span className="settings-addr">{shortAddr(evmWalletAddress)}</span>
+                                <button className="settings-icon-btn" onClick={handleCopyEvmAddr} title="Copy EVM address">
+                                    {evmAddrCopied ? "✓" : "📋"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
+                {evmWalletAddress && (
+                    <p className="settings-evm-hint">
+                        Use the 🔷 EVM address to receive bridged tokens (ETH, BNB, MATIC…)
+                    </p>
+                )}
             </div>
 
             {/* ── Trading ── */}

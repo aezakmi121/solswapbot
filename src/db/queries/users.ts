@@ -52,11 +52,19 @@ export async function upsertUser(params: {
   return { user, isNew: !existing };
 }
 
-/** Update a user's connected wallet address */
+/** Update a user's connected Solana wallet address */
 export function updateUserWallet(telegramId: string, walletAddress: string) {
   return prisma.user.update({
     where: { telegramId },
     data: { walletAddress },
+  });
+}
+
+/** Update a user's Privy-managed EVM embedded wallet address */
+export function updateUserEvmWallet(telegramId: string, evmWalletAddress: string) {
+  return prisma.user.update({
+    where: { telegramId },
+    data: { evmWalletAddress },
   });
 }
 

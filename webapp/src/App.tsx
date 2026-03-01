@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
+import { usePrivy, useLoginWithTelegram, useWallets as useAllWallets } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import {
     TokenBalance,
     saveWalletAddress,
+    registerEvmWallet,
     fetchUser,
     fetchBalances,
 } from "./lib/api";
@@ -31,10 +32,13 @@ export function App() {
     const { ready, authenticated } = usePrivy();
     const { login: loginWithTelegram } = useLoginWithTelegram();
     const { wallets } = useWallets();
+    const { wallets: allWallets } = useAllWallets();
 
     // ── Shared state (used across tabs) ──
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [walletSaved, setWalletSaved] = useState(false);
+    const [evmWalletAddress, setEvmWalletAddress] = useState<string | null>(null);
+    const [evmWalletSaved, setEvmWalletSaved] = useState(false);
     const [solBalance, setSolBalance] = useState<number | null>(null);
     const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
 
@@ -66,7 +70,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready, authenticated, loginWithTelegram]);
 
-    // ── Sync wallet address from Privy ──
+    // ── Sync Solana wallet address from Privy ──
     const embeddedWallet = wallets.length > 0 ? wallets[0] : null;
     useEffect(() => {
         if (embeddedWallet?.address) {
@@ -74,7 +78,7 @@ export function App() {
         }
     }, [embeddedWallet?.address]);
 
-    // ── Save wallet to backend (once, on first connect) ──
+    // ── Save Solana wallet to backend (once, on first connect) ──
     useEffect(() => {
         if (!walletAddress || walletSaved || !tg?.initData) return;
         saveWalletAddress(walletAddress)
@@ -83,6 +87,26 @@ export function App() {
     // saveWalletAddress is a stable module-level import (M17)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletAddress, walletSaved]);
+
+    // ── Sync EVM wallet address from Privy (all-chain wallets hook) ──
+    const evmWallet = allWallets.find(
+        (w: any) => w.walletClientType === "privy" && w.chainType === "ethereum"
+    );
+    useEffect(() => {
+        if (evmWallet?.address) {
+            setEvmWalletAddress(evmWallet.address);
+        }
+    }, [evmWallet?.address]);
+
+    // ── Save EVM wallet to backend (once, on first detect) ──
+    useEffect(() => {
+        if (!evmWalletAddress || evmWalletSaved || !tg?.initData) return;
+        registerEvmWallet(evmWalletAddress)
+            .then(() => setEvmWalletSaved(true))
+            .catch((err: unknown) => console.error("Failed to save EVM wallet:", err));
+    // registerEvmWallet is a stable module-level import (M17)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [evmWalletAddress, evmWalletSaved]);
 
     // ── Refresh SOL balance + all token balances (shared for swap balance checks) ──
     const refreshBalance = useCallback(() => {
@@ -192,6 +216,7 @@ export function App() {
                 {activeTab === "swap" && (
                     <SwapPanel
                         walletAddress={walletAddress}
+                        evmWalletAddress={evmWalletAddress}
                         tokenBalances={tokenBalances}
                         balancesLoaded={balancesLoaded}
                         refreshBalance={refreshBalance}
@@ -208,6 +233,7 @@ export function App() {
                 {activeTab === "settings" && (
                     <SettingsPanel
                         walletAddress={walletAddress}
+                        evmWalletAddress={evmWalletAddress}
                         slippageBps={slippageBps}
                         onSlippageChange={handleSlippageChange}
                     />

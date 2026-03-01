@@ -58,6 +58,7 @@ createRoot(document.getElementById("root")!).render(
                     },
                     embeddedWallets: {
                         solana: { createOnLogin: "all-users" },
+                        ethereum: { createOnLogin: "all-users" },
                     },
                 }}
             >

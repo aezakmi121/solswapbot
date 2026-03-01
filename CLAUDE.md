@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-28 | Version: 0.6.3
+> Updated: 2026-03-01 | Version: 0.7.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -445,6 +445,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 |--------|------|---------|----------|
 | GET | `/api/user` | — | `{ telegramId, walletAddress, solBalance, referralCode, referralCount }` |
 | POST | `/api/user/wallet` | `{ walletAddress }` | `{ success: true }` |
+| POST | `/api/user/evm-wallet` | `{ evmWalletAddress }` | `{ success: true }` — stores Privy EVM address |
 | GET | `/api/user/balances?walletAddress=` | — | `{ balances: [{ mint, amount, decimals }] }` |
 | GET | `/api/user/portfolio` | — | `{ totalValueUsd, tokens: [PortfolioToken], walletAddress }` |
 | GET | `/api/quote?inputMint=&outputMint=&humanAmount=&slippageBps=` | — | `{ quote, display: QuoteDisplay }` |
@@ -483,17 +484,20 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 #### `/api/user/portfolio` PortfolioToken shape
 ```typescript
 {
-  mint: string;
-  symbol: string;      // from Jupiter token list, fallback: first 6 chars of mint
-  name: string;        // from Jupiter token list, fallback: "Unknown Token"
-  icon: string | null; // Jupiter logoURI
+  chain: string;       // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
+  mint: string;        // Solana mint address, EVM contract address, or "native"
+  symbol: string;      // from Jupiter/Moralis, fallback: first 6 chars of mint
+  name: string;        // from Jupiter/Moralis, fallback: "Unknown Token"
+  icon: string | null; // Jupiter logoURI or Moralis token logo
   amount: number;      // human-readable balance
   decimals: number;
   priceUsd: number | null;
   valueUsd: number | null;
 }
 ```
+Response also includes `evmWalletAddress: string | null`.
 Sorted by `valueUsd` descending; tokens with `null` value at end sorted alphabetically.
+Solana tokens sourced from Jupiter. EVM tokens sourced from Moralis (requires `MORALIS_API_KEY`; returns [] if not set).
 
 ---
 
@@ -845,6 +849,7 @@ JUPITER_API_KEY=               # Required soon (after lite-api sunset). Get free
 LIFI_API_KEY=                  # LI.FI partner key — cross-chain works without it but no integrator fees
 HELIUS_API_KEY=                # Required for receive tracking. Extract from SOLANA_RPC_URL or set separately.
 HELIUS_WEBHOOK_SECRET=         # Random string to authenticate Helius webhook requests. Required for receive tracking.
+MORALIS_API_KEY=               # EVM token balances (Moralis free tier: 120K CUs/month). Get free key at moralis.io.
 
 # ── PHASE 4 (not needed yet) ───────────────────────────────────────────────────
 GEMINI_API_KEY=                # Phase 4: AI market signals
@@ -1026,6 +1031,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Helius webhook integration~~ | ~~P1~~ **DONE** | `helius/client.ts` + `helius/parser.ts` + `api/routes/webhook.ts`. Auto-creates webhook on startup, registers wallets on connect. |
 | ~~Receive tracking in Transactions tab~~ | ~~P1~~ **DONE** | `transactions.ts` query now supports 3-way merge (swaps+sends+receives). Transfer model has `direction` + `senderAddress` fields. |
 | ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
+| ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
 | LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps. Not needed until ~200-500 active users. |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
@@ -1045,6 +1051,20 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-01 — EVM Embedded Wallet + Multi-Chain Portfolio (v0.7.0)
+- **Privy EVM wallet auto-creation:** Added `ethereum: { createOnLogin: "all-users" }` to Privy config in `main.tsx`. All users now get a Privy-managed Ethereum embedded wallet (same MPC security as Solana wallet). Non-custodial — private key never exposed.
+- **EVM wallet stored in DB:** Added `evmWalletAddress String?` to `prisma/schema.prisma`. Requires `npx prisma db push` on deploy.
+- **New endpoint `POST /api/user/evm-wallet`:** Saves EVM address detected by Privy. Validates `^0x[a-fA-F0-9]{40}$`. Mirrors `POST /api/user/wallet`.
+- **`GET /api/user` updated:** Now returns `evmWalletAddress` alongside `walletAddress`.
+- **Multi-chain portfolio:** `GET /api/user/portfolio` merges Solana tokens (Jupiter) + EVM tokens (Moralis). All tokens get a `chain` field. `totalValueUsd` sums both chains. EVM portfolio fetched in parallel with Solana (non-blocking, returns [] if `MORALIS_API_KEY` not set).
+- **New `src/moralis/client.ts`:** Fetches ERC20 + native token balances across 5 EVM chains (Ethereum, BNB, Polygon, Arbitrum, Base). Skips spam tokens (`possible_spam: true`), skips zero balances. Assigns $1 price for known stablecoins (USDC/USDT/DAI…).
+- **Chain badges in Wallet tab:** `TokenRow` in `WalletTab.tsx` shows emoji badge per chain: 🟣 Solana, 🔷 Ethereum, 🟡 BNB, 🟪 Polygon, 🔵 Arbitrum/Base.
+- **EVM address in Settings:** `SettingsPanel.tsx` shows both Solana (🟣) and EVM (🔷) addresses with copy buttons. EVM section only shown when wallet exists.
+- **Bridge destination auto-filled:** `SwapPanel.tsx` auto-fills `bridgeToAddress` from `evmWalletAddress` prop when `ccOutputChain !== "solana"`. Shows "(your EVM wallet)" label when matched. User can still override.
+- **App.tsx EVM detection:** Uses `useAllWallets` from `@privy-io/react-auth` to find `walletClientType === "privy" && chainType === "ethereum"` wallet. Registers once via `registerEvmWallet()` then passes `evmWalletAddress` to SwapPanel + SettingsPanel.
+- **New env var:** `MORALIS_API_KEY` — optional (feature disabled if not set). Free at moralis.io: 120K CUs/month.
+- **Deploy requirements:** `npx prisma db push` (adds `evmWalletAddress` column) + add `MORALIS_API_KEY` to `.env`.
 
 ### 2026-02-28 — Cross-Chain Bridge Execution + Friendly Error Messages (v0.6.3)
 - **Cross-chain bridge execution (LIVE):** Replaced Phase 3 stub toast with full LI.FI bridge execution
