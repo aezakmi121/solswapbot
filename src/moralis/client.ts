@@ -87,7 +87,7 @@ async function fetchChainPortfolio(
     // ── ERC20 token balances ──────────────────────────────────────────────────
     if (erc20Res.status === "fulfilled" && erc20Res.value.ok) {
         try {
-            const raw = await erc20Res.value.json();
+            const raw: any = await erc20Res.value.json();
             const items: any[] = Array.isArray(raw) ? raw : (raw.result ?? []);
 
             for (const t of items) {
