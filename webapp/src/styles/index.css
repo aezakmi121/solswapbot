@@ -3747,7 +3747,44 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Destination address input for EVM output chains */
+/* Destination address for EVM output chains */
+.cc-to-address-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.cc-to-address-display-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.cc-to-address-display-label strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cc-to-address-override-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.cc-to-address-back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0 0 4px;
+  text-align: left;
+}
+
 .cc-to-address-row {
   display: flex;
   flex-direction: column;

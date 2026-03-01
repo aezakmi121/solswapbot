@@ -145,14 +145,17 @@ export function SwapPanel({
     const [bridgeError, setBridgeError] = useState("");
     const [bridgeTxSig, setBridgeTxSig] = useState<string | null>(null);
     const [bridgeToAddress, setBridgeToAddress] = useState("");
+    const [showAddressOverride, setShowAddressOverride] = useState(false);
     const bridgePollRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
     // Auto-fill bridge destination from user's EVM wallet when switching to a non-Solana output chain
     useEffect(() => {
         if (ccOutputChain === "solana") {
             setBridgeToAddress("");
+            setShowAddressOverride(false);
         } else if (evmWalletAddress && bridgeStatus === "idle") {
             setBridgeToAddress(evmWalletAddress);
+            setShowAddressOverride(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ccOutputChain, evmWalletAddress]);
@@ -847,24 +850,50 @@ export function SwapPanel({
                         </div>
                     </div>
 
-                    {/* Destination address input for EVM output chains */}
+                    {/* Destination address for EVM output chains */}
                     {ccOutputChain !== "solana" && bridgeStatus === "idle" && (
                         <div className="cc-to-address-row">
-                            <label className="cc-to-address-label">
-                                Receive at
-                                {evmWalletAddress && bridgeToAddress === evmWalletAddress
-                                    ? " (your EVM wallet)"
-                                    : " (EVM address)"}
-                            </label>
-                            <input
-                                className="cc-to-address-input"
-                                type="text"
-                                placeholder="0x..."
-                                value={bridgeToAddress}
-                                onChange={(e) => { setBridgeToAddress(e.target.value); setBridgeError(""); }}
-                                spellCheck={false}
-                                autoComplete="off"
-                            />
+                            {evmWalletAddress && !showAddressOverride ? (
+                                // Auto-filled: show clean display row, no raw input
+                                <div className="cc-to-address-display">
+                                    <span className="cc-to-address-display-label">
+                                        Receiving to: <strong>🔷 your EVM wallet</strong> · {bridgeToAddress.slice(0, 6)}…{bridgeToAddress.slice(-4)}
+                                    </span>
+                                    <button
+                                        className="cc-to-address-override-btn"
+                                        onClick={() => setShowAddressOverride(true)}
+                                    >
+                                        ✎ Send to different address
+                                    </button>
+                                </div>
+                            ) : (
+                                // Manual input: shown when no EVM wallet, or user clicked override
+                                <>
+                                    <label className="cc-to-address-label">
+                                        {evmWalletAddress ? "Send to different address" : "Receive at (EVM address)"}
+                                    </label>
+                                    {evmWalletAddress && (
+                                        <button
+                                            className="cc-to-address-back-btn"
+                                            onClick={() => {
+                                                setBridgeToAddress(evmWalletAddress);
+                                                setShowAddressOverride(false);
+                                            }}
+                                        >
+                                            ← Use my EVM wallet
+                                        </button>
+                                    )}
+                                    <input
+                                        className="cc-to-address-input"
+                                        type="text"
+                                        placeholder="0x..."
+                                        value={bridgeToAddress}
+                                        onChange={(e) => { setBridgeToAddress(e.target.value); setBridgeError(""); }}
+                                        spellCheck={false}
+                                        autoComplete="off"
+                                    />
+                                </>
+                            )}
                         </div>
                     )}
 
