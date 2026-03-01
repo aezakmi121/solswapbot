@@ -88,9 +88,11 @@ export function App() {
     }, [walletAddress, walletSaved]);
 
     // ── Sync EVM wallet address from Privy (user.linkedAccounts is reliable across Privy v3) ──
+    // Cast as any: LinkedAccountWithMetadata is a union that omits `address` on non-wallet subtypes
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const evmWallet = user?.linkedAccounts?.find(
         (a: any) => a.type === "wallet" && a.walletClientType === "privy" && a.chainType === "ethereum"
-    );
+    ) as any;
     useEffect(() => {
         if (evmWallet?.address) {
             setEvmWalletAddress(evmWallet.address);
