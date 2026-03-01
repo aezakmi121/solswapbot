@@ -3719,6 +3719,55 @@ body {
   text-decoration: underline;
 }
 
+/* EVM-origin bridging coming-soon banner */
+.cc-evm-origin-warning {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--warning);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+/* Destination address input for EVM output chains */
+.cc-to-address-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.cc-to-address-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.cc-to-address-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  font-family: monospace;
+  color: var(--text);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.cc-to-address-input:focus {
+  border-color: var(--accent);
+}
+
+.cc-to-address-input::placeholder {
+  color: var(--text-muted);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    CCTOKENMODAL: STEP LABELS (Network → Token flow)
    ═══════════════════════════════════════════════════════════════════════════════ */

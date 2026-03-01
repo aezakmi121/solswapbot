@@ -453,6 +453,67 @@ export interface CrossChainQuoteResult {
     error: string | null;
 }
 
+/**
+ * Execute a cross-chain bridge swap.
+ * Calls LI.FI with the user's real wallet addresses and returns a base64
+ * Solana transaction ready to be signed by Privy.
+ */
+export async function executeCrossChain(params: {
+    inputToken: string;
+    outputToken: string;
+    inputChain: string;
+    outputChain: string;
+    amount: string;
+    slippageBps?: number;
+    fromAddress: string;
+    toAddress: string;
+}): Promise<{ transactionData: string; lifiRouteId: string; outputAmount: string; outputAmountUsd: string }> {
+    const res = await fetch(`${API_BASE}/api/cross-chain/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to build bridge transaction");
+    return data;
+}
+
+/** Record a completed bridge transaction in the DB. */
+export async function confirmCrossChainSwap(params: {
+    txSignature: string;
+    inputToken: string;
+    outputToken: string;
+    inputChain: string;
+    outputChain: string;
+    inputAmount: string;
+    outputAmount: string;
+    feeAmountUsd?: number | null;
+}): Promise<{ swapId: string; status: string }> {
+    const res = await fetch(`${API_BASE}/api/cross-chain/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to record bridge transaction");
+    return data;
+}
+
+/** Poll the LI.FI bridge status for a given source transaction hash. */
+export async function getCrossChainBridgeStatus(
+    txHash: string,
+    fromChain: string,
+    toChain: string
+): Promise<{ status: string; receivingTxHash?: string | null }> {
+    const params = new URLSearchParams({ txHash, fromChain, toChain });
+    const res = await fetch(`${API_BASE}/api/cross-chain/status?${params}`, {
+        headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch bridge status");
+    return data;
+}
+
 /** Get a cross-chain or same-chain quote via the smart router (Jupiter or LI.FI) */
 export async function fetchCrossChainQuote(params: {
     inputToken: string;

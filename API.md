@@ -156,6 +156,59 @@ List tokens available on a specific chain.
 
 ---
 
+### `POST /api/cross-chain/execute`
+Build a signable LI.FI bridge transaction using the user's real wallet addresses. Only Solana-originated swaps are supported (`inputChain` must be `"solana"`). Returns a base64-encoded Solana VersionedTransaction ready to be signed with Privy.
+
+**Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `inputToken` | string | Yes | Token symbol (e.g., `"SOL"`) |
+| `outputToken` | string | Yes | Destination token symbol (e.g., `"USDC"`) |
+| `inputChain` | string | Yes | Source chain (`"solana"` only for now) |
+| `outputChain` | string | Yes | Destination chain (e.g., `"ethereum"`) |
+| `amount` | string | Yes | Human-readable amount (e.g., `"1.5"`) |
+| `slippageBps` | number | No | Slippage in basis points (0–5000, default 50) |
+| `fromAddress` | string | Yes | User's Solana wallet address |
+| `toAddress` | string | No | Destination address. Required for EVM output chains. Defaults to `fromAddress` for Solana output. |
+
+**Response:** `{ transactionData: base64, lifiRouteId: string, outputAmount: string, outputAmountUsd: string }`
+
+---
+
+### `POST /api/cross-chain/confirm`
+Record a completed bridge transaction in the DB after the user has signed and broadcast it.
+
+**Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `txSignature` | string | Yes | Solana transaction signature |
+| `inputToken` | string | Yes | Token symbol |
+| `outputToken` | string | Yes | Destination token symbol |
+| `inputChain` | string | Yes | Source chain |
+| `outputChain` | string | Yes | Destination chain |
+| `inputAmount` | string | Yes | Amount in smallest unit or human-readable |
+| `outputAmount` | string | Yes | Expected output amount |
+| `feeAmountUsd` | number | No | Bridge fee in USD |
+
+**Response:** `{ swapId: string, status: "SUBMITTED" }`
+
+---
+
+### `GET /api/cross-chain/status`
+Track the status of a LI.FI bridge transaction.
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `txHash` | string | Yes | Source chain tx hash (Solana signature) |
+| `fromChain` | string | Yes | Source chain name (e.g., `"solana"`) |
+| `toChain` | string | Yes | Destination chain name (e.g., `"ethereum"`) |
+
+**Response:** `{ status: "PENDING" | "DONE" | "FAILED" | "NOT_FOUND", receivingTxHash?: string | null }`
+
+Poll every 5 s. `DONE` means funds have arrived at the destination. `PENDING` means bridge is in progress.
+
+---
+
 ## User
 
 ### `GET /api/user`

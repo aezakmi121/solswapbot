@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-02-28 | Version: 0.6.2
+> Updated: 2026-02-28 | Version: 0.6.3
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -456,6 +456,9 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | GET | `/api/cross-chain/quote?inputToken=&outputToken=&inputChain=&outputChain=&amount=&slippageBps=` | — | `CrossChainQuoteResult` |
 | GET | `/api/cross-chain/chains` | — | LI.FI supported chain list |
 | GET | `/api/cross-chain/tokens` | — | LI.FI token registry |
+| POST | `/api/cross-chain/execute` | `{ inputToken, outputToken, inputChain, outputChain, amount, slippageBps?, fromAddress, toAddress? }` | `{ transactionData: base64, lifiRouteId, outputAmount, outputAmountUsd }` — LI.FI tx ready to sign |
+| POST | `/api/cross-chain/confirm` | `{ txSignature, inputToken, outputToken, inputChain, outputChain, inputAmount, outputAmount, feeAmountUsd? }` | `{ swapId, status: "SUBMITTED" }` — records bridge in DB |
+| GET | `/api/cross-chain/status?txHash=&fromChain=&toChain=` | — | `{ status: "PENDING"\|"DONE"\|"FAILED"\|"NOT_FOUND", receivingTxHash? }` — LI.FI bridge status |
 | GET | `/api/history` | — | `{ swaps: SwapRecord[] }` — last 20 swaps (legacy) |
 | GET | `/api/activity` | — | `{ activity: ActivityItem[] }` — last 20 swaps+sends merged |
 | GET | `/api/transactions?type=&preset=&from=&to=&offset=&limit=` | — | `{ transactions: UnifiedTransaction[], total, hasMore }` |
@@ -674,7 +677,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 **Tab 2 — Swap**
 - Same-chain Solana swaps via Jupiter
-- Cross-chain swaps via LI.FI (chain selector + CcTokenModal)
+- Cross-chain bridge swaps via LI.FI (chain selector + CcTokenModal) — **Solana-originated bridges fully live (v0.6.3)**
 - Slippage gear icon → **inline popup** (0.1% / 0.5% / 1.0% / Custom) — no Settings redirect
   - Popup closes on outside click; Custom input accepts 0.01–50%
   - SlippagePanel prop changed from `onOpenSettings` to `onSlippageChange` (v0.6.1)
@@ -1022,6 +1025,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Uptime monitoring~~ | ~~P1~~ **DONE** | Configured externally (UptimeRobot). |
 | ~~Helius webhook integration~~ | ~~P1~~ **DONE** | `helius/client.ts` + `helius/parser.ts` + `api/routes/webhook.ts`. Auto-creates webhook on startup, registers wallets on connect. |
 | ~~Receive tracking in Transactions tab~~ | ~~P1~~ **DONE** | `transactions.ts` query now supports 3-way merge (swaps+sends+receives). Transfer model has `direction` + `senderAddress` fields. |
+| ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
 | LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps. Not needed until ~200-500 active users. |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
@@ -1041,6 +1045,27 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-02-28 — Cross-Chain Bridge Execution + Friendly Error Messages (v0.6.3)
+- **Cross-chain bridge execution (LIVE):** Replaced Phase 3 stub toast with full LI.FI bridge execution
+  - New `POST /api/cross-chain/execute`: fetches LI.FI quote with user's real wallet addresses, returns base64 Solana transaction
+  - New `POST /api/cross-chain/confirm`: records bridge swap in DB (uses existing `Swap` model with `inputChain`/`outputChain`)
+  - New `GET /api/cross-chain/status`: proxies LI.FI `/status` API for bridge tracking (PENDING → DONE/FAILED)
+  - Frontend `handleBridgeExecute()`: signs with Privy (identical pattern to same-chain swap), polls status every 5s up to 5 min
+  - Destination address input shown when `outputChain !== "solana"` (EVM address, `^0x[a-fA-F0-9]{40}$` validated)
+  - EVM-origin guard: when `inputChain !== "solana"`, button disabled + yellow banner "Bridging from EVM chains is coming soon"
+  - Bridge done/error states with Solscan link and reset button (matches same-chain swap UX)
+- **Same-token guard:** `getQuote()` detects `inputToken.mint === outputToken.mint` before calling the API — shows "Select two different tokens to swap" immediately, no network request
+- **Friendly error messages:** `friendlySwapError()` mapper normalises raw Jupiter/LI.FI errors:
+  - "circular arbitrage" / "same mint" → "Select two different tokens to swap"
+  - "no route" / "no liquidity" → "No swap route found for this token pair"
+  - "slippage" / "price moved" → "Price moved — try increasing your slippage tolerance"
+  - "insufficient balance" → "Insufficient balance for this swap"
+  - "blockhash" / "expired" → "Transaction expired — please try again"
+  - Applied to both `quoteError` (quote fetch) and `swapError` (execution) paths
+- **New frontend API functions** in `webapp/src/lib/api.ts`: `executeCrossChain()`, `confirmCrossChainSwap()`, `getCrossChainBridgeStatus()`
+- **CSS additions** in `index.css`: `.cc-to-address-row`, `.cc-to-address-label`, `.cc-to-address-input`, `.cc-evm-origin-warning`
+- **Phase note removed:** `.cc-phase-note` div ("Bridge execution launches in Phase 3") removed from SwapPanel
 
 ### 2026-02-28 — Bridge UX Polish: Modal Labels, Same-Chain Guard, Slippage Fix (v0.6.2)
 - **Slippage popup out-of-bounds (#3 FIXED):** Replaced `position: absolute` floating popup with an in-document-flow inline section
