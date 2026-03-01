@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { usePrivy, useLoginWithTelegram, useWallets as useAllWallets } from "@privy-io/react-auth";
+import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import {
     TokenBalance,
@@ -29,10 +29,9 @@ function loadSlippage(): number {
 const tg = (window as any).Telegram?.WebApp;
 
 export function App() {
-    const { ready, authenticated } = usePrivy();
+    const { ready, authenticated, user } = usePrivy();
     const { login: loginWithTelegram } = useLoginWithTelegram();
     const { wallets } = useWallets();
-    const { wallets: allWallets } = useAllWallets();
 
     // ── Shared state (used across tabs) ──
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -88,9 +87,9 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletAddress, walletSaved]);
 
-    // ── Sync EVM wallet address from Privy (all-chain wallets hook) ──
-    const evmWallet = allWallets.find(
-        (w: any) => w.walletClientType === "privy" && w.chainType === "ethereum"
+    // ── Sync EVM wallet address from Privy (user.linkedAccounts is reliable across Privy v3) ──
+    const evmWallet = user?.linkedAccounts?.find(
+        (a: any) => a.type === "wallet" && a.walletClientType === "privy" && a.chainType === "ethereum"
     );
     useEffect(() => {
         if (evmWallet?.address) {
