@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-01 | Version: 0.7.0
+> Updated: 2026-03-06 | Version: 0.7.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -99,9 +99,9 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
             ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │ External APIs                                                         │
-│  • Jupiter (Solana swaps)    lite-api.jup.ag/swap/v1   ← being sunset│
-│  • Jupiter Tokens            lite-api.jup.ag/tokens/v2/tag           │
-│  • Jupiter Price             lite-api.jup.ag/price/v3/price          │
+│  • Jupiter (Solana swaps)    api.jup.ag/swap/v1  (migrated from lite)│
+│  • Jupiter Tokens            api.jup.ag/tokens/v2/tag                │
+│  • Jupiter Price             api.jup.ag/price/v3/price               │
 │  • LI.FI (cross-chain)       li.quest/v1  (works without key)        │
 │  • Helius (Solana RPC)       your-endpoint.helius-rpc.com            │
 │  • Privy (embedded wallets)  privy.io SDK (frontend only)            │
@@ -654,9 +654,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 **Auth middleware behavior:**
 - Valid: sets `res.locals.telegramId`, calls `next()`
-- Invalid signature: `401 { error: "Unauthorized" }`
-- Expired (>1hr): `401 { error: "Unauthorized" }`
-- Missing user field: `401`
+- Missing header: `401 { error: "Missing Authorization header" }`
+- Invalid format: `401 { error: "Invalid Authorization format. Expected: tma <initData>" }`
+- Invalid signature: `401 { error: "Invalid initData signature" }`
+- Expired (>1hr): `401 { error: "initData expired" }`
+- Missing user field: `401 { error: "Missing user in initData" }`
 
 ---
 
@@ -765,60 +767,75 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | DB-2 | INFO | `WatchedWallet` and `Subscription` schema models have no API routes or enforcement | `schema.prisma` | Reserved for Phase 3 |
 | MON-1 | ~~MEDIUM~~ **FIXED** | Uptime monitoring configured (UptimeRobot) | VPS | **DONE** — user configured externally |
 | TEST-1 | ~~HIGH~~ **PARTIAL** | Unit test suite exists (`npm test`, 23 tests: auth, fee bypass, address validation). Integration smoke tests exist (`npm run test:live`, 13 tests). No end-to-end Privy/swap signing tests. | `src/__tests__/smoke.test.ts`, `scripts/smoke-test.sh` | Unit + integration done. E2E pending Phase 3. |
-| RECV-1 | ~~MEDIUM~~ **FIXED** | Incoming transfers now tracked via Helius enhanced transaction webhooks. `POST /api/webhook/helius` creates Transfer records with `direction="RECEIVE"`. | `helius/client.ts`, `helius/parser.ts`, `api/routes/webhook.ts` | **DONE** — v0.6.0 |
+| RECV-1 | ~~MEDIUM~~ **PARTIAL** | Backend: Helius webhook integration records incoming transfers as `Transfer` with `direction="RECEIVE"` (v0.6.0). **Frontend:** `TransactionsTab.tsx` still has placeholder ("Receive tracking coming soon") and blocks `type=receive` API calls with an early return on line 276. Backend `/api/transactions?type=receive` works correctly. | `helius/client.ts`, `helius/parser.ts`, `api/routes/webhook.ts`, `webapp/src/components/TransactionsTab.tsx` | Backend DONE. **Frontend NOT wired up.** |
+| FE-1 | LOW | `SettingsPanel.tsx` hardcodes version as `v0.4.0` (line 202) instead of `v0.7.0` | `webapp/src/components/SettingsPanel.tsx` | Not fixed |
+| FE-2 | LOW | Cross-chain bridge fee always recorded as `null` — dead ternary `Number(x) > 0 ? null : null` in `SwapPanel.tsx` line 551 | `webapp/src/components/SwapPanel.tsx` | Not fixed |
+| FE-3 | MEDIUM | Cross-chain quote errors not mapped through `friendlySwapError()` — raw LI.FI errors may surface to users | `webapp/src/components/SwapPanel.tsx` | Not fixed |
+| DOC-1 | LOW | `SECURITY.md` is significantly outdated — says Privy "NOT yet integrated" and initData verification "NOT YET", both of which are fully implemented since v0.5.0+ | `SECURITY.md` | Not fixed |
+| DOC-2 | LOW | `.env.example` still has `JUPITER_API_URL=https://lite-api.jup.ag/swap/v1` (stale) and is missing `MORALIS_API_KEY` | `.env.example` | Not fixed |
 
 ---
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.0 READY — Audit score 82→92/100 (v0.5.3) + Helius webhook receive tracking (v0.6.0)**
+### Current Status: **v0.7.0 — NEAR PRODUCTION (soft launch ready, ~7 minor items remaining)**
+
+#### Full Audit (2026-03-06) — Rating: 8.2/10
 
 #### What IS production-ready:
 - All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
 - All 3 HIGH audit findings fixed (swap/status ownership, BigInt validation, GDPR deletion)
 - All 5 MEDIUM audit findings fixed (mint validation, slippage validation, BigInt precision, preset validation)
-- Telegram initData auth on all protected routes
+- Telegram initData auth on all protected routes (HMAC-SHA256, timing-safe, 1hr expiry)
 - Non-custodial wallet (Privy MPC) — we hold zero keys
-- Fee collection works correctly (ATA derivation fixed)
-- On-chain confirmation polling (no fake confirmations)
+- Fee collection works correctly (ATA derivation + platformFeeBps server-side validation)
+- On-chain confirmation polling (100x3s + final history check, TIMEOUT status)
 - GDPR data deletion endpoint (`DELETE /api/user`)
 - Rate limiting (100 req/min per IP)
 - Security headers (helmet)
 - Input validation throughout (strengthened in v0.5.3 audit)
 - Error boundaries (React + Express)
 - Terms of Use gate (legal protection)
-- Graceful shutdown (PM2 + Express)
+- Graceful shutdown (PM2 + Express + orphaned swap resumption on restart)
 - HTTPS enforced (Vercel + Hostinger domain)
+- EVM multi-chain portfolio (Moralis, 5 chains)
+- Cross-chain bridge execution (Solana-originated, via LI.FI)
 
-#### Blockers before FULL production (broad public launch):
+#### What is NOT yet production-ready:
 
-1. ~~**Jupiter API sunset**~~ **DONE** — `config.ts` already defaults to `https://api.jup.ag/swap/v1`.
-   Get free API key from `portal.jup.ag` and set `JUPITER_API_KEY` in `.env` for
-   authenticated rate limits (60 req/min free tier vs anonymous throttle). **Priority: LOW — get key, not blocking.**
+1. **Frontend receive tracking not wired up** — Backend records incoming transfers via Helius webhooks
+   (v0.6.0), but `TransactionsTab.tsx` still has a "Receive tracking coming soon" placeholder and
+   blocks `type=receive` API calls. **Priority: HIGH — easy fix (remove early return + placeholder).**
 
-2. ~~**No automated tests**~~ **PARTIAL** — 23 unit tests (`npm test`) + 13 integration tests
-   (`npm run test:live`) now exist and pass. Missing: true end-to-end Privy signing tests
-   (require real Telegram session + wallet). **Priority: LOW for launch, MEDIUM before scaling.**
-
-3. ~~**No monitoring**~~ **DONE** — Uptime monitoring configured (UptimeRobot).
-
-4. **LIFI_API_KEY missing** — Cross-chain quotes work without a key (LI.FI allows anonymous),
+2. **LIFI_API_KEY missing** — Cross-chain quotes work without a key (LI.FI allows anonymous),
    but you don't earn integrator fees. Need to register at li.fi and set `LIFI_API_KEY`
    to actually monetize cross-chain swaps. **Priority: LOW — only needed at ~200-500 active users.**
 
-5. ~~**Receive tracking not implemented**~~ **DONE** — Helius enhanced transaction webhooks
-   integrated (v0.6.0). Incoming SOL + SPL transfers automatically recorded as `Transfer`
-   with `direction="RECEIVE"`. Requires `HELIUS_API_KEY` + `HELIUS_WEBHOOK_SECRET` in `.env`.
-
-6. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
+3. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
    All users get all features for free. Not a bug, but premium features can't be sold yet.
+
+4. **Version display outdated** — `SettingsPanel.tsx` hardcodes `v0.4.0` instead of `v0.7.0`.
+
+5. **Bridge fee not tracked** — `SwapPanel.tsx` line 551 has dead ternary, always records `null`.
+
+6. **CC quote errors not user-friendly** — Raw LI.FI errors may surface; need `friendlySwapError()`.
+
+7. **SECURITY.md outdated** — Says Privy "NOT yet integrated" and initData verification "NOT YET".
+
+8. **`.env.example` stale** — Still lists `lite-api.jup.ag`, missing `MORALIS_API_KEY`.
+
+9. **`npm run lint` fails** — `tsconfig.json` missing `"DOM"` in `lib` array, causes ~100 type errors
+   despite `npm run build` working fine. Not a blocker but hurts CI/CD adoption.
 
 #### Recommended launch sequence:
 1. ~~Add uptime monitoring~~ **DONE**
-2. Deploy Helius webhook changes (see Deployment section — requires `npx prisma db push`)
-3. Manual end-to-end test with real SOL (see Beta Test Checklist)
-4. Soft launch to 50-100 users, watch PM2 logs closely
-5. Register `LIFI_API_KEY` for integrator fees when cross-chain volume justifies it
+2. ~~Deploy Helius webhook changes~~ **DONE** (backend)
+3. **Fix frontend receive tracking** — Remove early return in `TransactionsTab.tsx:276` + replace placeholder
+4. **Fix version display** — Update `SettingsPanel.tsx:202` from `v0.4.0` to `v0.7.0`
+5. **Fix `.env.example`** — Update `JUPITER_API_URL` default + add `MORALIS_API_KEY`
+6. Manual end-to-end test with real SOL (see Beta Test Checklist)
+7. Soft launch to 50-100 users, watch PM2 logs closely
+8. Register `LIFI_API_KEY` for integrator fees when cross-chain volume justifies it
 
 ---
 
@@ -1029,7 +1046,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Automated smoke tests~~ | ~~P0~~ **DONE** | 23 unit tests (`npm test`) + 13 integration tests (`npm run test:live`). |
 | ~~Uptime monitoring~~ | ~~P1~~ **DONE** | Configured externally (UptimeRobot). |
 | ~~Helius webhook integration~~ | ~~P1~~ **DONE** | `helius/client.ts` + `helius/parser.ts` + `api/routes/webhook.ts`. Auto-creates webhook on startup, registers wallets on connect. |
-| ~~Receive tracking in Transactions tab~~ | ~~P1~~ **DONE** | `transactions.ts` query now supports 3-way merge (swaps+sends+receives). Transfer model has `direction` + `senderAddress` fields. |
+| Receive tracking in Transactions tab | P1 | **Backend DONE** — `transactions.ts` query supports 3-way merge (swaps+sends+receives). **Frontend NOT DONE** — `TransactionsTab.tsx` still has placeholder + early return blocking `type=receive` API calls. Need to remove early return on line 276 and replace placeholder with actual fetched receive data. |
 | ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
 | ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
 | LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps. Not needed until ~200-500 active users. |
