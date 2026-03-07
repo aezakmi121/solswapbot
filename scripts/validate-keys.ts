@@ -167,8 +167,8 @@ async function checkJupiter() {
       `https://api.jup.ag/price/v3/price?ids=${SOL}`,
       { headers }
     );
-    if (priceData.data?.[SOL]?.usdPrice) {
-      pass("Price V3 endpoint", `SOL = $${Number(priceData.data[SOL].usdPrice).toFixed(2)}`);
+    if (priceData?.[SOL]?.usdPrice) {
+      pass("Price V3 endpoint", `SOL = $${Number(priceData[SOL].usdPrice).toFixed(2)}`);
     } else {
       fail("Price V3 endpoint", "no price data returned");
     }
