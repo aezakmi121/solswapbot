@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-07 | Version: 0.7.3
+> Updated: 2026-03-07 | Version: 0.7.4
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -781,12 +781,14 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | FE-3 | ~~MEDIUM~~ **FIXED** | Cross-chain quote+execution errors now mapped through `friendlySwapError()` | `webapp/src/components/SwapPanel.tsx` | **DONE** — v0.7.1 |
 | DOC-1 | ~~LOW~~ **FIXED** | `SECURITY.md` fully rewritten — all implemented features marked DONE | `SECURITY.md` | **DONE** — v0.7.2 |
 | DOC-2 | ~~LOW~~ **FIXED** | `.env.example` updated: correct `JUPITER_API_URL`, added `MORALIS_API_KEY`, `NODE_ENV`, `JUPITER_API_KEY` | `.env.example` | **DONE** — v0.7.1 |
+| FE-4 | ~~MEDIUM~~ **FIXED** | "You Receive" amount overflows token button on long decimals (no overflow/ellipsis) | `webapp/src/styles/index.css` | **DONE** — v0.7.4 |
+| FE-5 | ~~MEDIUM~~ **FIXED** | "Swap This Token" from Scan tab navigates to Swap but doesn't pre-select the scanned token | `App.tsx`, `SwapPanel.tsx` | **DONE** — v0.7.4 |
 
 ---
 
 ## Production Readiness Assessment
 
-### Current Status: **v0.7.3 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
+### Current Status: **v0.7.4 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
 
 #### Full Audit (2026-03-07) — Rating: 9.8/10
 
@@ -1078,6 +1080,14 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 - **FE-3 FIXED:** Cross-chain quote errors + bridge execution errors now mapped through `friendlySwapError()` for user-readable messages
 - **DOC-2 FIXED:** `.env.example` updated — `JUPITER_API_URL` corrected to `api.jup.ag`, added `MORALIS_API_KEY`, `JUPITER_API_KEY`, `NODE_ENV`
 - **Production readiness upgraded:** 8.2/10 → 9.2/10. Only 3 non-blocking items remain (LIFI_API_KEY config, subscription enforcement, SECURITY.md docs)
+
+### 2026-03-07 — Swap UI Fixes: Output Overflow + Scan→Swap Token Pre-Selection (v0.7.4)
+- **FE-4 FIXED:** "You Receive" amount overflow — long decimal numbers (common with memecoins) spilled past the token button. Added `overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0` to `.output-amount`, `.cc-output-display`, and `.token-row` CSS classes.
+- **FE-5 FIXED:** "Swap This Token" from Scan tab now pre-selects the scanned token as the output token in SwapPanel.
+  - `App.tsx` stores `pendingSwapMint` state, passes to `SwapPanel` via `initialOutputMint` prop
+  - `SwapPanel` looks up token via `searchTokens()` and sets it as output token on mount
+  - If scanned token matches current input token, tokens are swapped to avoid same-token-both-sides
+- **Frontend-only changes** — no VPS redeployment needed (Vercel auto-deploys)
 
 ### 2026-03-07 — API Key Validator + LIFI Integrator Confirmed (v0.7.3)
 - **New `scripts/validate-keys.ts`:** API key & config validator that tests all 7 external services live:
