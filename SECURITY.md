@@ -4,11 +4,12 @@
 
 SolSwap **never holds user private keys**. All wallet operations are handled by Privy's MPC (Multi-Party Computation) infrastructure.
 
-> **Implementation Status:** Privy is referenced in config but NOT yet integrated in the webapp.
-> The current webapp uses a Phantom deep-link as a placeholder.
-> Full Privy integration is Phase 1 priority.
+> **Implementation Status:** Privy is fully integrated since v0.5.0. Embedded wallets
+> (Solana + EVM) are created on first login via `@privy-io/react-auth`. All transaction
+> signing happens in-browser via `useSignAndSendTransaction`. Private keys never touch
+> our servers.
 
-### How Privy MPC Works (Target Architecture)
+### How Privy MPC Works
 
 1. When a user first opens the Mini App, Privy generates a wallet keypair
 2. The private key is **split into shards** using MPC
@@ -34,30 +35,45 @@ Platform fees are collected **on-chain, trustlessly** via Jupiter's referral pro
 1. We pass `platformFeeBps=50` in the Jupiter quote API call
 2. Jupiter's on-chain program automatically deducts 0.5% and sends it to `FEE_WALLET_ADDRESS`
 3. We never touch user funds — the DEX protocol handles fee splitting
+4. Server-side validation ensures `platformFeeBps` matches config (prevents fee bypass attacks)
 
 **Status:** Implemented in `src/jupiter/quote.ts` and `src/jupiter/swap.ts`.
 
-## API Security — What's Implemented
+## API Security
 
 | Layer | Implementation | Status |
 |-------|---------------|--------|
-| **CORS** | Restricted to `CORS_ORIGIN` env var | DONE |
-| **Rate Limiting** | Per-user per-command via Grammy middleware | DONE |
-| **Input Validation** | All user input sanitized via `utils/validation.ts` | DONE |
-| **Address Validation** | Solana PublicKey validation on all address inputs | DONE |
+| **Telegram initData HMAC** | HMAC-SHA256 verification of signed initData on all protected routes | DONE |
+| **Auth expiry** | initData rejected if `auth_date` > 1 hour old (replay prevention) | DONE |
+| **CORS** | Restricted to `CORS_ORIGIN` env var; crashes on `"*"` in production | DONE |
+| **Rate Limiting** | 100 req/min per IP (express-rate-limit) + per-user per-command (Grammy) | DONE |
+| **Security Headers** | Helmet middleware on all responses | DONE |
+| **Input Validation** | All user input validated via `utils/validation.ts` + Zod schemas | DONE |
+| **Address Validation** | `isValidSolanaAddress()` for wallets, `isValidPublicKey()` for mints | DONE |
 | **Env Validation** | All env vars validated at startup via Zod (crash-early) | DONE |
-| **Zod on External APIs** | Jupiter, LI.FI responses validated with Zod schemas | DONE |
-| **Telegram initData** | Used in `/api/user` to identify users | DONE |
-| **initData Signature Verification** | Cryptographic verification of Telegram initData | NOT YET |
-| **Webhook Auth** | Helius webhook secret header verification | NOT YET (Phase 3) |
+| **Zod on External APIs** | Jupiter + LI.FI responses validated with Zod schemas | DONE |
+| **Fee Bypass Prevention** | Server validates `platformFee.feeBps === PLATFORM_FEE_BPS` before building tx | DONE |
+| **Swap Ownership** | `/api/swap/status` enforces user ownership check | DONE |
+| **BigInt Validation** | `inputAmount`/`outputAmount` validated as integer strings before `BigInt()` | DONE |
+| **GDPR Deletion** | `DELETE /api/user` cascade-deletes all user records (transactional) | DONE |
+| **Webhook Auth** | `POST /api/webhook/helius` validates `Authorization` header against secret | DONE |
+
+## Auth Middleware Behavior
+
+- Valid: sets `res.locals.telegramId`, calls `next()`
+- Missing header: `401 { error: "Missing Authorization header" }`
+- Invalid format: `401 { error: "Invalid Authorization format. Expected: tma <initData>" }`
+- Invalid signature: `401 { error: "Invalid initData signature" }`
+- Expired (>1hr): `401 { error: "initData expired" }`
+- Missing user field: `401 { error: "Missing user in initData" }`
 
 ## Rate Limits
 
-| Command/Route | Limit |
-|--------------|-------|
-| /start | 1 per 30 seconds |
-| swap | 3 per 10 seconds |
-| price | 10 per 60 seconds |
+| Scope | Limit |
+|-------|-------|
+| Global API | 100 requests/min per IP |
+| /start command | 1 per 30 seconds per user |
+| swap command | 3 per 10 seconds per user |
 
 ## Data Storage
 
@@ -66,9 +82,7 @@ Platform fees are collected **on-chain, trustlessly** via Jupiter's referral pro
 - **Minimal PII**: Only Telegram user ID and optional username stored
 - **DB file location**: `prisma/dev.db` (not committed to git)
 
-## Known Gaps (To Address)
+## Resolved Security Issues
 
-1. **Telegram initData not cryptographically verified** — currently trusts the header value
-2. **No HTTPS termination** — needs reverse proxy (nginx) in production
-3. **CORS set to `*` by default** — must restrict to Mini App domain in production
-4. **No API key authentication** — routes are open (relies on Telegram initData)
+All 7 CRITICAL + 3 HIGH + 5 MEDIUM security issues have been fixed. See CLAUDE.md
+Security Model section for the full table.
