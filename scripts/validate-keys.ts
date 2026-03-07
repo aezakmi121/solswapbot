@@ -167,8 +167,8 @@ async function checkJupiter() {
       `https://api.jup.ag/price/v3/price?ids=${SOL}`,
       { headers }
     );
-    if (priceData.data?.[SOL]?.price) {
-      pass("Price V3 endpoint", `SOL = $${Number(priceData.data[SOL].price).toFixed(2)}`);
+    if (priceData.data?.[SOL]?.usdPrice) {
+      pass("Price V3 endpoint", `SOL = $${Number(priceData.data[SOL].usdPrice).toFixed(2)}`);
     } else {
       fail("Price V3 endpoint", "no price data returned");
     }
@@ -178,7 +178,7 @@ async function checkJupiter() {
 
   // Test token list endpoint
   try {
-    const tokensRes = await fetch("https://api.jup.ag/tokens/v2/tag/verified", {
+    const tokensRes = await fetch("https://api.jup.ag/tokens/v2/tag?query=verified", {
       signal: AbortSignal.timeout(10_000),
       headers,
     });
