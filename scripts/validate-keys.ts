@@ -164,7 +164,8 @@ async function checkJupiter() {
   // Test price endpoint
   try {
     const priceData = await fetchJson(
-      `https://api.jup.ag/price/v3/price?ids=${SOL}`
+      `https://api.jup.ag/price/v3/price?ids=${SOL}`,
+      { headers }
     );
     if (priceData.data?.[SOL]?.price) {
       pass("Price V3 endpoint", `SOL = $${Number(priceData.data[SOL].price).toFixed(2)}`);
@@ -179,6 +180,7 @@ async function checkJupiter() {
   try {
     const tokensRes = await fetch("https://api.jup.ag/tokens/v2/tag/verified", {
       signal: AbortSignal.timeout(10_000),
+      headers,
     });
     if (tokensRes.ok) {
       const tokens = await tokensRes.json();
