@@ -430,7 +430,7 @@ export interface TransactionsResponse {
 
 /** Fetch paginated, filtered transactions (swaps + sends) */
 export async function fetchTransactions(params: {
-    type?: "all" | "swap" | "send";
+    type?: "all" | "swap" | "send" | "receive";
     preset?: "today" | "7d" | "30d";
     from?: string;  // ISO date string "YYYY-MM-DD"
     to?: string;    // ISO date string "YYYY-MM-DD"

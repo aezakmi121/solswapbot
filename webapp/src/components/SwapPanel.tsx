@@ -319,14 +319,14 @@ export function SwapPanel({
             });
             if (controller.signal.aborted) return;
             if (result.error) {
-                setCcError(result.error);
+                setCcError(friendlySwapError(result.error));
                 setCcQuote(null);
             } else {
                 setCcQuote(result);
             }
         } catch (err) {
             if (controller.signal.aborted) return;
-            setCcError(err instanceof Error ? err.message : "Failed to get quote");
+            setCcError(friendlySwapError(err instanceof Error ? err.message : "Failed to get quote"));
             setCcQuote(null);
         } finally {
             if (!controller.signal.aborted) setCcLoading(false);
@@ -548,7 +548,7 @@ export function SwapPanel({
                     outputChain: ccOutputChain,
                     inputAmount: ccAmount,
                     outputAmount: outputAmount,
-                    feeAmountUsd: Number(outputAmountUsd) > 0 ? null : null,
+                    feeAmountUsd: ccQuote?.feeUsd && Number(ccQuote.feeUsd) > 0 ? Number(ccQuote.feeUsd) : null,
                 });
             } catch { /* non-fatal */ }
 
@@ -581,7 +581,7 @@ export function SwapPanel({
         } catch (err) {
             console.error("Bridge error:", err);
             const raw = err instanceof Error ? err.message : "Bridge failed";
-            setBridgeError(raw);
+            setBridgeError(friendlySwapError(raw));
             setBridgeStatus("error");
             tg?.HapticFeedback?.notificationOccurred("error");
         }
