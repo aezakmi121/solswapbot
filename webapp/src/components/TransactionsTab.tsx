@@ -273,17 +273,12 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
 
     const load = useCallback(
         async (reset: boolean) => {
-            if (typeFilter === "receive") {
-                setInitialLoad(false);
-                return;
-            }
-
             const currentOffset = reset ? 0 : offsetRef.current;
             setLoading(true);
 
             try {
                 const params: Parameters<typeof fetchTransactions>[0] = {
-                    type: typeFilter as "all" | "swap" | "send",
+                    type: typeFilter as "all" | "swap" | "send" | "receive",
                     offset: currentOffset,
                     limit: 20,
                 };
@@ -325,7 +320,6 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
     }, [typeFilter, preset, fromDate, toDate]);
 
     const grouped = groupByMonth(transactions);
-    const showReceives = typeFilter === "receive";
 
     return (
         <div className="tx-tab">
@@ -356,10 +350,9 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                 ))}
             </div>
 
-            {/* ── Date filter (hidden on Receives) ── */}
-            {!showReceives && (
-                <>
-                    <div className="tx-date-filters">
+            {/* ── Date filter ── */}
+            <>
+                <div className="tx-date-filters">
                         {(
                             [
                                 { id: "today",  label: "Today" },
@@ -402,40 +395,15 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                         </div>
                     )}
                 </>
-            )}
-
-            {/* ── Receives placeholder ── */}
-            {showReceives && (
-                <div className="tx-receives-placeholder">
-                    <div className="tx-receives-icon">📥</div>
-                    <div className="tx-receives-title">Receive tracking coming soon</div>
-                    <p className="tx-receives-desc">
-                        Incoming transfers will appear here once Helius webhook integration
-                        is complete in Phase 3.
-                    </p>
-                    <div className="tx-receives-addr-label">Your address for receiving:</div>
-                    <button
-                        className="tx-receives-addr"
-                        onClick={() => {
-                            navigator.clipboard.writeText(walletAddress);
-                            toast("Address copied!", "success");
-                            tg?.HapticFeedback?.impactOccurred("light");
-                        }}
-                    >
-                        {walletAddress.slice(0, 6)}...{walletAddress.slice(-6)} 📋
-                    </button>
-                </div>
-            )}
 
             {/* ── Transaction list ── */}
-            {!showReceives && (
-                <>
+            <>
                     {initialLoad ? (
                         <TxSkeleton />
                     ) : transactions.length === 0 ? (
                         <div className="tx-empty">
                             <div className="tx-empty-icon">
-                                {typeFilter === "swap" ? "🔄" : typeFilter === "send" ? "📤" : "📋"}
+                                {typeFilter === "swap" ? "🔄" : typeFilter === "send" ? "📤" : typeFilter === "receive" ? "📥" : "📋"}
                             </div>
                             <p className="tx-empty-title">No transactions found</p>
                             <p className="tx-empty-sub">
@@ -493,7 +461,6 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                         </>
                     )}
                 </>
-            )}
 
             {/* ── Detail modal ── */}
             {selectedTx && (
