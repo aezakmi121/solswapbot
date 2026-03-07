@@ -35,6 +35,7 @@ npm run dev                # Vite dev server at localhost:5173
 | `npm test` | Run unit smoke tests (Node built-in runner, no server needed) |
 | `npm run test:live` | Run integration smoke tests against `http://localhost:3001` |
 | `npm run test:live:prod` | Run integration smoke tests against production VPS |
+| `npm run validate-keys` | Validate all API keys & config against live services (run on VPS) |
 | `cd webapp && npm run dev` | Start Mini App Vite dev server |
 | `cd webapp && npm run build` | Build Mini App for Vercel deploy |
 | `npx prisma db push` | Apply schema changes to SQLite (no migration file needed) |
@@ -271,7 +272,8 @@ solswapbot/
 │           └── index.css             # All styles: dark theme, tabs, wallet, swap, scan, settings, transactions, toasts
 │
 ├── scripts/
-│   └── smoke-test.sh             # Integration smoke tests (curl-based, tests against live server)
+│   ├── smoke-test.sh             # Integration smoke tests (curl-based, tests against live server)
+│   └── validate-keys.ts          # API key & config validator (tests Telegram, Helius, Jupiter, LI.FI, Moralis)
 │
 ├── prisma/
 │   └── schema.prisma             # 6 models: User, Swap, Transfer, TokenScan, WatchedWallet, Subscription
