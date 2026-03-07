@@ -16,6 +16,7 @@ import {
     executeCrossChain,
     confirmCrossChainSwap,
     getCrossChainBridgeStatus,
+    searchTokens,
 } from "../lib/api";
 import { CC_CHAINS, CC_TOKENS, TOKEN_META, ChainId } from "../lib/chains";
 import { TokenSelector } from "../TokenSelector";
@@ -83,6 +84,8 @@ interface SwapPanelProps {
     refreshBalance: () => void;
     slippageBps: number;
     onSlippageChange: (bps: number) => void;
+    initialOutputMint?: string | null;
+    onInitialMintConsumed?: () => void;
 }
 
 /** Max age for a quote before we force a re-fetch (H3/H4) */
@@ -96,6 +99,8 @@ export function SwapPanel({
     refreshBalance,
     slippageBps,
     onSlippageChange,
+    initialOutputMint,
+    onInitialMintConsumed,
 }: SwapPanelProps) {
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -178,6 +183,23 @@ export function SwapPanel({
             })
             .catch(() => setTokensLoaded(true));
     }, []);
+
+    // Handle "Swap This Token" from Scan tab — set as output token
+    useEffect(() => {
+        if (!initialOutputMint || !tokensLoaded) return;
+        searchTokens(initialOutputMint).then((results) => {
+            const match = results.find((t) => t.mint === initialOutputMint);
+            if (match) {
+                // If scanned token is same as current input, swap them
+                if (inputToken?.mint === match.mint) {
+                    setInputToken(outputToken);
+                }
+                setOutputToken(match);
+            }
+        }).catch(() => {});
+        onInitialMintConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialOutputMint, tokensLoaded]);
 
     // Token selector modal state
     const [selectorOpen, setSelectorOpen] = useState<"input" | "output" | null>(null);

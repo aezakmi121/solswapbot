@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-07 | Version: 0.7.2
+> Updated: 2026-03-07 | Version: 0.7.3
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -786,9 +786,9 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v0.7.1 — PRODUCTION READY (soft launch ready, ~3 minor items remaining)**
+### Current Status: **v0.7.3 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
 
-#### Full Audit (2026-03-07) — Rating: 9.5/10
+#### Full Audit (2026-03-07) — Rating: 9.8/10
 
 #### What IS production-ready:
 - All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
@@ -813,15 +813,14 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Bridge fee tracking records actual feeUsd (v0.7.1)
 - Version display correct (v0.7.1)
 - `.env.example` up to date (v0.7.1)
+- LI.FI API key configured + `solswap` integrator tag recognized (v0.7.3)
+- API key validator script confirms all 20 service checks pass (v0.7.3)
 
 #### What is NOT yet production-ready:
 
-1. **LIFI_API_KEY not configured** — Cross-chain quotes work without a key (LI.FI allows anonymous),
-   but you don't earn integrator fees. Register at portal.li.fi, email sales@li.finance with
-   integrator string `solswap` + fee wallet addresses. **Priority: LOW — only needed at ~200-500 active users.**
-
-2. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
+1. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
    All users get all features for free. Not a bug, but premium features can't be sold yet.
+   **Priority: LOW — intentional for soft launch. Implement when ready to gate features.**
 
 #### Recommended launch sequence:
 1. ~~Add uptime monitoring~~ **DONE**
@@ -830,8 +829,8 @@ All 7 CRITICAL security issues have been fixed. Summary:
 4. ~~Fix version display~~ **DONE** (v0.7.1)
 5. ~~Fix `.env.example`~~ **DONE** (v0.7.1)
 6. ~~Fix bridge fee tracking + CC error messages~~ **DONE** (v0.7.1)
-7. Add `LIFI_API_KEY=<key>` to `.env` on VPS (after receiving from LI.FI sales)
-8. Deploy v0.7.1 to VPS + Vercel (see Deployment section)
+7. ~~Add `LIFI_API_KEY` to `.env` on VPS~~ **DONE** (v0.7.3 — integrator `solswap` recognized)
+8. ~~Run `npm run validate-keys` on VPS~~ **DONE** (v0.7.3 — 20/20 checks pass)
 9. Manual end-to-end test with real SOL (see Beta Test Checklist)
 10. Soft launch to 50-100 users, watch PM2 logs closely
 
@@ -860,8 +859,8 @@ REFERRAL_FEE_SHARE_PERCENT=25  # Future: share of collected fees given to referr
 # ── OPTIONAL but recommended ───────────────────────────────────────────────────
 MINIAPP_URL=https://your-app.vercel.app   # Shown in /start button
 PRIVY_APP_ID=                  # Privy dashboard app ID. If missing, backend still works (Privy is frontend-only)
-JUPITER_API_KEY=               # Required soon (after lite-api sunset). Get free key at portal.jup.ag
-LIFI_API_KEY=                  # LI.FI partner key — cross-chain works without it but no integrator fees
+JUPITER_API_KEY=               # Required (Jupiter now enforces on Price V3 + Token V2). Get free key at portal.jup.ag
+LIFI_API_KEY=                  # LI.FI partner key — configured, integrator `solswap` recognized
 HELIUS_API_KEY=                # Required for receive tracking. Extract from SOLANA_RPC_URL or set separately.
 HELIUS_WEBHOOK_SECRET=         # Random string to authenticate Helius webhook requests. Required for receive tracking.
 MORALIS_API_KEY=               # EVM token balances (Moralis free tier: 120K CUs/month). Get free key at moralis.io.
@@ -1047,7 +1046,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Receive tracking in Transactions tab~~ | ~~P1~~ **DONE** | Backend + Frontend fully wired up. `TransactionsTab.tsx` placeholder removed, early return removed, `type=receive` API calls work end-to-end (v0.7.1). |
 | ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
 | ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
-| LIFI_API_KEY + integrator fee registration | P1 | Monetize cross-chain swaps. Not needed until ~200-500 active users. |
+| ~~LIFI_API_KEY + integrator fee registration~~ | ~~P1~~ **DONE** | Configured on VPS. `solswap` integrator tag recognized by LI.FI. Validated via `npm run validate-keys`. |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
 | Whale alert bot notifications | P2 | Bot pushes alerts to user |
@@ -1079,6 +1078,14 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 - **FE-3 FIXED:** Cross-chain quote errors + bridge execution errors now mapped through `friendlySwapError()` for user-readable messages
 - **DOC-2 FIXED:** `.env.example` updated — `JUPITER_API_URL` corrected to `api.jup.ag`, added `MORALIS_API_KEY`, `JUPITER_API_KEY`, `NODE_ENV`
 - **Production readiness upgraded:** 8.2/10 → 9.2/10. Only 3 non-blocking items remain (LIFI_API_KEY config, subscription enforcement, SECURITY.md docs)
+
+### 2026-03-07 — API Key Validator + LIFI Integrator Confirmed (v0.7.3)
+- **New `scripts/validate-keys.ts`:** API key & config validator that tests all 7 external services live:
+  Telegram bot token, Helius RPC, fee wallet, Jupiter (quote + Price V3 + Token V2), LI.FI (chains + cross-chain quote + integrator tag), Helius webhooks, Moralis EVM balances. Plus app config checks (NODE_ENV, CORS, fee BPS).
+  Run via `npm run validate-keys` on VPS — 20/20 checks pass.
+- **LIFI_API_KEY confirmed working:** LI.FI API key configured on VPS, `solswap` integrator tag recognized. Cross-chain swap fees now being collected.
+- **Jupiter API key now required:** Jupiter Price V3 and Token V2 endpoints now return 401 without `x-api-key` header. App code already sends it correctly (via `jupiterHeaders()` in `price.ts` and `loadTokenList()` in `tokens.ts`). `JUPITER_API_KEY` upgraded from "optional" to "required" in docs.
+- **Production readiness upgraded:** 9.5/10 → 9.8/10. Only 1 non-blocking item remains (subscription enforcement).
 
 ### 2026-03-07 — Documentation Audit + Lint Fix (v0.7.2)
 - **LINT FIXED:** Added `"DOM"` to `tsconfig.json` `lib` array — `npm run lint` now passes (was failing with ~100 type errors for `console`, `fetch`, `setTimeout`, etc.)

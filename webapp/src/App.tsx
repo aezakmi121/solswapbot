@@ -51,6 +51,9 @@ export function App() {
     // ── Terms of Use (first-launch gate) ──
     const [termsAccepted, setTermsAccepted] = useState<boolean>(hasAcceptedTerms);
 
+    // ── Pending swap mint (from Scan → "Swap This Token") ──
+    const [pendingSwapMint, setPendingSwapMint] = useState<string | null>(null);
+
     // ── Slippage (persisted in localStorage) ──
     const [slippageBps, setSlippageBps] = useState<number>(loadSlippage);
     const handleSlippageChange = (bps: number) => {
@@ -223,10 +226,15 @@ export function App() {
                         refreshBalance={refreshBalance}
                         slippageBps={slippageBps}
                         onSlippageChange={handleSlippageChange}
+                        initialOutputMint={pendingSwapMint}
+                        onInitialMintConsumed={() => setPendingSwapMint(null)}
                     />
                 )}
                 {activeTab === "scan" && (
-                    <ScanPanel onNavigateToSwap={() => setActiveTab("swap")} />
+                    <ScanPanel onNavigateToSwap={(mint) => {
+                        if (mint) setPendingSwapMint(mint);
+                        setActiveTab("swap");
+                    }} />
                 )}
                 {activeTab === "history" && (
                     <TransactionsTab walletAddress={walletAddress} />
