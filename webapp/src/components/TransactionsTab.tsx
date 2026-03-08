@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { UnifiedTransaction, fetchTransactions } from "../lib/api";
+import { UnifiedTransaction, fetchTransactions, recheckSwap } from "../lib/api";
 import { toast } from "../lib/toast";
 
 const tg = (window as any).Telegram?.WebApp;
@@ -109,16 +109,48 @@ function TxRow({ tx, onClick }: { tx: UnifiedTransaction; onClick: () => void })
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
-function TxDetailModal({ tx, onClose }: { tx: UnifiedTransaction; onClose: () => void }) {
+function TxDetailModal({ tx, onClose, onStatusUpdate }: { tx: UnifiedTransaction; onClose: () => void; onStatusUpdate?: (id: string, status: string) => void }) {
+    const [recheckLoading, setRecheckLoading] = useState(false);
+    const [displayStatus, setDisplayStatus] = useState(tx.status);
+    const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
+
     const solscanLink = tx.txSignature
         ? `https://solscan.io/tx/${tx.txSignature}`
         : null;
+
+    const isStuck = tx.type === "swap" && ["PENDING", "SUBMITTED", "TIMEOUT"].includes(displayStatus.toUpperCase());
 
     const copyTx = () => {
         if (!tx.txSignature) return;
         navigator.clipboard.writeText(tx.txSignature);
         toast("Transaction ID copied!", "success");
         tg?.HapticFeedback?.impactOccurred("light");
+    };
+
+    const handleRecheck = async () => {
+        // Extract the actual swap ID (strip "swap_" prefix if present)
+        const swapId = tx.id.startsWith("swap_") ? tx.id.slice(5) : tx.id;
+        setRecheckLoading(true);
+        setRecheckMessage(null);
+        try {
+            const result = await recheckSwap(swapId);
+            setDisplayStatus(result.status);
+            setRecheckMessage(result.message || null);
+            onStatusUpdate?.(tx.id, result.status);
+            tg?.HapticFeedback?.notificationOccurred(result.status === "CONFIRMED" ? "success" : "warning");
+            if (result.status === "CONFIRMED") {
+                toast("Transaction confirmed!", "success");
+            } else if (result.status === "FAILED") {
+                toast(result.message || "Transaction failed", "error");
+            } else {
+                toast("Status unchanged", "info");
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to recheck";
+            toast(msg, "error");
+        } finally {
+            setRecheckLoading(false);
+        }
     };
 
     return (
@@ -133,8 +165,8 @@ function TxDetailModal({ tx, onClose }: { tx: UnifiedTransaction; onClose: () =>
                 </div>
 
                 {/* Status badge */}
-                <div className={`tx-detail-status tx-detail-status--${tx.status.toLowerCase()}`}>
-                    {statusEmoji(tx.status)} {statusLabel(tx.status)}
+                <div className={`tx-detail-status tx-detail-status--${displayStatus.toLowerCase()}`}>
+                    {statusEmoji(displayStatus)} {statusLabel(displayStatus)}
                 </div>
 
                 {/* Detail rows */}
@@ -222,6 +254,26 @@ function TxDetailModal({ tx, onClose }: { tx: UnifiedTransaction; onClose: () =>
                     >
                         View on Solscan ↗
                     </a>
+                )}
+
+                {/* Re-check button for stuck swaps */}
+                {isStuck && (
+                    <button
+                        className="tx-detail-recheck"
+                        onClick={handleRecheck}
+                        disabled={recheckLoading}
+                    >
+                        {recheckLoading ? (
+                            <><span className="btn-spinner" /> Checking on-chain...</>
+                        ) : (
+                            "🔍 Re-check status"
+                        )}
+                    </button>
+                )}
+
+                {/* Recheck result message */}
+                {recheckMessage && (
+                    <div className="tx-detail-recheck-msg">{recheckMessage}</div>
                 )}
             </div>
         </div>
@@ -464,7 +516,15 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
 
             {/* ── Detail modal ── */}
             {selectedTx && (
-                <TxDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
+                <TxDetailModal
+                    tx={selectedTx}
+                    onClose={() => setSelectedTx(null)}
+                    onStatusUpdate={(id, newStatus) => {
+                        setTransactions((prev) =>
+                            prev.map((t) => t.id === id ? { ...t, status: newStatus } : t)
+                        );
+                    }}
+                />
             )}
         </div>
     );

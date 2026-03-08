@@ -3606,6 +3606,36 @@ body {
 }
 .tx-detail-solscan:active { opacity: 0.8; }
 
+.tx-detail-recheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.tx-detail-recheck:disabled { opacity: 0.5; cursor: not-allowed; }
+.tx-detail-recheck:active:not(:disabled) { opacity: 0.7; }
+
+.tx-detail-recheck-msg {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 /* ── Skeleton ────────────────────────────────────────────────────────────────── */
 .tx-skeleton { padding: 0 0 8px; }
 .tx-skeleton-row {

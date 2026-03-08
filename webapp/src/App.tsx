@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { usePrivy, useLoginWithTelegram } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import {
+    TokenInfo,
     TokenBalance,
     saveWalletAddress,
     registerEvmWallet,
@@ -51,8 +52,8 @@ export function App() {
     // ── Terms of Use (first-launch gate) ──
     const [termsAccepted, setTermsAccepted] = useState<boolean>(hasAcceptedTerms);
 
-    // ── Pending swap mint (from Scan → "Swap This Token") ──
-    const [pendingSwapMint, setPendingSwapMint] = useState<string | null>(null);
+    // ── Pending swap token (from Scan → "Swap This Token") ──
+    const [pendingSwapToken, setPendingSwapToken] = useState<TokenInfo | null>(null);
 
     // ── Slippage (persisted in localStorage) ──
     const [slippageBps, setSlippageBps] = useState<number>(loadSlippage);
@@ -226,13 +227,13 @@ export function App() {
                         refreshBalance={refreshBalance}
                         slippageBps={slippageBps}
                         onSlippageChange={handleSlippageChange}
-                        initialOutputMint={pendingSwapMint}
-                        onInitialMintConsumed={() => setPendingSwapMint(null)}
+                        initialOutputToken={pendingSwapToken}
+                        onInitialTokenConsumed={() => setPendingSwapToken(null)}
                     />
                 )}
                 {activeTab === "scan" && (
-                    <ScanPanel onNavigateToSwap={(mint) => {
-                        if (mint) setPendingSwapMint(mint);
+                    <ScanPanel onNavigateToSwap={(token) => {
+                        if (token) setPendingSwapToken(token);
                         setActiveTab("swap");
                     }} />
                 )}

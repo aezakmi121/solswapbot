@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-08 | Version: 0.7.5
+> Updated: 2026-03-08 | Version: 0.7.6
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -87,6 +87,7 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  GET  /api/user/balances      GET  /api/user/portfolio                │
 │  GET  /api/quote              POST /api/swap                          │
 │  POST /api/swap/confirm       GET  /api/swap/status                   │
+│  POST /api/swap/recheck                                               │
 │  GET  /api/scan               GET  /api/scan/history                  │
 │  GET  /api/cross-chain/quote  GET  /api/cross-chain/chains            │
 │  GET  /api/cross-chain/tokens GET  /api/history                       │
@@ -177,7 +178,7 @@ solswapbot/
 │   │       ├── quote.ts          # GET /api/quote  (Jupiter quote + USD breakdown + slippageBps support)
 │   │       ├── scan.ts           # GET /api/scan + GET /api/scan/history
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
-│   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status
+│   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
@@ -460,6 +461,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | POST | `/api/swap` | `{ quoteResponse, userPublicKey }` | `{ swapTransaction: base64, lastValidBlockHeight }` |
 | POST | `/api/swap/confirm` | `{ txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }` | `{ swapId, status: "SUBMITTED" }` |
 | GET | `/api/swap/status?swapId=` | — | `{ swapId, status, txSignature }` |
+| POST | `/api/swap/recheck` | `{ swapId }` | `{ swapId, status, txSignature, message }` — re-checks on-chain status for stuck swaps |
 | GET | `/api/scan?mint=` | — | `ScanResult` (see Scanner section) |
 | GET | `/api/scan/history` | — | `{ scans: [{ id, mintAddress, tokenName, tokenSymbol, riskScore, riskLevel, createdAt }] }` |
 | GET | `/api/cross-chain/quote?inputToken=&outputToken=&inputChain=&outputChain=&amount=&slippageBps=` | — | `CrossChainQuoteResult` |
@@ -782,7 +784,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | DOC-1 | ~~LOW~~ **FIXED** | `SECURITY.md` fully rewritten — all implemented features marked DONE | `SECURITY.md` | **DONE** — v0.7.2 |
 | DOC-2 | ~~LOW~~ **FIXED** | `.env.example` updated: correct `JUPITER_API_URL`, added `MORALIS_API_KEY`, `NODE_ENV`, `JUPITER_API_KEY` | `.env.example` | **DONE** — v0.7.1 |
 | FE-4 | ~~MEDIUM~~ **FIXED** | "You Receive" amount overflows token button on long decimals (no overflow/ellipsis) | `webapp/src/styles/index.css` | **DONE** — v0.7.4 |
-| FE-5 | ~~MEDIUM~~ **FIXED** | "Swap This Token" from Scan tab navigates to Swap but doesn't pre-select the scanned token | `App.tsx`, `SwapPanel.tsx` | **DONE** — v0.7.4 |
+| FE-5 | ~~MEDIUM~~ **FIXED** | "Swap This Token" from Scan tab navigates to Swap but doesn't pre-select the scanned token. Root cause: `searchTokens()` only searched Jupiter verified list — memecoins not found. Fix: pass full token info from scan result directly. | `ScanPanel.tsx`, `App.tsx`, `SwapPanel.tsx` | **DONE** — v0.7.6 |
 
 ---
 
@@ -1067,6 +1069,28 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-08 — Swap This Token Fix + Stuck Transaction Re-check (v0.7.6)
+- **FE-5 PROPERLY FIXED:** "Swap This Token" from Scan tab now works for ALL tokens including memecoins/unverified tokens.
+  - **Root cause:** Previous fix used `searchTokens(mint)` which only searched Jupiter's verified token list — memecoins and unknown tokens (the scanner's primary use case) were never found, so the token was silently not pre-selected.
+  - **Fix:** `ScanPanel` now passes the full token info object (`mint`, `symbol`, `name`, `decimals`, `icon`) directly from the scan result instead of just the mint string. `SwapPanel` sets the output token directly without any API lookup.
+  - `ScanPanel.onNavigateToSwap` signature changed: `(mint?: string)` → `(token?: { mint, symbol, name, decimals, icon })`
+  - `App.tsx`: `pendingSwapMint: string` → `pendingSwapToken: TokenInfo`
+  - `SwapPanel`: `initialOutputMint` prop → `initialOutputToken` prop. No more `searchTokens()` call. Toast confirms selection.
+- **New `POST /api/swap/recheck` endpoint:** Re-checks on-chain status for stuck swaps (PENDING, SUBMITTED, TIMEOUT).
+  - If `txSignature` is missing → marks as `FAILED` ("Transaction was never broadcast")
+  - If found on-chain → updates to `CONFIRMED` or `FAILED` accordingly
+  - If not found on-chain → marks as `FAILED` ("Transaction not found — likely expired")
+  - Only works on non-terminal statuses (CONFIRMED/FAILED already final)
+  - Enforces user ownership (same auth pattern as `/api/swap/status`)
+- **TransactionsTab re-check button:** Stuck swaps (⏳) now show a "Re-check status" button in the detail modal.
+  - Calls `POST /api/swap/recheck`, updates status in-place with haptic + toast feedback
+  - Shows result message explaining what happened
+  - Transaction list updates immediately when status changes
+- **Frontend API:** Added `recheckSwap()` function in `api.ts`
+- **CSS:** Added `.tx-detail-recheck` and `.tx-detail-recheck-msg` styles
+- **VPS redeployment required** for the new recheck endpoint. No Prisma/DB changes needed.
+- **Removed unused `searchTokens` import** from `SwapPanel.tsx`
 
 ### 2026-03-08 — Scanner Info Icons, Swap History Removal, Scan→Swap Fix (v0.7.5)
 - **FE-5 RE-FIXED:** "Swap This Token" race condition — `onInitialMintConsumed()` was called synchronously before `searchTokens()` resolved, clearing the mint before it could be set. Moved callback inside `.then()`/`.catch()` so mint is only consumed after token is actually set (or lookup fails).
