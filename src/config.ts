@@ -62,6 +62,9 @@ const envSchema = z.object({
   ),
   MINIAPP_URL: z.string().url().optional(),
 
+  // Admin
+  ADMIN_TELEGRAM_ID: z.string().optional(), // Your Telegram ID — gates /api/admin/* routes
+
   // Referral
   REFERRAL_FEE_SHARE_PERCENT: z.coerce
     .number()

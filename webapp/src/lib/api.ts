@@ -51,6 +51,7 @@ export interface UserData {
     solBalance: number | null;
     referralCode?: string;
     referralCount?: number;
+    referralEarningsUsd?: number;
     message?: string;
 }
 

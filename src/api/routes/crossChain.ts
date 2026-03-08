@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { getSmartQuote } from "../../aggregator/router";
 import { getLiFiQuote } from "../../aggregator/lifi";
 import { getSupportedChainIds, CHAINS, CROSS_CHAIN_TOKENS, findToken } from "../../aggregator/chains";
+import { getCachedTokens } from "../../aggregator/lifiTokens";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
 
@@ -85,16 +86,20 @@ crossChainRouter.get("/cross-chain/chains", (_req: Request, res: Response) => {
  * GET /api/cross-chain/tokens?chain=<chainId>
  * Returns tokens available on a specific chain.
  */
-crossChainRouter.get("/cross-chain/tokens", (req: Request, res: Response) => {
-    const chainId = req.query.chain as string;
-
-    if (!chainId) {
-        res.json({ tokens: CROSS_CHAIN_TOKENS });
-        return;
+crossChainRouter.get("/cross-chain/tokens", async (req: Request, res: Response) => {
+    try {
+        const chainId = req.query.chain as string;
+        const tokens = await getCachedTokens(chainId || undefined);
+        res.json({ tokens });
+    } catch (err) {
+        console.error("Cross-chain tokens error:", err);
+        // Fallback to hardcoded
+        const chainId = req.query.chain as string;
+        const tokens = chainId
+            ? CROSS_CHAIN_TOKENS.filter(t => t.chainId === chainId.toLowerCase())
+            : CROSS_CHAIN_TOKENS;
+        res.json({ tokens });
     }
-
-    const filtered = CROSS_CHAIN_TOKENS.filter(t => t.chainId === chainId.toLowerCase());
-    res.json({ tokens: filtered });
 });
 
 /**

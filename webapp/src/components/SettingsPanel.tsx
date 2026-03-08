@@ -188,9 +188,20 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                                 <span className="settings-value">{userData.referralCount} users</span>
                             </div>
                         )}
+                        {userData.referralEarningsUsd !== undefined && (
+                            <div className="settings-row">
+                                <span className="settings-label">Earnings (25%)</span>
+                                <span className="settings-value" style={{ color: userData.referralEarningsUsd > 0 ? "#4ade80" : undefined }}>
+                                    ${userData.referralEarningsUsd.toFixed(2)}
+                                </span>
+                            </div>
+                        )}
                         <button className="settings-share-btn" onClick={handleCopyRef}>
                             {refCopied ? "✓ Link Copied!" : "Share Referral Link"}
                         </button>
+                        <p className="settings-evm-hint" style={{ marginTop: "8px" }}>
+                            Earn 25% of swap fees from users you refer
+                        </p>
                     </div>
                 </div>
             )}
@@ -199,7 +210,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             <div className="settings-section">
                 <div className="settings-section-title">About</div>
                 <div className="settings-card settings-about">
-                    <p className="settings-about-name">SolSwap v0.7.7</p>
+                    <p className="settings-about-name">SolSwap v0.8.0</p>
                     <p className="settings-about-sub">Non-custodial · Privy MPC wallet</p>
                     <p className="settings-about-sub">Platform fee: 0.5% per swap</p>
                     <p className="settings-about-sub">Powered by Jupiter &amp; LI.FI</p>

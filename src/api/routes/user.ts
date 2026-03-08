@@ -8,6 +8,8 @@ import { getTokenPricesBatch } from "../../jupiter/price";
 import { getTokensMetadata } from "../../jupiter/tokens";
 import { addAddressToWebhook } from "../../helius/client";
 import { getEvmPortfolio } from "../../moralis/client";
+import { getReferralEarnings } from "../../db/queries/referrals";
+import { config } from "../../config";
 
 export const userRouter = Router();
 
@@ -28,6 +30,7 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
         }
 
         const referralCount = user._count.referrals;
+        const referralEarningsUsd = await getReferralEarnings(user.id, config.REFERRAL_FEE_SHARE_PERCENT);
 
         if (!user.walletAddress) {
             res.json({
@@ -36,6 +39,7 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
                 solBalance: null,
                 referralCode: user.referralCode,
                 referralCount,
+                referralEarningsUsd,
                 message: "No wallet connected. Open the Mini App to set up your wallet.",
             });
             return;
@@ -58,6 +62,7 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
             solBalance,
             referralCode: user.referralCode,
             referralCount,
+            referralEarningsUsd,
         });
     } catch (err) {
         console.error("User API error:", err);

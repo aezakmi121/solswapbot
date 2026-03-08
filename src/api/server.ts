@@ -30,6 +30,7 @@ import { sendRouter } from "./routes/send";
 import { transferRouter } from "./routes/transfer";
 import { transactionsRouter } from "./routes/transactions";
 import { webhookRouter } from "./routes/webhook";
+import { adminRouter } from "./routes/admin";
 
 /**
  * Creates and configures the Express API server.
@@ -88,6 +89,7 @@ export function createApiServer(): express.Express {
     app.use("/api", telegramAuthMiddleware, sendRouter);
     app.use("/api", telegramAuthMiddleware, transferRouter);
     app.use("/api", telegramAuthMiddleware, transactionsRouter);
+    app.use("/api", telegramAuthMiddleware, adminRouter);
 
     // Global error handler (improved: logs full error object)
     app.use(

@@ -25,12 +25,38 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
             return;
         }
 
+        // ── Scanner daily limit (5 free scans/day) ──────────────────────
+        const telegramId = res.locals.telegramId as string;
+        const user = await findUserByTelegramId(telegramId);
+
+        const FREE_SCANS_PER_DAY = 5;
+        if (user) {
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+            const todayScans = await prisma.tokenScan.count({
+                where: { userId: user.id, createdAt: { gte: todayStart } },
+            });
+
+            if (todayScans >= FREE_SCANS_PER_DAY) {
+                // Check subscription tier — paid users bypass the limit
+                const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
+                if (!sub || sub.tier === "FREE") {
+                    res.status(429).json({
+                        error: "Daily scan limit reached (5 free scans/day)",
+                        todayScans,
+                        limit: FREE_SCANS_PER_DAY,
+                        upgradeHint: "Upgrade to Scanner Pro for unlimited scans",
+                    });
+                    return;
+                }
+            }
+        }
+
         const result = await analyzeToken(mint);
 
         // Save scan to DB for history (best effort — don't fail the response if DB write fails)
         try {
-            const telegramId = res.locals.telegramId as string;
-            const user = await findUserByTelegramId(telegramId);
             if (user) {
                 await prisma.tokenScan.create({
                     data: {

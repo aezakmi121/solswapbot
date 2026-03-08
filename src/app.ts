@@ -4,6 +4,8 @@ import { createBot } from "./bot";
 import { startApiServer } from "./api/server";
 import { pollTransactionInBackground } from "./solana/transaction";
 import { initHeliusWebhook, isHeliusEnabled } from "./helius/client";
+import { startBridgePoller } from "./bridge/bridgePoller";
+import { initTokenCache } from "./aggregator/lifiTokens";
 
 async function main(): Promise<void> {
   console.log(`Starting SolSwap Bot (${config.NODE_ENV})...`);
@@ -39,6 +41,12 @@ async function main(): Promise<void> {
       console.error("Helius webhook init failed (non-fatal):", err);
     });
   }
+
+  // Start background bridge status poller (checks SUBMITTED cross-chain swaps every 60s)
+  startBridgePoller();
+
+  // Pre-warm the LI.FI token cache (non-blocking, refreshes every 30 min)
+  initTokenCache();
 
   // Create and start the bot
   const bot = createBot();

@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-08 | Version: 0.7.7
+> Updated: 2026-03-08 | Version: 0.8.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -172,18 +172,19 @@ solswapbot/
 │   │   ├── middleware/
 │   │   │   └── telegramAuth.ts   # HMAC-SHA256 verification of Telegram initData. Sets res.locals.telegramId
 │   │   └── routes/
-│   │       ├── crossChain.ts     # GET /api/cross-chain/quote|chains|tokens  (LI.FI routing)
+│   │       ├── admin.ts          # GET /api/admin/stats|referrals|users  (gated by ADMIN_TELEGRAM_ID) [v0.8.0]
+│   │       ├── crossChain.ts     # GET /api/cross-chain/quote|chains|tokens  (LI.FI routing, dynamic token cache)
 │   │       ├── history.ts        # GET /api/history (last 20 swaps) + GET /api/activity (swaps+sends merged)
 │   │       ├── price.ts          # GET /api/price/:mint  (Jupiter Price V3, public)
 │   │       ├── quote.ts          # GET /api/quote  (Jupiter quote + USD breakdown + slippageBps support)
-│   │       ├── scan.ts           # GET /api/scan + GET /api/scan/history
+│   │       ├── scan.ts           # GET /api/scan (5/day free limit) + GET /api/scan/history [limit: v0.8.0]
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
 │   │       ├── webhook.ts        # POST /api/webhook/helius  (Helius enhanced tx webhook receiver)
-│   │       └── user.ts           # GET /api/user + POST /api/user/wallet + GET /api/user/balances + GET /api/user/portfolio
+│   │       └── user.ts           # GET /api/user (includes referralEarningsUsd) + POST /api/user/wallet + balances + portfolio
 │   │
 │   ├── bot/
 │   │   ├── index.ts              # Bot setup: /start + /help only, catch-all → Mini App redirect
@@ -202,7 +203,11 @@ solswapbot/
 │   ├── aggregator/
 │   │   ├── router.ts             # Smart router: same-chain → Jupiter, cross-chain → LI.FI
 │   │   ├── lifi.ts               # LI.FI API client with Zod validation + withRetry wrapper
-│   │   └── chains.ts             # Backend chain + token registry (6 chains, 20+ tokens)
+│   │   ├── chains.ts             # Backend chain + token registry (6 chains, 23 hardcoded tokens)
+│   │   └── lifiTokens.ts         # Dynamic LI.FI token cache (30-min TTL, merges with hardcoded) [v0.8.0]
+│   │
+│   ├── bridge/
+│   │   └── bridgePoller.ts       # Background poller: resolves SUBMITTED cross-chain swaps via LI.FI status [v0.8.0]
 │   │
 │   ├── scanner/
 │   │   ├── analyze.ts            # analyzeToken(): orchestrates all checks, computes risk score 0-100
@@ -775,8 +780,8 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | AUD-M2 | ~~MEDIUM~~ **FIXED** | `/api/cross-chain/quote` had no slippageBps range validation | `api/routes/crossChain.ts` | **DONE** — v0.5.3 audit fix |
 | AUD-M3 | ~~MEDIUM~~ **FIXED** | Quote display used `Number(outAmount)` causing precision loss for values > 2^53 | `api/routes/quote.ts` | **DONE** — v0.5.3 audit fix |
 | AUD-L2 | ~~LOW~~ **FIXED** | `/api/transactions` silently accepted unknown preset values | `api/routes/transactions.ts` | **DONE** — v0.5.3 audit fix |
-| DB-1 | INFO | `fees.ts` and `referrals.ts` are stubs with Phase 3 query logic but no route wiring | `db/queries/fees.ts` | Reserved for Phase 3 |
-| DB-2 | INFO | `WatchedWallet` and `Subscription` schema models have no API routes or enforcement | `schema.prisma` | Reserved for Phase 3 |
+| DB-1 | ~~INFO~~ **FIXED** | `fees.ts` and `referrals.ts` now wired via `/api/admin/*` routes + referral earnings in `/api/user` | `api/routes/admin.ts`, `api/routes/user.ts` | **DONE** — v0.8.0 |
+| DB-2 | ~~INFO~~ **PARTIAL** | `Subscription.tier` now checked in scanner (5/day free limit). `WatchedWallet` still unused. | `api/routes/scan.ts` | Scanner gate done v0.8.0. Whale tracker reserved Phase 3. |
 | MON-1 | ~~MEDIUM~~ **FIXED** | Uptime monitoring configured (UptimeRobot) | VPS | **DONE** — user configured externally |
 | TEST-1 | ~~HIGH~~ **PARTIAL** | Unit test suite exists (`npm test`, 23 tests: auth, fee bypass, address validation). Integration smoke tests exist (`npm run test:live`, 13 tests). No end-to-end Privy/swap signing tests. | `src/__tests__/smoke.test.ts`, `scripts/smoke-test.sh` | Unit + integration done. E2E pending Phase 3. |
 | RECV-1 | ~~MEDIUM~~ **FIXED** | Backend + Frontend: Helius webhook records incoming transfers. `TransactionsTab.tsx` placeholder removed, early return removed, `type=receive` API calls fully wired up. `api.ts` type updated to accept `"receive"`. | `helius/client.ts`, `helius/parser.ts`, `api/routes/webhook.ts`, `webapp/src/components/TransactionsTab.tsx`, `webapp/src/lib/api.ts` | **DONE** — v0.7.1 |
@@ -792,9 +797,9 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v0.7.5 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
+### Current Status: **v0.8.0 — PRODUCTION READY + REVENUE FEATURES (admin analytics, scanner monetization, bridge reliability)**
 
-#### Full Audit (2026-03-07) — Rating: 9.8/10
+#### Full Audit (2026-03-08) — Rating: 9.8/10
 
 #### What IS production-ready:
 - All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
@@ -870,6 +875,7 @@ LIFI_API_KEY=                  # LI.FI partner key — configured, integrator `s
 HELIUS_API_KEY=                # Required for receive tracking. Extract from SOLANA_RPC_URL or set separately.
 HELIUS_WEBHOOK_SECRET=         # Random string to authenticate Helius webhook requests. Required for receive tracking.
 MORALIS_API_KEY=               # EVM token balances (Moralis free tier: 120K CUs/month). Get free key at moralis.io.
+ADMIN_TELEGRAM_ID=             # Your Telegram numeric user ID — gates /api/admin/* routes. Optional.
 
 # ── PHASE 4 (not needed yet) ───────────────────────────────────────────────────
 GEMINI_API_KEY=                # Phase 4: AI market signals
