@@ -36,6 +36,8 @@ model Swap {
   user          User       @relation(fields: [userId], references: [id])
   inputMint     String
   outputMint    String
+  inputSymbol   String?    // human-readable symbol (e.g. "SOL") — stored at confirm time
+  outputSymbol  String?    // falls back to Jupiter lookup if null (old records)
   inputAmount   BigInt
   outputAmount  BigInt
   inputChain    String     @default("solana")  // "solana", "ethereum", "bsc", etc.

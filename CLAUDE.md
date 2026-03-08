@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-08 | Version: 0.7.6
+> Updated: 2026-03-08 | Version: 0.7.7
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -321,6 +321,8 @@ model Swap {
   userId        String
   inputMint     String
   outputMint    String
+  inputSymbol   String?             // human-readable symbol stored at confirm time (v0.7.7)
+  outputSymbol  String?             // falls back to Jupiter lookup if null (old records)
   inputAmount   BigInt              // raw token units (not human-readable)
   outputAmount  BigInt
   inputChain    String      @default("solana")
@@ -1069,6 +1071,15 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-08 — Token Names in History + Modal Fix (v0.7.7)
+- **Token names now stored in Swap DB:** Added `inputSymbol` and `outputSymbol` nullable fields to Swap model.
+  - `POST /api/swap/confirm` and `POST /api/cross-chain/confirm` now accept and store `inputSymbol`/`outputSymbol`.
+  - `getTransactions()` uses stored symbols as primary source, falls back to Jupiter lookup for old records (null).
+  - Existing DB records unaffected — new columns are nullable, old swaps still resolve via Jupiter.
+- **Transaction detail modal transparency fixed:** `.tx-detail-sheet` used `var(--bg)` which doesn't exist in the theme — changed to `var(--bg-primary)`. Modal now has solid dark background.
+- **Version bumped to v0.7.7.**
+- **VPS redeployment required:** `npx prisma db push` (adds 2 columns) + `npm run build` + `pm2 restart`.
 
 ### 2026-03-08 — Swap This Token Fix + Stuck Transaction Re-check (v0.7.6)
 - **FE-5 PROPERLY FIXED:** "Swap This Token" from Scan tab now works for ALL tokens including memecoins/unverified tokens.
