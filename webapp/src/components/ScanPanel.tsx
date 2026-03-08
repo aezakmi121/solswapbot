@@ -3,8 +3,16 @@ import { fetchTokenScan, ScanResult } from "../lib/api";
 import { RiskGauge } from "./RiskGauge";
 import { toast } from "../lib/toast";
 
+interface SwapTokenInfo {
+    mint: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    icon: string;
+}
+
 interface ScanPanelProps {
-    onNavigateToSwap?: (mint?: string) => void;
+    onNavigateToSwap?: (token?: SwapTokenInfo) => void;
 }
 
 interface RecentScan {
@@ -206,7 +214,13 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                     {onNavigateToSwap && (
                         <button
                             className="scan-swap-btn swap-btn"
-                            onClick={() => onNavigateToSwap(result.mintAddress)}
+                            onClick={() => onNavigateToSwap({
+                                mint: result.mintAddress,
+                                symbol: result.tokenInfo.symbol || result.mintAddress.slice(0, 6),
+                                name: result.tokenInfo.name || "Unknown Token",
+                                decimals: result.tokenInfo.decimals ?? 9,
+                                icon: result.tokenInfo.icon || "",
+                            })}
                         >
                             🔄 Swap This Token
                         </button>

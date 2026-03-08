@@ -3,6 +3,7 @@ import { buildSwapTransaction } from "../../jupiter/swap";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { prisma } from "../../db/client";
 import { pollTransactionInBackground } from "../../solana/transaction";
+import { connection } from "../../solana/connection";
 import { config } from "../../config";
 
 /** Regex: non-negative integer string (for BigInt validation) */
@@ -145,5 +146,95 @@ swapRouter.get("/swap/status", async (req: Request, res: Response) => {
     } catch (err) {
         console.error("Swap status error:", err);
         res.status(500).json({ error: "Failed to fetch swap status" });
+    }
+});
+
+/**
+ * POST /api/swap/recheck
+ * Re-checks on-chain status for a stuck swap (PENDING, SUBMITTED, or TIMEOUT).
+ * If txSignature is missing, marks as FAILED (transaction was never broadcast).
+ * If found on-chain, updates status to CONFIRMED or FAILED accordingly.
+ *
+ * Body: { swapId }
+ */
+swapRouter.post("/swap/recheck", async (req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        const { swapId } = req.body;
+
+        if (!swapId) {
+            res.status(400).json({ error: "Missing swapId" });
+            return;
+        }
+
+        const user = await findUserByTelegramId(telegramId);
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        const swap = await prisma.swap.findFirst({
+            where: { id: swapId, userId: user.id },
+        });
+
+        if (!swap) {
+            res.status(404).json({ error: "Swap not found" });
+            return;
+        }
+
+        // Only recheck non-terminal statuses
+        if (swap.status === "CONFIRMED" || swap.status === "FAILED") {
+            res.json({ swapId: swap.id, status: swap.status, txSignature: swap.txSignature });
+            return;
+        }
+
+        // No txSignature means the transaction was never broadcast
+        if (!swap.txSignature) {
+            await prisma.swap.update({
+                where: { id: swapId },
+                data: { status: "FAILED" },
+            });
+            console.log(`Swap ${swapId} recheck: no txSignature — marked FAILED (never broadcast)`);
+            res.json({ swapId: swap.id, status: "FAILED", txSignature: null, message: "Transaction was never broadcast" });
+            return;
+        }
+
+        // Check on-chain status with history search enabled
+        const sigStatus = await connection.getSignatureStatus(swap.txSignature, {
+            searchTransactionHistory: true,
+        });
+
+        let newStatus: string = swap.status;
+        let message = "No on-chain confirmation found — transaction may have expired";
+
+        if (sigStatus.value) {
+            if (sigStatus.value.err) {
+                newStatus = "FAILED";
+                message = "Transaction failed on-chain";
+            } else if (
+                sigStatus.value.confirmationStatus === "confirmed" ||
+                sigStatus.value.confirmationStatus === "finalized"
+            ) {
+                newStatus = "CONFIRMED";
+                message = "Transaction confirmed on-chain";
+            }
+        } else {
+            // Transaction not found on-chain at all — likely expired
+            newStatus = "FAILED";
+            message = "Transaction not found on-chain — likely expired";
+        }
+
+        if (newStatus !== swap.status) {
+            await prisma.swap.update({
+                where: { id: swapId },
+                data: { status: newStatus as any },
+            });
+            console.log(`Swap ${swapId} recheck: ${swap.status} → ${newStatus}`);
+        }
+
+        res.json({ swapId: swap.id, status: newStatus, txSignature: swap.txSignature, message });
+    } catch (err) {
+        console.error("Swap recheck error:", err);
+        res.status(500).json({ error: "Failed to recheck swap status" });
     }
 });

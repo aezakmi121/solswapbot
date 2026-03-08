@@ -209,6 +209,22 @@ export async function confirmSwap(params: {
     return res.json();
 }
 
+/** Re-check on-chain status for a stuck swap */
+export async function recheckSwap(
+    swapId: string
+): Promise<{ swapId: string; status: string; txSignature: string | null; message?: string }> {
+    const res = await fetch(`${API_BASE}/api/swap/recheck`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ swapId }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to recheck swap");
+    }
+    return res.json();
+}
+
 /** Poll swap confirmation status */
 export async function fetchSwapStatus(
     swapId: string
