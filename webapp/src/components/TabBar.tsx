@@ -1,8 +1,9 @@
-export type TabId = "wallet" | "swap" | "scan" | "history" | "settings";
+export type TabId = "wallet" | "swap" | "scan" | "history" | "settings" | "admin";
 
 interface TabBarProps {
     activeTab: TabId;
     onTabChange: (tab: TabId) => void;
+    isAdmin?: boolean;
 }
 
 const TABS: Array<{ id: TabId; label: string; icon: string }> = [
@@ -13,10 +14,15 @@ const TABS: Array<{ id: TabId; label: string; icon: string }> = [
     { id: "settings", label: "Settings", icon: "⚙️" },
 ];
 
-export function TabBar({ activeTab, onTabChange }: TabBarProps) {
+export function TabBar({ activeTab, onTabChange, isAdmin }: TabBarProps) {
+    const tabs = [...TABS];
+    if (isAdmin) {
+        tabs.push({ id: "admin", label: "Admin", icon: "🛡️" });
+    }
+
     return (
-        <nav className="tab-bar tab-bar--five">
-            {TABS.map((tab) => (
+        <nav className={`tab-bar tab-bar--${tabs.length}`}>
+            {tabs.map((tab) => (
                 <button
                     key={tab.id}
                     className={`tab-item${activeTab === tab.id ? " tab-item--active" : ""}`}

@@ -29,6 +29,11 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
             return;
         }
 
+        const isAdmin = config.ADMIN_TELEGRAM_ID ? user.telegramId === config.ADMIN_TELEGRAM_ID : false;
+        if (isAdmin) {
+            console.log(`[ADMIN] Admin ${user.telegramId} accessed the Mini App`);
+        }
+
         const referralCount = user._count.referrals;
         const referralEarningsUsd = await getReferralEarnings(user.id, config.REFERRAL_FEE_SHARE_PERCENT);
 
@@ -40,6 +45,7 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
                 referralCode: user.referralCode,
                 referralCount,
                 referralEarningsUsd,
+                isAdmin,
                 message: "No wallet connected. Open the Mini App to set up your wallet.",
             });
             return;
@@ -63,6 +69,7 @@ userRouter.get("/user", async (_req: Request, res: Response) => {
             referralCode: user.referralCode,
             referralCount,
             referralEarningsUsd,
+            isAdmin,
         });
     } catch (err) {
         console.error("User API error:", err);

@@ -52,6 +52,7 @@ export interface UserData {
     referralCode?: string;
     referralCount?: number;
     referralEarningsUsd?: number;
+    isAdmin?: boolean;
     message?: string;
 }
 
@@ -574,4 +575,47 @@ export async function fetchCrossChainQuote(params: {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to get cross-chain quote");
     return data;
+}
+
+// ==========================================
+// Admin APIs (Only accessible if isAdmin=true)
+// ==========================================
+
+export interface AdminStats {
+    totalUsers: number;
+    totalSwaps: number;
+    totalFeesUsd: number;
+    feesToday: { totalUsd: number; swapCount: number };
+    fees7d: { totalUsd: number; swapCount: number };
+    fees30d: { totalUsd: number; swapCount: number };
+}
+
+export interface AdminUser {
+    telegramId: string;
+    telegramUsername: string | null;
+    walletAddress: string | null;
+    hasEvmWallet: boolean;
+    swapCount: number;
+    sendCount: number;
+    scanCount: number;
+    referralCount: number;
+    joinedAt: string;
+}
+
+export interface AdminUsersResponse {
+    users: AdminUser[];
+    topFeeGenerators: any[];
+    totalUsers: number;
+}
+
+export async function fetchAdminStats(): Promise<AdminStats> {
+    const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch admin stats");
+    return res.json();
+}
+
+export async function fetchAdminUsers(): Promise<AdminUsersResponse> {
+    const res = await fetch(`${API_BASE}/api/admin/users`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch admin users");
+    return res.json();
 }

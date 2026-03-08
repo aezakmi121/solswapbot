@@ -14,6 +14,7 @@ import { SwapPanel } from "./components/SwapPanel";
 import { WalletTab } from "./components/WalletTab";
 import { ScanPanel } from "./components/ScanPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { AdminPanel } from "./components/AdminPanel";
 import { Toast } from "./components/Toast";
 import { TermsModal, hasAcceptedTerms } from "./components/TermsModal";
 import { TransactionsTab } from "./components/TransactionsTab";
@@ -41,6 +42,7 @@ export function App() {
     const [evmWalletSaved, setEvmWalletSaved] = useState(false);
     const [solBalance, setSolBalance] = useState<number | null>(null);
     const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     // ── Tab navigation with haptic ──
     const [activeTab, setActiveTab] = useState<TabId>("wallet");
@@ -118,7 +120,10 @@ export function App() {
         if (!walletAddress) return;
         if (tg?.initData) {
             fetchUser()
-                .then((data) => setSolBalance(data.solBalance))
+                .then((data) => {
+                    setSolBalance(data.solBalance);
+                    setIsAdmin(!!data.isAdmin);
+                })
                 .catch(() => {});
         }
         fetchBalances(walletAddress)
@@ -248,10 +253,13 @@ export function App() {
                         onSlippageChange={handleSlippageChange}
                     />
                 )}
+                {activeTab === ("admin" as TabId) && isAdmin && (
+                    <AdminPanel />
+                )}
             </main>
 
             {/* ── Bottom tab bar ── */}
-            <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+            <TabBar activeTab={activeTab} onTabChange={handleTabChange} isAdmin={isAdmin} />
 
             {/* ── Toast notifications ── */}
             <Toast />
