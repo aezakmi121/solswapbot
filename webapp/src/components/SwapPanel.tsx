@@ -446,6 +446,8 @@ export function SwapPanel({
                     inputAmount: quote.raw.inAmount,
                     outputAmount: quote.raw.outAmount,
                     feeAmountUsd: quote.display.feeUsd,
+                    inputSymbol: inputToken.symbol,
+                    outputSymbol: outputToken.symbol,
                 });
 
                 if (confirmPollRef.current) clearInterval(confirmPollRef.current);

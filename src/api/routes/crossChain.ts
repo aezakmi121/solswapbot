@@ -238,6 +238,8 @@ crossChainRouter.post("/cross-chain/confirm", async (req: Request, res: Response
                 userId: user.id,
                 inputMint: inputTokenInfo?.address ?? inputToken,
                 outputMint: outputTokenInfo?.address ?? outputToken,
+                inputSymbol: inputTokenInfo?.symbol ?? null,
+                outputSymbol: outputTokenInfo?.symbol ?? null,
                 inputAmount: BigInt(Math.round(parseFloat(String(inputAmount)) || 0)),
                 outputAmount: BigInt(Math.round(parseFloat(String(outputAmount)) || 0)),
                 inputChain: inputChain,

@@ -56,12 +56,12 @@ swapRouter.post("/swap", async (req: Request, res: Response) => {
  * Creates a swap record in the DB and starts background confirmation polling.
  * telegramId from verified initData — no spoofing possible (C2).
  *
- * Body: { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }
+ * Body: { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd?, inputSymbol?, outputSymbol? }
  */
 swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
     try {
         const telegramId = res.locals.telegramId as string;
-        const { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd } = req.body;
+        const { txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd, inputSymbol, outputSymbol } = req.body;
 
         if (!txSignature || !inputMint || !outputMint || !inputAmount || !outputAmount) {
             res.status(400).json({ error: "Missing required fields" });
@@ -86,6 +86,8 @@ swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
                 userId: user.id,
                 inputMint,
                 outputMint,
+                inputSymbol: inputSymbol || null,
+                outputSymbol: outputSymbol || null,
                 inputAmount: BigInt(inputAmount),
                 outputAmount: BigInt(outputAmount),
                 feeAmountUsd: feeAmountUsd ?? null,

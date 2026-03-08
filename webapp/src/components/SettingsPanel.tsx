@@ -199,7 +199,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             <div className="settings-section">
                 <div className="settings-section-title">About</div>
                 <div className="settings-card settings-about">
-                    <p className="settings-about-name">SolSwap v0.7.6</p>
+                    <p className="settings-about-name">SolSwap v0.7.7</p>
                     <p className="settings-about-sub">Non-custodial · Privy MPC wallet</p>
                     <p className="settings-about-sub">Platform fee: 0.5% per swap</p>
                     <p className="settings-about-sub">Powered by Jupiter &amp; LI.FI</p>

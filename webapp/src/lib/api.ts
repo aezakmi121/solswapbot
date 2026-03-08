@@ -196,6 +196,8 @@ export async function confirmSwap(params: {
     inputAmount: string;
     outputAmount: string;
     feeAmountUsd?: number | null;
+    inputSymbol?: string;
+    outputSymbol?: string;
 }): Promise<{ swapId: string; status: string }> {
     const res = await fetch(`${API_BASE}/api/swap/confirm`, {
         method: "POST",
