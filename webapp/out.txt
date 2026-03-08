@@ -1,0 +1,184 @@
+﻿node.exe : 
+At C:\Program 
+Files\nodejs\npx.ps1:29 
+char:3
++   & $NODE_EXE 
+$NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (:St  
+  ring) [], RemoteExcept   
+ ion
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+[31mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+[39m[1m[41m Startup 
+Error [49m[22m[31mΓÄ»ΓÄ»
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[39m
+Error: Failed to load 
+custom Reporter from basic
+    at 
+loadCustomReporterModule (f
+ile:///D:/NEW_DOWNLOADS/sol
+swapbot/solswapbot/webapp/n
+ode_modules/vitest/dist/chu
+nks/cli-api.B7PN_QUv.js:105
+93:9)
+    at file:///D:/NEW_DOWNL
+OADS/solswapbot/solswapbot/
+webapp/node_modules/vitest/
+dist/chunks/cli-api.B7PN_QU
+v.js:10609:23
+    ... 3 lines matching 
+cause stack trace ...
+    at _createServer (file:
+///D:/NEW_DOWNLOADS/solswap
+bot/solswapbot/webapp/node_
+modules/vite/dist/node/chun
+ks/dep-D4NMHUTW.js:38686:20
+)
+    at createViteServer (fi
+le:///D:/NEW_DOWNLOADS/sols
+wapbot/solswapbot/webapp/no
+de_modules/vitest/dist/chun
+ks/cli-api.B7PN_QUv.js:9870
+:17)
+    at createVitest (file:/
+//D:/NEW_DOWNLOADS/solswapb
+ot/solswapbot/webapp/node_m
+odules/vitest/dist/chunks/c
+li-api.B7PN_QUv.js:13186:17
+)
+    at prepareVitest (file:
+///D:/NEW_DOWNLOADS/solswap
+bot/solswapbot/webapp/node_
+modules/vitest/dist/chunks/
+cli-api.B7PN_QUv.js:13548:1
+4)
+    at startVitest (file://
+/D:/NEW_DOWNLOADS/solswapbo
+t/solswapbot/webapp/node_mo
+dules/vitest/dist/chunks/cl
+i-api.B7PN_QUv.js:13494:14)
+ {
+  [cause]: Error: Failed 
+to load url basic 
+(resolved id: basic). Does 
+the file exist?
+      at reviveInvokeError 
+(file:///D:/NEW_DOWNLOADS/s
+olswapbot/solswapbot/webapp
+/node_modules/vite/dist/nod
+e/module-runner.js:548:17)
+      at Object.invoke (fil
+e:///D:/NEW_DOWNLOADS/solsw
+apbot/solswapbot/webapp/nod
+e_modules/vite/dist/node/mo
+dule-runner.js:570:17)
+      at ServerModuleRunner
+.getModuleInformation (file
+:///D:/NEW_DOWNLOADS/solswa
+pbot/solswapbot/webapp/node
+_modules/vite/dist/node/mod
+ule-runner.js:1205:73)
+      at 
+ServerModuleRunner.import (
+file:///D:/NEW_DOWNLOADS/so
+lswapbot/solswapbot/webapp/
+node_modules/vite/dist/node
+/module-runner.js:1116:27)
+      at 
+loadCustomReporterModule (f
+ile:///D:/NEW_DOWNLOADS/sol
+swapbot/solswapbot/webapp/n
+ode_modules/vitest/dist/chu
+nks/cli-api.B7PN_QUv.js:105
+91:26)
+      at file:///D:/NEW_DOW
+NLOADS/solswapbot/solswapbo
+t/webapp/node_modules/vites
+t/dist/chunks/cli-api.B7PN_
+QUv.js:10609:23
+      at async Promise.all 
+(index 0)
+      at Vitest._setServer 
+(file:///D:/NEW_DOWNLOADS/s
+olswapbot/solswapbot/webapp
+/node_modules/vitest/dist/c
+hunks/cli-api.B7PN_QUv.js:1
+2251:138)
+      at handler (file:///D
+:/NEW_DOWNLOADS/solswapbot/
+solswapbot/webapp/node_modu
+les/vitest/dist/chunks/cli-
+api.B7PN_QUv.js:13158:6)
+      at _createServer (fil
+e:///D:/NEW_DOWNLOADS/solsw
+apbot/solswapbot/webapp/nod
+e_modules/vite/dist/node/ch
+unks/dep-D4NMHUTW.js:38686:
+20) {
+    code: 'ERR_LOAD_URL',
+    runnerError: Error: 
+RunnerError
+        at 
+reviveInvokeError (file:///
+D:/NEW_DOWNLOADS/solswapbot
+/solswapbot/webapp/node_mod
+ules/vite/dist/node/module-
+runner.js:552:18)
+        at Object.invoke (f
+ile:///D:/NEW_DOWNLOADS/sol
+swapbot/solswapbot/webapp/n
+ode_modules/vite/dist/node/
+module-runner.js:570:17)
+        at ServerModuleRunn
+er.getModuleInformation (fi
+le:///D:/NEW_DOWNLOADS/sols
+wapbot/solswapbot/webapp/no
+de_modules/vite/dist/node/m
+odule-runner.js:1205:73)
+        at 
+ServerModuleRunner.import (
+file:///D:/NEW_DOWNLOADS/so
+lswapbot/solswapbot/webapp/
+node_modules/vite/dist/node
+/module-runner.js:1116:27)
+        at 
+loadCustomReporterModule (f
+ile:///D:/NEW_DOWNLOADS/sol
+swapbot/solswapbot/webapp/n
+ode_modules/vitest/dist/chu
+nks/cli-api.B7PN_QUv.js:105
+91:26)
+        at file:///D:/NEW_D
+OWNLOADS/solswapbot/solswap
+bot/webapp/node_modules/vit
+est/dist/chunks/cli-api.B7P
+N_QUv.js:10609:23
+        at async 
+Promise.all (index 0)
+        at 
+Vitest._setServer (file:///
+D:/NEW_DOWNLOADS/solswapbot
+/solswapbot/webapp/node_mod
+ules/vitest/dist/chunks/cli
+-api.B7PN_QUv.js:12251:138)
+        at handler (file://
+/D:/NEW_DOWNLOADS/solswapbo
+t/solswapbot/webapp/node_mo
+dules/vitest/dist/chunks/cl
+i-api.B7PN_QUv.js:13158:6)
+        at _createServer (f
+ile:///D:/NEW_DOWNLOADS/sol
+swapbot/solswapbot/webapp/n
+ode_modules/vite/dist/node/
+chunks/dep-D4NMHUTW.js:3868
+6:20)
+  }
+}
+
+
+

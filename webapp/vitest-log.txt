@@ -1,0 +1,72 @@
+
+ RUN  v4.0.18 D:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Failed to start forks worker for test files D:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp/src/components/__tests__/SwapPanel.test.tsx.
+ ❯ node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:8046:94
+ ❯ processTicksAndRejections node:internal/process/task_queues:105:5
+ ❯ Pool.schedule node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:8046:5
+
+Caused by: Error: Cannot find module './GetRootNodeOptions.js'
+Require stack:
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js
+ ❯ Function._resolveFilename node:internal/modules/cjs/loader:1401:15
+ ❯ defaultResolveImpl node:internal/modules/cjs/loader:1057:19
+ ❯ resolveForCJSWithHooks node:internal/modules/cjs/loader:1062:22
+ ❯ Function._load node:internal/modules/cjs/loader:1211:37
+ ❯ TracingChannel.traceSync node:diagnostics_channel:322:14
+ ❯ wrapModuleLoad node:internal/modules/cjs/loader:235:24
+ ❯ Module.require node:internal/modules/cjs/loader:1487:12
+ ❯ require node:internal/modules/helpers:135:16
+ ❯ Object.<anonymous> node_modules/jsdom/lib/generated/idl/Node.js:6:28
+ ❯ Module._compile node:internal/modules/cjs/loader:1730:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'MODULE_NOT_FOUND', requireStack: [ 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js' ] }
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Failed to start forks worker for test files D:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp/src/components/__tests__/AdminPanel.test.tsx.
+ ❯ node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:8046:94
+ ❯ processTicksAndRejections node:internal/process/task_queues:105:5
+ ❯ Pool.schedule node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:8046:5
+
+Caused by: Error: Cannot find module './GetRootNodeOptions.js'
+Require stack:
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js
+ ❯ Function._resolveFilename node:internal/modules/cjs/loader:1401:15
+ ❯ defaultResolveImpl node:internal/modules/cjs/loader:1057:19
+ ❯ resolveForCJSWithHooks node:internal/modules/cjs/loader:1062:22
+ ❯ Function._load node:internal/modules/cjs/loader:1211:37
+ ❯ TracingChannel.traceSync node:diagnostics_channel:322:14
+ ❯ wrapModuleLoad node:internal/modules/cjs/loader:235:24
+ ❯ Module.require node:internal/modules/cjs/loader:1487:12
+ ❯ require node:internal/modules/helpers:135:16
+ ❯ Object.<anonymous> node_modules/jsdom/lib/generated/idl/Node.js:6:28
+ ❯ Module._compile node:internal/modules/cjs/loader:1730:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'MODULE_NOT_FOUND', requireStack: [ 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js' ] }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  no tests
+      Tests  no tests
+     Errors  2 errors
+   Start at  00:19:17
+   Duration  5.54s (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+

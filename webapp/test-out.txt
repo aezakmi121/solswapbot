@@ -1,0 +1,76 @@
+
+> solswap-webapp@0.1.0 test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Error [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mError[22m: [vitest-pool]: Failed to start forks worker for test files D:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp/src/components/__tests__/SwapPanel.test.tsx.[39m
+[90m [2m❯[22m node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:[2m8046:94[22m[39m
+[90m [2m❯[22m processTicksAndRejections node:internal/process/task_queues:[2m105:5[22m[39m
+[90m [2m❯[22m Pool.schedule node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:[2m8046:5[22m[39m
+
+[31m[1mCaused by: Error[22m: Cannot find module './GetRootNodeOptions.js'
+Require stack:
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js[39m
+[90m [2m❯[22m Function._resolveFilename node:internal/modules/cjs/loader:[2m1401:15[22m[39m
+[90m [2m❯[22m defaultResolveImpl node:internal/modules/cjs/loader:[2m1057:19[22m[39m
+[90m [2m❯[22m resolveForCJSWithHooks node:internal/modules/cjs/loader:[2m1062:22[22m[39m
+[90m [2m❯[22m Function._load node:internal/modules/cjs/loader:[2m1211:37[22m[39m
+[90m [2m❯[22m TracingChannel.traceSync node:diagnostics_channel:[2m322:14[22m[39m
+[90m [2m❯[22m wrapModuleLoad node:internal/modules/cjs/loader:[2m235:24[22m[39m
+[90m [2m❯[22m Module.require node:internal/modules/cjs/loader:[2m1487:12[22m[39m
+[90m [2m❯[22m require node:internal/modules/helpers:[2m135:16[22m[39m
+[90m [2m❯[22m Object.<anonymous> node_modules/jsdom/lib/generated/idl/Node.js:[2m6:28[22m[39m
+[90m [2m❯[22m Module._compile node:internal/modules/cjs/loader:[2m1730:14[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'MODULE_NOT_FOUND', requireStack: [ 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js' ] }[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Error [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mError[22m: [vitest-pool]: Failed to start forks worker for test files D:/NEW_DOWNLOADS/solswapbot/solswapbot/webapp/src/components/__tests__/AdminPanel.test.tsx.[39m
+[90m [2m❯[22m node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:[2m8046:94[22m[39m
+[90m [2m❯[22m processTicksAndRejections node:internal/process/task_queues:[2m105:5[22m[39m
+[90m [2m❯[22m Pool.schedule node_modules/vitest/dist/chunks/cli-api.B7PN_QUv.js:[2m8046:5[22m[39m
+
+[31m[1mCaused by: Error[22m: Cannot find module './GetRootNodeOptions.js'
+Require stack:
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js
+- D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js[39m
+[90m [2m❯[22m Function._resolveFilename node:internal/modules/cjs/loader:[2m1401:15[22m[39m
+[90m [2m❯[22m defaultResolveImpl node:internal/modules/cjs/loader:[2m1057:19[22m[39m
+[90m [2m❯[22m resolveForCJSWithHooks node:internal/modules/cjs/loader:[2m1062:22[22m[39m
+[90m [2m❯[22m Function._load node:internal/modules/cjs/loader:[2m1211:37[22m[39m
+[90m [2m❯[22m TracingChannel.traceSync node:diagnostics_channel:[2m322:14[22m[39m
+[90m [2m❯[22m wrapModuleLoad node:internal/modules/cjs/loader:[2m235:24[22m[39m
+[90m [2m❯[22m Module.require node:internal/modules/cjs/loader:[2m1487:12[22m[39m
+[90m [2m❯[22m require node:internal/modules/helpers:[2m135:16[22m[39m
+[90m [2m❯[22m Object.<anonymous> node_modules/jsdom/lib/generated/idl/Node.js:[2m6:28[22m[39m
+[90m [2m❯[22m Module._compile node:internal/modules/cjs/loader:[2m1730:14[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'MODULE_NOT_FOUND', requireStack: [ 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Node.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\Attr.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\generated\idl\NamedNodeMap.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\living\interfaces.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\jsdom\browser\Window.js', 'D:\NEW_DOWNLOADS\solswapbot\solswapbot\webapp\node_modules\jsdom\lib\api.js' ] }[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [2mno tests[22m
+[2m      Tests [22m [2mno tests[22m
+[2m     Errors [22m [1m[31m2 errors[39m[22m
+[2m   Start at [22m 00:18:21
+[2m   Duration [22m 5.38s[2m (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)[22m
+
