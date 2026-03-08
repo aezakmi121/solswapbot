@@ -25,7 +25,7 @@ vi.mock("../../lib/api", () => ({
 describe("SwapPanel Component", () => {
     const defaultProps = {
         walletAddress: "wallet123",
-        tokenBalances: [{ mint: "So11111111111111111111111111111111111111112", amount: 1.5 }],
+        tokenBalances: [{ mint: "So11111111111111111111111111111111111111112", amount: 1.5, decimals: 9 }],
         balancesLoaded: true,
         refreshBalance: vi.fn(),
         slippageBps: 50,
