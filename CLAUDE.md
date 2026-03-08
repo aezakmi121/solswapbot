@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-07 | Version: 0.7.4
+> Updated: 2026-03-08 | Version: 0.7.5
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -702,13 +702,13 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Recent tokens row (last 5 used, localStorage `solswap_recent_tokens`)
 - AbortController on quote fetch (cancels in-flight requests when inputs change)
 - Quote auto-expires after 30s with auto-refresh
-- Swap history slide-up panel (tap wallet badge)
 
 **Tab 3 — Scan**
 - Paste or type token mint address
 - Animated SVG speedometer gauge (RiskGauge) with color gradient
 - Token icon + name + symbol displayed above gauge
 - Per-check results: Mint Authority, Freeze Authority, Top Holders, Token Metadata, Jupiter Verified, Token Age
+- Info icon (ℹ️) on each check — tap to expand inline explanation of what the check means
 - Token info: supply, price, decimals
 - "Swap This Token" → switches to Swap tab with that token pre-selected
 - Recent scans list (last 5, localStorage `solswap_recent_scans`) showing token symbol + risk level
@@ -788,7 +788,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v0.7.4 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
+### Current Status: **v0.7.5 — PRODUCTION READY (all services validated, 1 non-blocking item remaining)**
 
 #### Full Audit (2026-03-07) — Rating: 9.8/10
 
@@ -1067,6 +1067,13 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-08 — Scanner Info Icons, Swap History Removal, Scan→Swap Fix (v0.7.5)
+- **FE-5 RE-FIXED:** "Swap This Token" race condition — `onInitialMintConsumed()` was called synchronously before `searchTokens()` resolved, clearing the mint before it could be set. Moved callback inside `.then()`/`.catch()` so mint is only consumed after token is actually set (or lookup fails).
+- **Scanner info icons:** Each safety check row now has an ℹ️ button that expands an inline explanation of what the check means and why it matters (Mint Authority, Freeze Authority, Top Holders, Token Metadata, Jupiter Verified, Token Age).
+- **Swap history removed:** Removed redundant "History" button from swap header (and associated overlay, state, `loadHistory` function, `fetchHistory`/`SwapRecord` imports). Dedicated Transactions tab (Tab 5) already provides full history with filtering.
+- **CSS cleanup:** Removed `.history-overlay`, `.history-panel`, `.history-item`, `.history-link-btn` and related classes. Added `.scan-check-info-btn`, `.scan-check-info`, `.scan-check-wrap` classes.
+- **Frontend-only changes** — no VPS redeployment needed
 
 ### 2026-03-07 — Pre-Launch Fixes: Receive Tracking, Bridge Fees, Error Messages (v0.7.1)
 - **RECV-1 FIXED (frontend):** `TransactionsTab.tsx` receive tracking fully wired up

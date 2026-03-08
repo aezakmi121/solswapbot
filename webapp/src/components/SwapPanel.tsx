@@ -7,10 +7,8 @@ import {
     fetchQuote,
     fetchSwapTransaction,
     fetchPopularTokens,
-    fetchHistory,
     confirmSwap,
     fetchSwapStatus,
-    SwapRecord,
     fetchCrossChainQuote,
     CrossChainQuoteResult,
     executeCrossChain,
@@ -196,8 +194,10 @@ export function SwapPanel({
                 }
                 setOutputToken(match);
             }
-        }).catch(() => {});
-        onInitialMintConsumed?.();
+            onInitialMintConsumed?.();
+        }).catch(() => {
+            onInitialMintConsumed?.();
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialOutputMint, tokensLoaded]);
 
@@ -224,10 +224,6 @@ export function SwapPanel({
     >("idle");
     const [swapError, setSwapError] = useState("");
     const [txSignature, setTxSignature] = useState<string | null>(null);
-
-    // History
-    const [history, setHistory] = useState<SwapRecord[]>([]);
-    const [showHistory, setShowHistory] = useState(false);
 
     /** Get the user's balance for a specific token mint. */
     const getTokenBalance = (mint: string): number | null => {
@@ -508,17 +504,6 @@ export function SwapPanel({
         }
     };
 
-    // Load swap history
-    const loadHistory = async () => {
-        try {
-            const data = await fetchHistory();
-            setHistory(data);
-            setShowHistory(true);
-        } catch (err) {
-            console.error("Failed to load history:", err);
-        }
-    };
-
     // Execute a cross-chain bridge swap via LI.FI
     const handleBridgeExecute = async () => {
         if (!walletAddress || !ccQuote || !embeddedWallet) return;
@@ -667,9 +652,6 @@ export function SwapPanel({
                         title={crossChainMode ? "Return to Solana swap" : "Bridge tokens across blockchains"}
                     >
                         {crossChainMode ? "◎ Solana swap" : "🌐 Cross-chain"}
-                    </button>
-                    <button className="history-link-btn" onClick={loadHistory}>
-                        History
                     </button>
                 </div>
             </div>
@@ -1255,39 +1237,6 @@ export function SwapPanel({
                 excludeMint={selectorOpen === "input" ? outputToken?.mint : inputToken?.mint}
             />
 
-            {/* ── History Panel ── */}
-            {showHistory && (
-                <div className="history-overlay" onClick={() => setShowHistory(false)}>
-                    <div className="history-panel" onClick={(e) => e.stopPropagation()}>
-                        <div className="history-header">
-                            <h3>Swap History</h3>
-                            <button className="history-close" onClick={() => setShowHistory(false)}>×</button>
-                        </div>
-                        {history.length === 0 ? (
-                            <p className="history-empty">No swaps yet</p>
-                        ) : (
-                            <div className="history-list">
-                                {history.map((swap) => (
-                                    <div key={swap.id} className="history-item">
-                                        <div className="history-pair">
-                                            {swap.inputSymbol} → {swap.outputSymbol}
-                                        </div>
-                                        <div className="history-detail">
-                                            <span>{swap.inputAmount}</span>
-                                            <span className={`history-status status-${swap.status.toLowerCase()}`}>
-                                                {swap.status}
-                                            </span>
-                                        </div>
-                                        <div className="history-date">
-                                            {new Date(swap.createdAt).toLocaleDateString()}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

@@ -42,12 +42,22 @@ function timeAgo(ts: number): string {
     return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+const CHECK_INFO: Record<string, string> = {
+    "Mint Authority": "If enabled, the token creator can mint unlimited new tokens at any time, diluting your holdings and crashing the price.",
+    "Freeze Authority": "If enabled, the token creator can freeze your token balance, preventing you from selling or transferring.",
+    "Top Holders": "Shows how much of the supply the top 10 wallets control. High concentration (>50%) means whales can dump and crash the price.",
+    "Token Metadata": "Legitimate tokens have a registered name and symbol. Missing metadata is common with hastily-created scam tokens.",
+    "Jupiter Verified": "Jupiter maintains a curated list of vetted tokens. Unverified tokens haven't passed their review process.",
+    "Token Age": "Very new tokens (under 24 hours) are higher risk. Most rug pulls happen within the first few hours of launch.",
+};
+
 export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
     const [mint, setMint] = useState("");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<ScanResult | null>(null);
     const [error, setError] = useState("");
     const [recentScans, setRecentScans] = useState<RecentScan[]>(loadRecent);
+    const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
 
     const handleScan = async (addr?: string) => {
         const target = (addr ?? mint).trim();
@@ -56,6 +66,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
         setLoading(true);
         setError("");
         setResult(null);
+        setExpandedCheck(null);
         try {
             const data = await fetchTokenScan(target);
             setResult(data);
@@ -140,12 +151,28 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                     <div className="scan-section">
                         <div className="scan-section-title">Safety Checks</div>
                         {result.checks.map((check, i) => (
-                            <div key={i} className="scan-check-row">
-                                <span className={`scan-check-icon ${check.safe ? "scan-check-safe" : "scan-check-warn"}`}>
-                                    {check.safe ? "✅" : "⚠️"}
-                                </span>
-                                <span className="scan-check-name">{check.name}</span>
-                                <span className="scan-check-detail">{check.detail}</span>
+                            <div key={i} className="scan-check-wrap">
+                                <div className="scan-check-row">
+                                    <span className={`scan-check-icon ${check.safe ? "scan-check-safe" : "scan-check-warn"}`}>
+                                        {check.safe ? "✅" : "⚠️"}
+                                    </span>
+                                    <span className="scan-check-name">{check.name}</span>
+                                    <span className="scan-check-detail">{check.detail}</span>
+                                    {CHECK_INFO[check.name] && (
+                                        <button
+                                            className={`scan-check-info-btn${expandedCheck === check.name ? " scan-check-info-btn--active" : ""}`}
+                                            onClick={() => setExpandedCheck(expandedCheck === check.name ? null : check.name)}
+                                            title="What does this mean?"
+                                        >
+                                            i
+                                        </button>
+                                    )}
+                                </div>
+                                {expandedCheck === check.name && CHECK_INFO[check.name] && (
+                                    <div className="scan-check-info">
+                                        {CHECK_INFO[check.name]}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
