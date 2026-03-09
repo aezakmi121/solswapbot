@@ -55,6 +55,32 @@ function getTokenListUrl(): string {
   return `${base}/tokens/v2/tag?query=verified`;
 }
 
+/**
+ * Look up a single token by mint address via Jupiter's per-token endpoint.
+ * This returns metadata for ANY token Jupiter has ever indexed (not just verified),
+ * including memecoins. Returns null if Jupiter doesn't know the token.
+ */
+async function lookupTokenFromJupiter(mint: string): Promise<JupiterToken | null> {
+  try {
+    const base = config.JUPITER_API_URL.replace(/\/swap\/v1\/?$/, "");
+    const headers: Record<string, string> = {};
+    if (config.JUPITER_API_KEY) headers["x-api-key"] = config.JUPITER_API_KEY;
+    const res = await fetch(`${base}/tokens/v2/${mint}`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json() as JupiterTokenV2;
+    if (!data || !data.id) return null;
+    return {
+      address: data.id,
+      symbol: data.symbol,
+      name: data.name,
+      decimals: data.decimals,
+      logoURI: data.icon,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Raw shape returned by Jupiter Tokens API V2 */
 interface JupiterTokenV2 {
   id: string;
@@ -132,6 +158,10 @@ export async function searchTokens(query: string, limit = 20): Promise<JupiterTo
     const exact = all.find((t) => t.address.toLowerCase() === q);
     if (exact) return [exact];
 
+    // Jupiter single-token lookup — returns metadata for any token Jupiter has indexed
+    const jupiterToken = await lookupTokenFromJupiter(query.trim());
+    if (jupiterToken) return [jupiterToken];
+
     // On-chain fallback: resolve unverified token metadata from the mint account
     try {
       const mintPubkey = new PublicKey(query.trim());
@@ -171,10 +201,14 @@ export async function searchTokens(query: string, limit = 20): Promise<JupiterTo
   return results.slice(0, limit).map((r) => r.token);
 }
 
-/** Look up a single token by mint address */
+/** Look up a single token by mint address. Checks verified cache first, then Jupiter single-token API. */
 export async function getTokenByMint(mint: string): Promise<JupiterToken | null> {
   const all = await loadTokenList();
-  return all.find((t) => t.address === mint) ?? null;
+  const cached = all.find((t) => t.address === mint);
+  if (cached) return cached;
+
+  // Jupiter single-token lookup for unverified/memecoin tokens
+  return lookupTokenFromJupiter(mint);
 }
 
 /** Look up decimals for a mint address. Tries Jupiter cache first, then on-chain RPC. Falls back to 9. */
