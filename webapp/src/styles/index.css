@@ -4823,3 +4823,587 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   background: rgba(124, 92, 252, 0.06);
   border-color: rgba(124, 92, 252, 0.3);
 }
+
+/* ════════════════════════════════════════════════════════════════
+   P1 UI OVERHAUL — Secondary Tabs + Referral Dashboard (2026-03-09)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Settings — glass cards ── */
+.settings-card {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.settings-section-title {
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.settings-row {
+  border-color: var(--border-glass);
+}
+
+.settings-addr {
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.3px;
+}
+
+/* ── Referral Dashboard Card ── */
+.referral-dashboard {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+.referral-hero {
+  padding: 20px 16px 16px;
+  text-align: center;
+  background: linear-gradient(145deg, rgba(124, 92, 252, 0.12) 0%, rgba(0, 212, 255, 0.05) 100%);
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.referral-hero-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}
+
+.referral-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+}
+
+.referral-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.referral-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.referral-stat-value--earnings {
+  background: linear-gradient(135deg, #4ade80, #22d3ee);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.referral-stat-value--count {
+  color: var(--text-primary);
+}
+
+.referral-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.referral-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.referral-code-value {
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  background: rgba(124, 92, 252, 0.1);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+.referral-code-copy {
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.referral-code-copy:hover {
+  background: rgba(124, 92, 252, 0.1);
+  color: var(--accent);
+}
+
+.referral-how {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.referral-how-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 10px;
+}
+
+.referral-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.referral-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.referral-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(124, 92, 252, 0.15);
+  border: 1px solid rgba(124, 92, 252, 0.3);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.referral-share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(124, 92, 252, 0.15), rgba(124, 92, 252, 0.08));
+  border: none;
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.referral-share-btn:hover {
+  background: linear-gradient(135deg, rgba(124, 92, 252, 0.25), rgba(124, 92, 252, 0.15));
+}
+
+.referral-share-btn:active {
+  opacity: 0.8;
+}
+
+/* ── Slippage chips — glass styling ── */
+.slippage-chip {
+  background: rgba(36, 37, 64, 0.8);
+  border-color: var(--border-glass);
+}
+
+.slippage-chip--active {
+  background: rgba(124, 92, 252, 0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Settings about card ── */
+.settings-about {
+  background: rgba(28, 29, 50, 0.5);
+  border: 1px solid var(--border-glass);
+}
+
+.settings-terms-link {
+  color: var(--accent);
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+  font-family: var(--font);
+  transition: opacity 0.15s;
+}
+
+.settings-terms-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* ── Logout button — danger zone ── */
+.logout-btn--settings {
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--radius);
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.15);
+  color: var(--error);
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.logout-btn--settings:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+/* ── Scanner — glass treatment ── */
+.scan-section {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.scan-section-title {
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  border-color: var(--border-glass);
+}
+
+.scan-input-wrap {
+  background: rgba(20, 21, 40, 0.9);
+  border: 1px solid var(--border-glass);
+}
+
+.scan-input-wrap:focus-within {
+  border-color: rgba(124, 92, 252, 0.45);
+  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.1);
+}
+
+.scan-check-row {
+  border-color: var(--border-glass);
+  transition: background 0.1s;
+}
+
+.scan-check-row:hover {
+  background: rgba(124, 92, 252, 0.03);
+}
+
+.scan-check-wrap {
+  border-color: var(--border-glass);
+}
+
+.scan-info-row {
+  border-color: var(--border-glass);
+}
+
+.scan-error {
+  background: rgba(248, 113, 113, 0.07);
+  border: 1px solid rgba(248, 113, 113, 0.16);
+  border-radius: var(--radius);
+}
+
+.scan-disclaimer {
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.12);
+  border-radius: var(--radius);
+}
+
+/* ── Recent scans — card style ── */
+.scan-recent {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.scan-recent .scan-section-title {
+  padding: 12px 14px 8px;
+}
+
+.scan-recent-row {
+  border-color: var(--border-glass);
+  transition: background 0.12s;
+}
+
+.scan-recent-row:hover {
+  background: rgba(124, 92, 252, 0.04);
+}
+
+/* ── Transactions — glass treatment ── */
+.tx-tab {
+  padding: 0 0 20px;
+}
+
+.tx-tab .panel-header {
+  padding: 12px 16px 8px;
+}
+
+.tx-tab .panel-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+/* Type filter — segmented control style */
+.tx-type-filters {
+  display: flex;
+  gap: 0;
+  padding: 0 16px 12px;
+  background: transparent;
+}
+
+.tx-filter-chip {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 0;
+  border: 1px solid var(--border-glass);
+  background: rgba(20, 21, 40, 0.6);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.tx-filter-chip:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.tx-filter-chip:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.tx-filter-chip:not(:first-child) {
+  border-left: none;
+}
+
+.tx-filter-chip--active {
+  background: rgba(124, 92, 252, 0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tx-filter-chip--active + .tx-filter-chip {
+  border-left-color: var(--accent);
+}
+
+/* Date chips — pill style */
+.tx-date-chip {
+  background: rgba(36, 37, 64, 0.6);
+  border-color: var(--border-glass);
+}
+
+.tx-date-chip--active {
+  background: rgba(124, 92, 252, 0.12);
+  border-color: rgba(124, 92, 252, 0.35);
+}
+
+/* Date inputs */
+.tx-date-field input[type="date"] {
+  background: rgba(20, 21, 40, 0.9);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+/* Transaction rows — card feel */
+.tx-row {
+  border-color: var(--border-glass);
+  transition: background 0.12s;
+  font-family: var(--font);
+}
+
+.tx-row:hover {
+  background: rgba(124, 92, 252, 0.03);
+}
+
+.tx-row:active {
+  background: rgba(124, 92, 252, 0.06);
+}
+
+.tx-row-title {
+  color: var(--text-primary);
+}
+
+/* Month group header */
+.tx-month-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.8px;
+}
+
+/* Load more button */
+.tx-load-more {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  margin: 14px 0 0;
+  width: 100%;
+  transition: all 0.15s;
+}
+
+.tx-load-more:hover:not(:disabled) {
+  background: rgba(124, 92, 252, 0.08);
+  border-color: rgba(124, 92, 252, 0.25);
+}
+
+/* Detail modal — glass */
+.tx-detail-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.tx-detail-sheet {
+  background: rgba(22, 23, 40, 0.98);
+  border: 1px solid var(--border-glass);
+  border-bottom: none;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.tx-detail-status {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.tx-detail-status--confirmed {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  color: var(--success);
+}
+
+.tx-detail-status--failed {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  color: var(--error);
+}
+
+.tx-detail-status--submitted,
+.tx-detail-status--pending,
+.tx-detail-status--timeout {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  color: var(--warning);
+}
+
+.tx-detail-row {
+  border-color: var(--border-glass);
+}
+
+.tx-detail-solscan {
+  display: block;
+  text-align: center;
+  padding: 12px;
+  background: rgba(124, 92, 252, 0.08);
+  border: 1px solid rgba(124, 92, 252, 0.2);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s;
+  margin-top: 8px;
+}
+
+.tx-detail-solscan:hover {
+  background: rgba(124, 92, 252, 0.15);
+}
+
+/* Skeleton — inherits P0 shimmer */
+.tx-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+/* ── Receive Modal — glass ── */
+.receive-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.receive-sheet {
+  background: rgba(22, 23, 40, 0.98);
+  border: 1px solid var(--border-glass);
+  border-bottom: none;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Send Flow — glass treatment ── */
+.send-step-card {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Terms Modal — glass ── */
+.terms-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Token Selector — glass ── */
+.ts-panel {
+  background: rgba(22, 23, 42, 0.98);
+  border: 1px solid var(--border-glass);
+  border-bottom: none;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.ts-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.ts-search {
+  background: rgba(20, 21, 40, 0.9);
+  border: 1px solid var(--border-glass);
+}
+
+.ts-search:focus {
+  border-color: rgba(124, 92, 252, 0.45);
+  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.1);
+}
+
+.ts-item:hover {
+  background: rgba(124, 92, 252, 0.06);
+}
+
+/* ── Cross-chain modal — glass ── */
+.cc-modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}

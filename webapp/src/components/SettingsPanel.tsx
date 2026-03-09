@@ -65,6 +65,24 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
         }).catch(() => {});
     };
 
+    const handleShareRef = () => {
+        if (!referralLink) return;
+        const text = "Swap tokens across 6 blockchains — right inside Telegram! Join me on SolSwap:";
+        const tg = (window as any).Telegram?.WebApp;
+        // Try Telegram share first, then Web Share API, then clipboard
+        if (tg?.openTelegramLink) {
+            tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(text)}`);
+        } else if (navigator.share) {
+            navigator.share({ title: "SolSwap", text, url: referralLink }).catch(() => {});
+        } else {
+            navigator.clipboard.writeText(referralLink).then(() => {
+                setRefCopied(true);
+                setTimeout(() => setRefCopied(false), 2000);
+                toast("Referral link copied!");
+            }).catch(() => {});
+        }
+    };
+
     const handleSlippageSelect = (bps: number) => {
         setShowCustom(false);
         onSlippageChange(bps);
@@ -168,40 +186,61 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                 </div>
             </div>
 
-            {/* ── Referral ── */}
+            {/* ── Referral Dashboard ── */}
             {userData?.referralCode && (
                 <div className="settings-section">
-                    <div className="settings-section-title">Referral</div>
-                    <div className="settings-card">
-                        <div className="settings-row">
-                            <span className="settings-label">Your Code</span>
-                            <div className="settings-addr-row">
-                                <span className="settings-referral-code">{userData.referralCode.slice(0, 8)}</span>
-                                <button className="settings-icon-btn" onClick={handleCopyRef} title="Copy referral link">
-                                    {refCopied ? "✓" : "📋"}
-                                </button>
+                    <div className="settings-section-title">Referral Program</div>
+                    <div className="referral-dashboard">
+                        {/* Stats hero */}
+                        <div className="referral-hero">
+                            <div className="referral-hero-title">Your Earnings</div>
+                            <div className="referral-stats">
+                                <div className="referral-stat">
+                                    <span className="referral-stat-value referral-stat-value--earnings">
+                                        ${(userData.referralEarningsUsd ?? 0).toFixed(2)}
+                                    </span>
+                                    <span className="referral-stat-label">Earned</span>
+                                </div>
+                                <div className="referral-stat">
+                                    <span className="referral-stat-value referral-stat-value--count">
+                                        {userData.referralCount ?? 0}
+                                    </span>
+                                    <span className="referral-stat-label">Referrals</span>
+                                </div>
                             </div>
                         </div>
-                        {userData.referralCount !== undefined && (
-                            <div className="settings-row">
-                                <span className="settings-label">Referrals</span>
-                                <span className="settings-value">{userData.referralCount} users</span>
+
+                        {/* Referral code */}
+                        <div className="referral-code-row">
+                            <span className="referral-code-value">{userData.referralCode.slice(0, 8)}</span>
+                            <button className="referral-code-copy" onClick={handleCopyRef} title="Copy referral link">
+                                {refCopied ? "✓" : "📋"}
+                            </button>
+                        </div>
+
+                        {/* How it works */}
+                        <div className="referral-how">
+                            <div className="referral-how-title">How It Works</div>
+                            <div className="referral-steps">
+                                <div className="referral-step">
+                                    <span className="referral-step-num">1</span>
+                                    <span>Share your referral link with friends</span>
+                                </div>
+                                <div className="referral-step">
+                                    <span className="referral-step-num">2</span>
+                                    <span>They join SolSwap and start swapping</span>
+                                </div>
+                                <div className="referral-step">
+                                    <span className="referral-step-num">3</span>
+                                    <span>You earn 25% of their swap fees</span>
+                                </div>
                             </div>
-                        )}
-                        {userData.referralEarningsUsd !== undefined && (
-                            <div className="settings-row">
-                                <span className="settings-label">Earnings (25%)</span>
-                                <span className="settings-value" style={{ color: userData.referralEarningsUsd > 0 ? "#4ade80" : undefined }}>
-                                    ${userData.referralEarningsUsd.toFixed(2)}
-                                </span>
-                            </div>
-                        )}
-                        <button className="settings-share-btn" onClick={handleCopyRef}>
-                            {refCopied ? "✓ Link Copied!" : "Share Referral Link"}
+                        </div>
+
+                        {/* Share CTA */}
+                        <button className="referral-share-btn" onClick={handleShareRef}>
+                            {refCopied ? "✓ Link Copied!" : "📤 Invite Friends"}
                         </button>
-                        <p className="settings-evm-hint" style={{ marginTop: "8px" }}>
-                            Earn 25% of swap fees from users you refer
-                        </p>
                     </div>
                 </div>
             )}
