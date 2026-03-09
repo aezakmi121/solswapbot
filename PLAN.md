@@ -314,6 +314,7 @@ Key changes:
 | **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | ✅ DONE (2026-03-09) |
 | **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | ✅ DONE (2026-03-09) |
 | **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight | pending |
+| **P2.5** | EVM-origin bridge signing | 2-3 sessions | HIGH — unlocks full cross-chain revenue | pending |
 | **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature | pending |
 | **P3** | Subscription payment flow | 2 sessions | LOW — monetization | pending |
 
@@ -403,3 +404,195 @@ Key changes:
 - `webapp/src/components/SettingsPanel.tsx` — Added ReferralModal trigger + version bump
 - `webapp/src/lib/api.ts` — Added `fetchReferrals()` + types
 - `webapp/src/styles/index.css` — Added referral modal styles
+
+---
+
+## Part 5: EVM-Origin Bridge Implementation Plan
+
+### Overview
+
+Currently, cross-chain bridges only work **Solana → EVM** (Solana-originated). The reverse direction (**EVM → Solana** and **EVM → EVM**) is gated with a "coming soon" banner in `SwapPanel.tsx`. This plan covers full EVM-origin bridge signing using Privy's embedded EVM wallet.
+
+### Revenue Impact
+
+LI.FI integrator fees apply to **all bridge directions** — EVM-origin bridges generate the same revenue as Solana-origin. Enabling this doubles the available bridge routes and revenue surface.
+
+### Current State (What Already Exists)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Privy EVM wallet creation | ✅ Done | `main.tsx`: `ethereum: { createOnLogin: "all-users" }` |
+| EVM wallet stored in DB | ✅ Done | `User.evmWalletAddress` field, `POST /api/user/evm-wallet` |
+| EVM wallet detected in frontend | ✅ Done | `App.tsx` uses `useAllWallets` to find Privy EVM wallet |
+| LI.FI backend (chain-agnostic) | ✅ Done | `aggregator/lifi.ts` works for any chain |
+| Cross-chain quote API | ✅ Done | `GET /api/cross-chain/quote` works for EVM-origin |
+| Cross-chain confirm API | ✅ Done | `POST /api/cross-chain/confirm` records any-direction swaps |
+| Cross-chain status API | ✅ Done | `GET /api/cross-chain/status` polls LI.FI for any bridge |
+| Frontend EVM-origin guard | ✅ Done | Yellow banner + disabled button when `inputChain !== "solana"` |
+| **EVM signing hook** | ❌ Missing | Need `useSendTransaction` from `@privy-io/react-auth` |
+| **Backend EVM tx format** | ❌ Missing | `/api/cross-chain/execute` only returns Solana base64 |
+| **PrivyProvider chain config** | ❌ Missing | Need `supportedChains` + `defaultChain` from viem/chains |
+| **ERC-20 token approval** | ❌ Missing | Need approval tx before bridge for non-native tokens |
+
+### Implementation Steps
+
+#### Step 1: PrivyProvider Chain Configuration (frontend)
+
+**File: `webapp/src/main.tsx`**
+
+```typescript
+import { mainnet, polygon, bsc, arbitrum, base } from "viem/chains";
+
+// In PrivyProvider config:
+supportedChains: [mainnet, polygon, bsc, arbitrum, base],
+defaultChain: mainnet,
+```
+
+**New dependency:** `npm install viem` in `webapp/` (viem is already a transitive dep of @privy-io/react-auth, but we need direct import for chain objects).
+
+#### Step 2: Backend — Return Full EVM Transaction Object
+
+**File: `src/api/routes/crossChain.ts`**
+
+Currently the `/api/cross-chain/execute` endpoint extracts `.transactionRequest.data` (Solana base64). For EVM, LI.FI returns a different format:
+
+```typescript
+// LI.FI Solana response:
+{ transactionRequest: { data: "base64..." } }
+
+// LI.FI EVM response:
+{ transactionRequest: { to: "0x...", data: "0x...", value: "0x...", chainId: 137, gasLimit: "0x..." } }
+```
+
+**Change:** When `inputChain !== "solana"`, return the full `transactionRequest` object instead of just `.data`:
+
+```typescript
+// Response shape for EVM:
+{
+  transactionData: null,           // null for EVM (was base64 for Solana)
+  evmTransaction: {                // new field
+    to: "0x...",
+    data: "0x...",
+    value: "0x...",
+    chainId: 137,
+    gasLimit: "0x..."
+  },
+  lifiRouteId: "...",
+  outputAmount: "...",
+  outputAmountUsd: "..."
+}
+```
+
+Also: remove the Solana-only guard at lines 130-133 of `crossChain.ts`.
+
+#### Step 3: Frontend — EVM Signing Hook
+
+**File: `webapp/src/components/SwapPanel.tsx`**
+
+```typescript
+import { useSendTransaction } from "@privy-io/react-auth";
+
+const { sendTransaction } = useSendTransaction();
+
+// In handleBridgeExecute():
+if (ccInputChain !== "solana") {
+  // EVM bridge
+  const res = await executeCrossChain({ ... });
+  const txHash = await sendTransaction({
+    to: res.evmTransaction.to,
+    data: res.evmTransaction.data,
+    value: res.evmTransaction.value,
+    chainId: res.evmTransaction.chainId,
+    gasLimit: res.evmTransaction.gasLimit,
+  });
+  // Then confirm + poll status (same as Solana path)
+}
+```
+
+#### Step 4: ERC-20 Token Approval (Critical)
+
+When bridging non-native EVM tokens (e.g., USDC on Ethereum), the user must first approve LI.FI's router contract to spend their tokens.
+
+**Option A (Recommended): Let LI.FI handle approvals**
+- LI.FI can include approval in the transaction data if `allowDestinationCall: true` is set
+- Check LI.FI docs for `getTokenApproval` endpoint
+
+**Option B: Manual approval transaction**
+- Before the bridge tx, send an `approve()` call to the token contract
+- **CRITICAL: Use exact amount, NEVER `type(uint256).max` (infinite approval)**
+- This requires a second `sendTransaction()` call before the bridge
+
+```typescript
+// Approval flow (Option B):
+const approvalTx = await sendTransaction({
+  to: tokenContractAddress,
+  data: encodeApproveCalldata(lifiRouterAddress, exactAmount),
+  chainId: chainId,
+});
+// Wait for approval confirmation
+// Then send bridge tx
+```
+
+#### Step 5: Remove EVM-Origin Guard
+
+**File: `webapp/src/components/SwapPanel.tsx`**
+
+Remove/modify the yellow "coming soon" banner and disabled button state when `inputChain !== "solana"`. Replace with the actual EVM signing flow.
+
+#### Step 6: Chain Switching (if needed)
+
+Privy may need to switch the user's wallet to the correct EVM chain before signing. Check if `useSendTransaction` handles this automatically or if we need:
+
+```typescript
+import { useSetActiveWallet } from "@privy-io/react-auth";
+// Switch to correct chain before sending
+```
+
+### Security Checklist
+
+| Risk | Mitigation | Priority |
+|------|-----------|----------|
+| LI.FI router exploit (historical: $11.6M July 2024, $600K earlier) | Both exploits were via **infinite token approvals**. Use exact-amount approvals only. | CRITICAL |
+| Malicious `to` address in LI.FI response | Validate `transactionRequest.to` against LI.FI's known router contracts whitelist | HIGH |
+| Value manipulation | Display tx value to user before signing (confirmation screen) | HIGH |
+| Chain mismatch | Verify `chainId` in response matches expected chain | MEDIUM |
+| Gas estimation failures | Use LI.FI's provided `gasLimit`, add 10% buffer | LOW |
+| Approval leftover | Use exact amounts; optionally revoke approval after bridge | LOW |
+
+### LI.FI Known Router Contracts (for validation)
+
+These should be maintained as a whitelist and validated before signing:
+- Check `https://li.quest/v1/integrations` for current contract addresses per chain
+- Hard-fail if `to` address is not in whitelist
+
+### Effort Estimate
+
+| Step | Effort | Dependencies |
+|------|--------|-------------|
+| Step 1: PrivyProvider config | 15 min | `npm install viem` |
+| Step 2: Backend EVM tx format | 30 min | None |
+| Step 3: Frontend EVM signing | 1 hr | Steps 1-2 |
+| Step 4: ERC-20 approval flow | 1-2 hr | Step 3, LI.FI docs |
+| Step 5: Remove guard + UX | 30 min | Steps 3-4 |
+| Step 6: Chain switching | 30 min | Privy docs |
+| Testing (manual, all chains) | 2-3 hr | All steps |
+| **Total** | **~1-2 sessions** | |
+
+### Testing Plan
+
+1. **ETH → SOL** (native → native): simplest, no approval needed
+2. **USDC on Ethereum → SOL** (ERC-20 → native): tests approval flow
+3. **USDC on Polygon → USDC on Ethereum** (EVM → EVM): tests cross-EVM
+4. **Small amounts first** ($1-5): mitigate testing risk
+5. **Verify fees collected** in LI.FI partner dashboard
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `webapp/package.json` | Add `viem` dependency |
+| `webapp/src/main.tsx` | Add `supportedChains` + `defaultChain` to PrivyProvider |
+| `src/api/routes/crossChain.ts` | Return full EVM tx object, remove Solana-only guard |
+| `webapp/src/components/SwapPanel.tsx` | Add `useSendTransaction`, EVM signing flow, remove "coming soon" |
+| `webapp/src/lib/api.ts` | Update `CrossChainExecuteResponse` type for `evmTransaction` field |
+| `webapp/src/lib/chains.ts` | Possibly add chain ID → viem chain mapping |
