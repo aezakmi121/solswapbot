@@ -564,8 +564,6 @@ export function SwapPanel({
                     data: evmTx.data,
                     value: evmTx.value,
                     chainId: evmTx.chainId,
-                    ...(evmTx.gasLimit ? { gasLimit: evmTx.gasLimit } : {}),
-                    ...(evmTx.gasPrice ? { gasPrice: evmTx.gasPrice } : {}),
                 });
                 sigStr = hash;
             } else if (result.transactionData) {
