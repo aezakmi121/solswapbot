@@ -33,7 +33,7 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
         // Admin account bypasses all limits
         const isAdmin = config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID;
 
-        const FREE_SCANS_PER_DAY = 5;
+        const FREE_SCANS_PER_DAY = 50;
         if (user && !isAdmin) {
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
@@ -47,7 +47,7 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
                 const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
                 if (!sub || sub.tier === "FREE") {
                     res.status(429).json({
-                        error: "Daily scan limit reached (5 free scans/day)",
+                        error: "Daily scan limit reached (50 free scans/day)",
                         todayScans,
                         limit: FREE_SCANS_PER_DAY,
                         upgradeHint: "Upgrade to Scanner Pro for unlimited scans",

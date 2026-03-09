@@ -2426,21 +2426,21 @@ body {
 }
 
 .toast--success {
-  background: rgba(74, 222, 128, 0.15);
-  border: 1px solid rgba(74, 222, 128, 0.4);
-  color: var(--success);
+  background: rgba(74, 222, 128, 0.85);
+  border: 1px solid rgba(74, 222, 128, 0.9);
+  color: #0a1a0f;
 }
 
 .toast--error {
-  background: rgba(248, 113, 113, 0.15);
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  color: var(--error);
+  background: rgba(248, 113, 113, 0.85);
+  border: 1px solid rgba(248, 113, 113, 0.9);
+  color: #1a0a0a;
 }
 
 .toast--info {
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  color: var(--accent);
+  background: rgba(99, 102, 241, 0.85);
+  border: 1px solid rgba(99, 102, 241, 0.9);
+  color: #0a0a1a;
 }
 
 .toast-icon {
