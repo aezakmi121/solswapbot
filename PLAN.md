@@ -309,8 +309,8 @@ Key changes:
 |----------|------|--------|--------|--------|
 | **P0** | UI/UX Sprint 1 (foundation + wallet) | 2-3 sessions | HIGH — first impression | ✅ DONE (2026-03-09) |
 | **P0** | UI/UX Sprint 2 (swap redesign) | 2-3 sessions | HIGH — core revenue flow | ✅ DONE (2026-03-09) |
-| **P1** | Referral dashboard (Phase A) | 1 session | MEDIUM — growth driver | pending |
-| **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | pending |
+| **P1** | Referral dashboard (Phase A) | 1 session | MEDIUM — growth driver | ✅ DONE (2026-03-09) |
+| **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | ✅ DONE (2026-03-09) |
 | **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | pending |
 | **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight | pending |
 | **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature | pending |
@@ -341,3 +341,29 @@ Key changes:
 - `webapp/src/components/TabBar.tsx` — full rewrite with SVG icons
 - `webapp/src/components/WalletTab.tsx` — action buttons wrapped in `.wallet-action-circle`
 - `webapp/src/App.tsx` — simplified header wallet badge
+
+---
+
+## P1 Implementation Log (2026-03-09)
+
+### What was done
+
+**Referral Dashboard (Phase A):**
+- Replaced minimal referral section in Settings with a full dashboard card
+- **Hero section**: gradient background with large stat numbers (earnings in green gradient, referral count)
+- **Referral code**: monospace pill with copy button
+- **How it works**: 3-step numbered explainer (Share → Join → Earn 25%)
+- **Share CTA**: "Invite Friends" button with Telegram share API → Web Share API → clipboard fallback
+- Uses `tg.openTelegramLink()` for native Telegram share dialog
+
+**Secondary Tab Polish:**
+- **Settings**: glass card backgrounds, glass border treatment, danger-zone logout button (red tint)
+- **Scanner**: glass sections, glass input, hover effects on check rows, glass error/disclaimer, glass recent scans card
+- **Transactions**: segmented control type filter (joined pills instead of floating chips), glass date chips, glass detail modal with colored status badges (green confirmed, red failed, amber pending), glass load-more button
+- **Token Selector**: glass bottom sheet, glass search input, accent hover on items
+- **Receive Modal**: glass overlay + sheet
+- **Terms Modal**: glass overlay
+
+### Files changed
+- `webapp/src/styles/index.css` — ~350 lines appended (P1 overhaul section)
+- `webapp/src/components/SettingsPanel.tsx` — referral dashboard card + Telegram share
