@@ -837,6 +837,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
    All users get all features for free. Not a bug, but premium features can't be sold yet.
    **Priority: LOW — intentional for soft launch. Implement when ready to gate features.**
 
+2. **EVM-origin bridges not yet live** — Frontend gated with "coming soon" banner. Backend
+   only returns Solana base64 transactions. Needs: Privy `useSendTransaction` hook, PrivyProvider
+   chain config (viem), backend EVM tx format, ERC-20 approval flow. See PLAN.md Part 5.
+   **Priority: P1.5 — unlocks full cross-chain revenue (LI.FI fees apply to all directions).**
+
 #### Recommended launch sequence:
 1. ~~Add uptime monitoring~~ **DONE**
 2. ~~Deploy Helius webhook changes~~ **DONE** (backend)
@@ -1063,6 +1068,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
 | ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
 | ~~LIFI_API_KEY + integrator fee registration~~ | ~~P1~~ **DONE** | Configured on VPS. `solswap` integrator tag recognized by LI.FI. Validated via `npm run validate-keys`. |
+| EVM-origin bridge signing | P1.5 | Privy `useSendTransaction` + LI.FI EVM tx format. Requires: PrivyProvider chain config (viem), backend return full `transactionRequest` for EVM, ERC-20 approval flow (exact-amount only), remove "coming soon" guard. See PLAN.md Part 5. |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
 | Whale alert bot notifications | P2 | Bot pushes alerts to user |
