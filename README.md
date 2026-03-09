@@ -6,11 +6,16 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 
 | Feature | Status |
 |---------|--------|
-| Cross-Chain Swaps — SOL, ETH, BNB, MATIC, ARB, BASE via Jupiter + LI.FI | Backend done, UI in progress |
-| Token Scanner — Paste any contract, get instant safety score | Backend done, UI in progress |
-| Whale Tracker — Follow smart money wallets, get alerts | Schema done, not built |
-| AI Signals — Daily market analysis powered by Gemini | Planned |
-| Zero Custody — Privy MPC wallets sign inside the Mini App | Integration pending |
+| Solana Swaps — SOL, USDC, memecoins via Jupiter (0.5% fee) | Live |
+| Cross-Chain Bridges — SOL ↔ ETH, BNB, MATIC, ARB, BASE via LI.FI | Live (Solana-originated) |
+| Token Scanner — Paste any contract, get instant safety score (0-100) | Live (5/day free) |
+| Multi-Chain Portfolio — Solana + 5 EVM chains via Moralis | Live |
+| Send/Receive — SOL + SPL transfers with QR codes | Live |
+| Transaction History — Swaps, sends, receives with date/type filters | Live |
+| Non-Custodial Wallets — Privy MPC (Solana + EVM, auto-created) | Live |
+| Admin Dashboard — Revenue analytics, user management, referral tracking | Live |
+| Whale Tracker — Follow smart money wallets, get alerts | Backend done, not mounted |
+| AI Signals — Daily market analysis powered by Gemini | Planned (Phase 4) |
 
 ## How It Works
 
@@ -30,15 +35,20 @@ A non-custodial, cross-chain token trading app built as a **Telegram Mini App**.
 | Wallets | Privy (MPC, non-custodial) |
 | Solana DEX | Jupiter API |
 | Cross-Chain | LI.FI API |
-| AI | Google Gemini |
+| EVM Balances | Moralis API |
+| AI | Google Gemini (Phase 4) |
 
 ## Quick Start
 
 ```bash
+# Backend
 npm install
 cp .env.example .env  # Fill in your API keys
 npx prisma generate && npx prisma db push
 npm run dev
+
+# Frontend (separate terminal)
+cd webapp && npm install && npm run dev
 ```
 
 ## Deployment
