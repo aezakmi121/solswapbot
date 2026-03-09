@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { mainnet, polygon, bsc, arbitrum, base } from "@privy-io/chains";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { App } from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -44,6 +45,7 @@ createRoot(document.getElementById("root")!).render(
                         theme: "#1a1b2e",
                         accentColor: "#7c5cfc",
                     },
+                    supportedChains: [mainnet, polygon, bsc, arbitrum, base],
                     loginMethods: ["telegram"],
                     solana: {
                         rpcs: {

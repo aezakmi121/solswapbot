@@ -53,6 +53,25 @@ export const CC_TOKENS: Record<ChainId, Array<{ symbol: string; address: string;
     ],
 };
 
+/** Map our internal chain IDs to EVM numeric chain IDs (for Privy sendTransaction) */
+export const EVM_CHAIN_IDS: Partial<Record<ChainId, number>> = {
+    ethereum: 1,
+    bsc: 56,
+    polygon: 137,
+    arbitrum: 42161,
+    base: 8453,
+};
+
+/** Block explorer URL for each chain's transactions */
+export const EXPLORER_TX_URL: Record<ChainId, string> = {
+    solana:   "https://solscan.io/tx/",
+    ethereum: "https://etherscan.io/tx/",
+    bsc:      "https://bscscan.com/tx/",
+    polygon:  "https://polygonscan.com/tx/",
+    arbitrum: "https://arbiscan.io/tx/",
+    base:     "https://basescan.org/tx/",
+};
+
 /** Display metadata for tokens shown in the modal */
 export const TOKEN_META: Record<string, { name: string; emoji: string }> = {
     SOL:   { name: "Solana",        emoji: "🟣" },

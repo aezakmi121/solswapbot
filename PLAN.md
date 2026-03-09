@@ -314,7 +314,7 @@ Key changes:
 | **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | ✅ DONE (2026-03-09) |
 | **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | ✅ DONE (2026-03-09) |
 | **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight | pending |
-| **P2.5** | EVM-origin bridge signing | 2-3 sessions | HIGH — unlocks full cross-chain revenue | pending |
+| **P2.5** | EVM-origin bridge signing | 2-3 sessions | HIGH — unlocks full cross-chain revenue | ✅ DONE (2026-03-09) |
 | **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature | pending |
 | **P3** | Subscription payment flow | 2 sessions | LOW — monetization | pending |
 
@@ -407,6 +407,28 @@ Key changes:
 
 ---
 
+## P2.5 Implementation Log (2026-03-09)
+
+### What was done
+
+**EVM-Origin Bridge Signing (All Directions Live):**
+- **PrivyProvider chain config** in `webapp/src/main.tsx`: Added `supportedChains: [mainnet, polygon, bsc, arbitrum, base]` from `@privy-io/chains`. No `viem` dependency needed.
+- **Backend EVM tx format** in `src/api/routes/crossChain.ts`: `/api/cross-chain/execute` now returns `evmTransaction: { to, data, value, chainId, gasLimit }` for EVM-origin, `transactionData: base64` for Solana-origin. Solana-only guard removed.
+- **Frontend EVM signing** in `webapp/src/components/SwapPanel.tsx`: Added `useSendTransaction` from `@privy-io/react-auth`. `handleBridgeExecute()` routes to Solana or EVM signing based on `ccInputChain`. "Coming soon" guard removed. Button text and disabled conditions updated.
+- **Explorer links per chain** in SwapPanel: Bridge done state links to correct explorer (Etherscan, BscScan, etc.) based on input chain.
+- **Chain utilities** in `webapp/src/lib/chains.ts`: Added `EVM_CHAIN_IDS`, `EXPLORER_TX_URL` maps.
+- **API types** in `webapp/src/lib/api.ts`: Added `EvmTransactionData`, `CrossChainExecuteResult` interfaces.
+- **ERC-20 approvals**: LI.FI handles approvals in the quote response — no separate approval tx needed.
+
+### Files changed
+- `webapp/src/main.tsx` — Added `@privy-io/chains` import + `supportedChains` in PrivyProvider
+- `src/api/routes/crossChain.ts` — Removed Solana-only guard, dual response format (Solana/EVM)
+- `webapp/src/components/SwapPanel.tsx` — Added `useSendTransaction`, EVM signing flow, removed "coming soon"
+- `webapp/src/lib/api.ts` — Added EVM transaction types + updated `executeCrossChain` return type
+- `webapp/src/lib/chains.ts` — Added `EVM_CHAIN_IDS` + `EXPLORER_TX_URL`
+
+---
+
 ## Part 5: EVM-Origin Bridge Implementation Plan
 
 ### Overview
@@ -429,10 +451,10 @@ LI.FI integrator fees apply to **all bridge directions** — EVM-origin bridges 
 | Cross-chain confirm API | ✅ Done | `POST /api/cross-chain/confirm` records any-direction swaps |
 | Cross-chain status API | ✅ Done | `GET /api/cross-chain/status` polls LI.FI for any bridge |
 | Frontend EVM-origin guard | ✅ Done | Yellow banner + disabled button when `inputChain !== "solana"` |
-| **EVM signing hook** | ❌ Missing | Need `useSendTransaction` from `@privy-io/react-auth` |
-| **Backend EVM tx format** | ❌ Missing | `/api/cross-chain/execute` only returns Solana base64 |
-| **PrivyProvider chain config** | ❌ Missing | Need `supportedChains` + `defaultChain` from viem/chains |
-| **ERC-20 token approval** | ❌ Missing | Need approval tx before bridge for non-native tokens |
+| **EVM signing hook** | ✅ Done | `useSendTransaction` from `@privy-io/react-auth` wired in SwapPanel |
+| **Backend EVM tx format** | ✅ Done | Returns `evmTransaction` object for EVM-origin, `transactionData` for Solana |
+| **PrivyProvider chain config** | ✅ Done | `supportedChains` from `@privy-io/chains` (no viem needed) |
+| **ERC-20 token approval** | ✅ Done | LI.FI handles approvals in the quote response |
 
 ### Implementation Steps
 
