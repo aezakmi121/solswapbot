@@ -3,6 +3,7 @@ import { analyzeToken } from "../../scanner/analyze";
 import { isValidPublicKey } from "../../utils/validation";
 import { prisma } from "../../db/client";
 import { findUserByTelegramId } from "../../db/queries/users";
+import { config } from "../../config";
 
 export const scanRouter = Router();
 
@@ -29,8 +30,11 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
         const telegramId = res.locals.telegramId as string;
         const user = await findUserByTelegramId(telegramId);
 
+        // Admin account bypasses all limits
+        const isAdmin = config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID;
+
         const FREE_SCANS_PER_DAY = 5;
-        if (user) {
+        if (user && !isAdmin) {
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
 
