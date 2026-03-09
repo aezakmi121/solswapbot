@@ -1,5 +1,8 @@
 import { withRetry } from "../utils/retry";
 import { config } from "../config";
+import { connection } from "../solana/connection";
+import { PublicKey } from "@solana/web3.js";
+import { getMint } from "@solana/spl-token";
 
 /** Token info from Jupiter Token API */
 export interface JupiterToken {
@@ -127,7 +130,23 @@ export async function searchTokens(query: string, limit = 20): Promise<JupiterTo
   // Exact mint address match
   if (q.length >= 32) {
     const exact = all.find((t) => t.address.toLowerCase() === q);
-    return exact ? [exact] : [];
+    if (exact) return [exact];
+
+    // On-chain fallback: resolve unverified token metadata from the mint account
+    try {
+      const mintPubkey = new PublicKey(query.trim());
+      const mintInfo = await getMint(connection, mintPubkey);
+      return [{
+        address: mintPubkey.toBase58(),
+        symbol: mintPubkey.toBase58().slice(0, 6),
+        name: "Unknown Token",
+        decimals: mintInfo.decimals,
+        logoURI: null,
+      }];
+    } catch {
+      // Not a valid mint address or RPC error
+      return [];
+    }
   }
 
   // Score-based search: exact symbol match first, then prefix, then includes
@@ -158,10 +177,19 @@ export async function getTokenByMint(mint: string): Promise<JupiterToken | null>
   return all.find((t) => t.address === mint) ?? null;
 }
 
-/** Look up decimals for a mint address. Falls back to 9 (SOL default). */
+/** Look up decimals for a mint address. Tries Jupiter cache first, then on-chain RPC. Falls back to 9. */
 export async function getTokenDecimals(mint: string): Promise<number> {
   const token = await getTokenByMint(mint);
-  return token?.decimals ?? 9;
+  if (token) return token.decimals;
+
+  // On-chain fallback for unverified tokens (critical for correct USD display)
+  try {
+    const mintInfo = await getMint(connection, new PublicKey(mint));
+    return mintInfo.decimals;
+  } catch (err) {
+    console.warn(`getTokenDecimals: on-chain lookup failed for ${mint}, defaulting to 9:`, (err as Error).message);
+    return 9;
+  }
 }
 
 /** Batch look up metadata for multiple mints. Returns a map of mint → token (undefined if not found). */
