@@ -522,10 +522,27 @@ export interface CrossChainQuoteResult {
     error: string | null;
 }
 
+export interface EvmTransactionData {
+    to: string;
+    data: string;
+    value: string;
+    chainId: number;
+    gasLimit?: string;
+    gasPrice?: string;
+}
+
+export interface CrossChainExecuteResult {
+    transactionData: string | null;       // base64 Solana tx (null for EVM-origin)
+    evmTransaction: EvmTransactionData | null;  // EVM tx object (null for Solana-origin)
+    lifiRouteId: string;
+    outputAmount: string;
+    outputAmountUsd: string;
+}
+
 /**
  * Execute a cross-chain bridge swap.
- * Calls LI.FI with the user's real wallet addresses and returns a base64
- * Solana transaction ready to be signed by Privy.
+ * For Solana-origin: returns transactionData (base64) + evmTransaction=null
+ * For EVM-origin: returns transactionData=null + evmTransaction object
  */
 export async function executeCrossChain(params: {
     inputToken: string;
@@ -536,7 +553,7 @@ export async function executeCrossChain(params: {
     slippageBps?: number;
     fromAddress: string;
     toAddress: string;
-}): Promise<{ transactionData: string; lifiRouteId: string; outputAmount: string; outputAmountUsd: string }> {
+}): Promise<CrossChainExecuteResult> {
     const res = await fetch(`${API_BASE}/api/cross-chain/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },

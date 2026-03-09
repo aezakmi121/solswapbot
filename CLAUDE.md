@@ -703,7 +703,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 **Tab 2 — Swap**
 - Same-chain Solana swaps via Jupiter
-- Cross-chain bridge swaps via LI.FI (chain selector + CcTokenModal) — **Solana-originated bridges fully live (v0.6.3)**
+- Cross-chain bridge swaps via LI.FI (chain selector + CcTokenModal) — **All directions live: Solana→EVM, EVM→Solana, EVM→EVM (v0.9.1)**
 - Slippage gear icon → **inline popup** (0.1% / 0.5% / 1.0% / Custom) — no Settings redirect
   - Popup closes on outside click; Custom input accepts 0.01–50%
   - SlippagePanel prop changed from `onOpenSettings` to `onSlippageChange` (v0.6.1)
@@ -837,10 +837,9 @@ All 7 CRITICAL security issues have been fixed. Summary:
    All users get all features for free. Not a bug, but premium features can't be sold yet.
    **Priority: LOW — intentional for soft launch. Implement when ready to gate features.**
 
-2. **EVM-origin bridges not yet live** — Frontend gated with "coming soon" banner. Backend
-   only returns Solana base64 transactions. Needs: Privy `useSendTransaction` hook, PrivyProvider
-   chain config (viem), backend EVM tx format, ERC-20 approval flow. See PLAN.md Part 5.
-   **Priority: P1.5 — unlocks full cross-chain revenue (LI.FI fees apply to all directions).**
+2. ~~**EVM-origin bridges not yet live**~~ **DONE (v0.9.1)** — Full EVM-origin bridge signing
+   implemented. Privy `useSendTransaction` for EVM, backend returns `evmTransaction` object,
+   PrivyProvider configured with 5 EVM chains via `@privy-io/chains`. Explorer links per chain.
 
 #### Recommended launch sequence:
 1. ~~Add uptime monitoring~~ **DONE**
@@ -1068,7 +1067,7 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~Cross-chain bridge execution~~ | ~~P1~~ **DONE** | Solana-originated bridges live. `POST /api/cross-chain/execute` + `POST /api/cross-chain/confirm` + `GET /api/cross-chain/status`. EVM-origin coming later. |
 | ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
 | ~~LIFI_API_KEY + integrator fee registration~~ | ~~P1~~ **DONE** | Configured on VPS. `solswap` integrator tag recognized by LI.FI. Validated via `npm run validate-keys`. |
-| EVM-origin bridge signing | P1.5 | Privy `useSendTransaction` + LI.FI EVM tx format. Requires: PrivyProvider chain config (viem), backend return full `transactionRequest` for EVM, ERC-20 approval flow (exact-amount only), remove "coming soon" guard. See PLAN.md Part 5. |
+| ~~EVM-origin bridge signing~~ | ~~P1.5~~ **DONE** | Privy `useSendTransaction` for EVM signing. Backend returns full `evmTransaction` object for EVM-origin. PrivyProvider configured with `@privy-io/chains`. "Coming soon" guard removed. Explorer links per chain. ERC-20 approval handled by LI.FI (v0.9.1). |
 | Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
 | TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
 | Whale alert bot notifications | P2 | Bot pushes alerts to user |
@@ -1089,6 +1088,19 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-09 — EVM-Origin Bridge Signing: Full Cross-Chain in All Directions (v0.9.1)
+- **EVM-origin bridges now live:** Users can bridge from any EVM chain (Ethereum, BSC, Polygon, Arbitrum, Base) to Solana or other EVM chains. Previously gated with "coming soon" banner.
+- **PrivyProvider chain config:** Added `supportedChains: [mainnet, polygon, bsc, arbitrum, base]` from `@privy-io/chains`. No `viem` dependency needed — Privy already bundles compatible chain objects.
+- **Backend EVM tx format:** `POST /api/cross-chain/execute` now returns `evmTransaction: { to, data, value, chainId, gasLimit }` for EVM-origin requests, and `transactionData: base64` for Solana-origin (unchanged). Solana-only guard removed.
+- **Frontend EVM signing:** `SwapPanel.tsx` uses `useSendTransaction` from `@privy-io/react-auth` for EVM bridges. Detects chain from input selection, routes to Solana or EVM signing automatically.
+- **Explorer links per chain:** Bridge done state now links to the correct block explorer (Etherscan, BscScan, PolygonScan, Arbiscan, BaseScan, Solscan) based on input chain.
+- **Chain ID mapping:** Added `EVM_CHAIN_IDS` and `EXPLORER_TX_URL` maps to `webapp/src/lib/chains.ts`.
+- **Frontend API types:** Added `EvmTransactionData` and `CrossChainExecuteResult` interfaces to `api.ts`.
+- **ERC-20 approvals:** Handled by LI.FI — the quote response includes approval data when needed. No separate approval transaction required.
+- **Revenue impact:** LI.FI integrator fees now apply to all bridge directions (Solana→EVM, EVM→Solana, EVM→EVM). Doubles available bridge routes.
+- **VPS redeployment required:** `npm run build` + `pm2 restart`. No Prisma/DB changes needed.
+- **Version bumped to v0.9.1.**
 
 ### 2026-03-09 — Referral System Complete: Backend + Dashboard + Bot Notifications (v0.9.0)
 - **New `GET /api/user/referrals` endpoint:** Returns paginated list of referred users with username, join date, swap count, and fees generated. Privacy-safe (no wallet addresses). Supports `offset`/`limit` query params.

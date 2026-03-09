@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import { useSendTransaction } from "@privy-io/react-auth";
 import {
     TokenInfo,
     TokenBalance,
@@ -15,7 +16,7 @@ import {
     confirmCrossChainSwap,
     getCrossChainBridgeStatus,
 } from "../lib/api";
-import { CC_CHAINS, CC_TOKENS, TOKEN_META, ChainId } from "../lib/chains";
+import { CC_CHAINS, CC_TOKENS, TOKEN_META, ChainId, EVM_CHAIN_IDS, EXPLORER_TX_URL } from "../lib/chains";
 import { TokenSelector } from "../TokenSelector";
 import { CcTokenModal } from "./CcTokenModal";
 import { toast } from "../lib/toast";
@@ -101,6 +102,7 @@ export function SwapPanel({
 }: SwapPanelProps) {
     const { wallets } = useWallets();
     const { signAndSendTransaction } = useSignAndSendTransaction();
+    const { sendTransaction: sendEvmTransaction } = useSendTransaction();
     const embeddedWallet = wallets.length > 0 ? wallets[0] : null;
 
     // Polling ref for swap confirmation
@@ -501,12 +503,35 @@ export function SwapPanel({
         }
     };
 
-    // Execute a cross-chain bridge swap via LI.FI
+    // Execute a cross-chain bridge swap via LI.FI (Solana-origin or EVM-origin)
     const handleBridgeExecute = async () => {
-        if (!walletAddress || !ccQuote || !embeddedWallet) return;
+        if (!ccQuote) return;
+        const isEvmOrigin = ccInputChain !== "solana";
+
+        // Solana-origin needs wallet + embedded wallet; EVM-origin needs evmWalletAddress
+        if (!isEvmOrigin && (!walletAddress || !embeddedWallet)) return;
+        if (isEvmOrigin && !evmWalletAddress) {
+            setBridgeError("No EVM wallet found. Please reconnect your wallet.");
+            return;
+        }
+
         tg?.HapticFeedback?.impactOccurred("medium");
 
-        const toAddr = ccOutputChain === "solana" ? walletAddress : bridgeToAddress.trim();
+        // Resolve source and destination addresses
+        const fromAddr = isEvmOrigin ? evmWalletAddress! : walletAddress;
+        let toAddr: string;
+        if (ccOutputChain === "solana") {
+            toAddr = walletAddress;
+        } else if (bridgeToAddress.trim()) {
+            toAddr = bridgeToAddress.trim();
+        } else if (evmWalletAddress) {
+            toAddr = evmWalletAddress;
+        } else {
+            setBridgeError("Enter a valid EVM wallet address (starts with 0x)");
+            return;
+        }
+
+        // Validate EVM destination address format
         if (ccOutputChain !== "solana" && !/^0x[a-fA-F0-9]{40}$/.test(toAddr)) {
             setBridgeError("Enter a valid EVM wallet address (starts with 0x)");
             return;
@@ -517,26 +542,45 @@ export function SwapPanel({
             setBridgeError("");
             setBridgeTxSig(null);
 
-            const { transactionData, outputAmount, outputAmountUsd } = await executeCrossChain({
+            const result = await executeCrossChain({
                 inputToken: ccInputSymbol,
                 outputToken: ccOutputSymbol,
                 inputChain: ccInputChain,
                 outputChain: ccOutputChain,
                 amount: ccAmount,
                 slippageBps,
-                fromAddress: walletAddress,
+                fromAddress: fromAddr,
                 toAddress: toAddr,
             });
 
             setBridgeStatus("signing");
-            const txBytes = Uint8Array.from(atob(transactionData), (c) => c.charCodeAt(0));
-            const { signature } = await signAndSendTransaction({
-                transaction: txBytes,
-                wallet: embeddedWallet,
-                chain: "solana:mainnet",
-            });
+            let sigStr: string;
 
-            const sigStr = uint8ToBase58(signature);
+            if (isEvmOrigin && result.evmTransaction) {
+                // EVM signing via Privy embedded EVM wallet
+                const evmTx = result.evmTransaction;
+                const { hash } = await sendEvmTransaction({
+                    to: evmTx.to,
+                    data: evmTx.data,
+                    value: evmTx.value,
+                    chainId: evmTx.chainId,
+                    ...(evmTx.gasLimit ? { gasLimit: evmTx.gasLimit } : {}),
+                    ...(evmTx.gasPrice ? { gasPrice: evmTx.gasPrice } : {}),
+                });
+                sigStr = hash;
+            } else if (result.transactionData) {
+                // Solana signing via Privy embedded Solana wallet
+                const txBytes = Uint8Array.from(atob(result.transactionData), (c) => c.charCodeAt(0));
+                const { signature } = await signAndSendTransaction({
+                    transaction: txBytes,
+                    wallet: embeddedWallet!,
+                    chain: "solana:mainnet",
+                });
+                sigStr = uint8ToBase58(signature);
+            } else {
+                throw new Error("No transaction data returned from bridge");
+            }
+
             setBridgeTxSig(sigStr);
             setBridgeStatus("bridging");
             tg?.HapticFeedback?.notificationOccurred("success");
@@ -551,7 +595,7 @@ export function SwapPanel({
                     inputChain: ccInputChain,
                     outputChain: ccOutputChain,
                     inputAmount: ccAmount,
-                    outputAmount: outputAmount,
+                    outputAmount: result.outputAmount,
                     feeAmountUsd: ccQuote?.feeUsd && Number(ccQuote.feeUsd) > 0 ? Number(ccQuote.feeUsd) : null,
                 });
             } catch { /* non-fatal */ }
@@ -898,13 +942,6 @@ export function SwapPanel({
                         </div>
                     )}
 
-                    {/* EVM-origin guard */}
-                    {ccInputChain !== "solana" && (
-                        <div className="cc-evm-origin-warning">
-                            Bridging from EVM chains is coming soon. Switch the <strong>You Pay</strong> side to a Solana token to bridge out.
-                        </div>
-                    )}
-
                     {ccError && <div className="cc-error">{ccError}</div>}
 
                     {/* Quote breakdown */}
@@ -944,8 +981,8 @@ export function SwapPanel({
                             className="swap-btn"
                             disabled={
                                 !ccQuote || ccLoading || !ccAmount ||
-                                ccInputChain !== "solana" ||
                                 (ccInputChain === ccOutputChain && ccInputChain !== "solana") ||
+                                (ccInputChain !== "solana" && !evmWalletAddress) ||
                                 bridgeStatus === "building" || bridgeStatus === "signing" || bridgeStatus === "bridging" ||
                                 (ccOutputChain !== "solana" && !/^0x[a-fA-F0-9]{40}$/.test(bridgeToAddress.trim()))
                             }
@@ -963,8 +1000,8 @@ export function SwapPanel({
                                                 ? "Getting quote…"
                                                 : !ccAmount || Number(ccAmount) <= 0
                                                     ? "Enter an amount to get a quote"
-                                                    : ccInputChain !== "solana"
-                                                        ? "EVM-origin bridges coming soon"
+                                                    : (ccInputChain !== "solana" && !evmWalletAddress)
+                                                        ? "No EVM wallet — reconnect"
                                                         : ccQuote
                                                             ? `Bridge ${ccAmount} ${ccInputSymbol} → ${ccOutputSymbol}`
                                                             : "Enter an amount to get a quote"}
@@ -977,11 +1014,11 @@ export function SwapPanel({
                             <p>Bridge transaction submitted. Funds will arrive at the destination chain shortly.</p>
                             <a
                                 className="tx-link"
-                                href={`https://solscan.io/tx/${bridgeTxSig}`}
+                                href={`${EXPLORER_TX_URL[ccInputChain] ?? "https://solscan.io/tx/"}${bridgeTxSig}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                View source tx on Solscan
+                                View source tx on {CC_CHAINS.find(c => c.id === ccInputChain)?.name ?? "explorer"}
                             </a>
                             <button
                                 className="reset-btn"

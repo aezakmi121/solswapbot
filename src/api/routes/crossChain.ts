@@ -106,14 +106,12 @@ crossChainRouter.get("/cross-chain/tokens", async (req: Request, res: Response) 
  * POST /api/cross-chain/execute
  *
  * Fetches a LI.FI quote with the user's real wallet address(es) so the
- * returned transactionRequest.data is signed for the correct wallet.
- * The frontend signs the base64 Solana transaction with Privy and then
- * calls POST /api/cross-chain/confirm to record the swap in the DB.
+ * returned transactionRequest is signed for the correct wallet.
  *
- * Only Solana-originated swaps are supported (inputChain must be "solana").
+ * For Solana-origin: returns { transactionData: base64, evmTransaction: null }
+ * For EVM-origin: returns { transactionData: null, evmTransaction: { to, data, value, chainId, gasLimit } }
  *
  * Body: { inputToken, outputToken, inputChain, outputChain, amount, slippageBps?, fromAddress, toAddress? }
- * Response: { transactionData: base64, lifiRouteId: string, outputAmount: string }
  */
 crossChainRouter.post("/cross-chain/execute", async (req: Request, res: Response) => {
     try {
@@ -124,11 +122,6 @@ crossChainRouter.post("/cross-chain/execute", async (req: Request, res: Response
 
         if (!inputToken || !outputToken || !inputChain || !outputChain || !amount || !fromAddress) {
             res.status(400).json({ error: "Missing required fields: inputToken, outputToken, inputChain, outputChain, amount, fromAddress" });
-            return;
-        }
-
-        if (inputChain !== "solana") {
-            res.status(400).json({ error: "Only Solana-originated cross-chain swaps are currently supported" });
             return;
         }
 
@@ -162,10 +155,10 @@ crossChainRouter.post("/cross-chain/execute", async (req: Request, res: Response
             parsedSlippage = bps / 10000;
         }
 
-        // Default toAddress: user's own wallet (for Solana output) or required for EVM
-        const resolvedToAddress = toAddress ?? (outputChain === "solana" ? fromAddress : undefined);
+        // Default toAddress: same wallet on destination chain (if same chain type), or required
+        const resolvedToAddress = toAddress ?? fromAddress;
         if (!resolvedToAddress) {
-            res.status(400).json({ error: "toAddress is required for EVM destination chains" });
+            res.status(400).json({ error: "toAddress is required" });
             return;
         }
 
@@ -187,17 +180,47 @@ crossChainRouter.post("/cross-chain/execute", async (req: Request, res: Response
             return;
         }
 
-        if (!result.transactionRequest || !(result.transactionRequest as any).data) {
+        if (!result.transactionRequest) {
             res.status(502).json({ error: "LI.FI did not return a signable transaction. Try a different amount or token pair." });
             return;
         }
 
-        res.json({
-            transactionData: (result.transactionRequest as any).data as string,
-            lifiRouteId: result.id,
-            outputAmount: result.toAmount,
-            outputAmountUsd: result.toAmountUsd,
-        });
+        const txReq = result.transactionRequest as any;
+
+        if (inputChain === "solana") {
+            // Solana: LI.FI returns { data: "base64..." }
+            if (!txReq.data) {
+                res.status(502).json({ error: "LI.FI did not return a signable transaction. Try a different amount or token pair." });
+                return;
+            }
+            res.json({
+                transactionData: txReq.data as string,
+                evmTransaction: null,
+                lifiRouteId: result.id,
+                outputAmount: result.toAmount,
+                outputAmountUsd: result.toAmountUsd,
+            });
+        } else {
+            // EVM: LI.FI returns { to, data, value, chainId, gasLimit, ... }
+            if (!txReq.to || !txReq.data) {
+                res.status(502).json({ error: "LI.FI did not return a valid EVM transaction. Try a different amount or token pair." });
+                return;
+            }
+            res.json({
+                transactionData: null,
+                evmTransaction: {
+                    to: txReq.to,
+                    data: txReq.data,
+                    value: txReq.value ?? "0x0",
+                    chainId: txReq.chainId ?? parseInt(inputChainInfo.lifiChainId, 10),
+                    gasLimit: txReq.gasLimit ?? txReq.gas ?? undefined,
+                    gasPrice: txReq.gasPrice ?? undefined,
+                },
+                lifiRouteId: result.id,
+                outputAmount: result.toAmount,
+                outputAmountUsd: result.toAmountUsd,
+            });
+        }
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error("Cross-chain execute error:", message);
