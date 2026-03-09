@@ -26,14 +26,15 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
             return;
         }
 
-        // ── Scanner daily limit (5 free scans/day) ──────────────────────
+        // ── Scanner daily limit ────────────────────────────────────────
         const telegramId = res.locals.telegramId as string;
         const user = await findUserByTelegramId(telegramId);
 
         // Admin account bypasses all limits
-        const isAdmin = config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID;
+        const isAdmin = !!(config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID);
+        console.log(`[scan] telegramId=${telegramId}, ADMIN_TELEGRAM_ID=${config.ADMIN_TELEGRAM_ID ?? "(not set)"}, isAdmin=${isAdmin}`);
 
-        const FREE_SCANS_PER_DAY = 5;
+        const FREE_SCANS_PER_DAY = 10;
         if (user && !isAdmin) {
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
@@ -47,7 +48,7 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
                 const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
                 if (!sub || sub.tier === "FREE") {
                     res.status(429).json({
-                        error: "Daily scan limit reached (5 free scans/day)",
+                        error: "Daily scan limit reached (10 free scans/day)",
                         todayScans,
                         limit: FREE_SCANS_PER_DAY,
                         upgradeHint: "Upgrade to Scanner Pro for unlimited scans",
