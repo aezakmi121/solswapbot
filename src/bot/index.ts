@@ -2,7 +2,7 @@ import { Bot } from "grammy";
 import { config } from "../config";
 import { loggerMiddleware } from "./middleware/logger";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
-import { startCommand } from "./commands/start";
+import { startCommand, setBotInstance } from "./commands/start";
 
 /**
  * Creates and configures the Grammy bot instance.
@@ -14,6 +14,9 @@ import { startCommand } from "./commands/start";
  */
 export function createBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+
+  // Store bot instance so startCommand can send referral notifications
+  setBotInstance(bot);
 
   // Global middleware — order matters
   bot.use(loggerMiddleware);

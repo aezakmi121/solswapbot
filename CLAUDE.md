@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-08 | Version: 0.8.0
+> Updated: 2026-03-09 | Version: 0.9.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -93,7 +93,7 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  GET  /api/cross-chain/tokens GET  /api/history                       │
 │  GET  /api/activity           POST /api/send                          │
 │  POST /api/transfer/confirm   GET  /api/transactions                  │
-│  DELETE /api/user                                                     │
+│  GET  /api/user/referrals    DELETE /api/user                         │
 ├───────────────────────────────────────────────────────────────────────┤
 │ SQLite via Prisma ORM  (6 models, see Database Schema)                │
 └───────────────────────────────────────────────────────────────────────┘
@@ -267,7 +267,8 @@ solswapbot/
 │       │   ├── RiskGauge.tsx         # Animated SVG semicircle speedometer gauge for risk score 0-100
 │       │   ├── CcTokenModal.tsx      # Cross-chain token selector: chain picker + token picker (uses chains.ts)
 │       │   ├── Toast.tsx             # Floating toast notifications (CustomEvent "solswap:toast")
-│       │   └── TermsModal.tsx        # First-launch ToS gate (scroll-to-bottom to accept), re-viewable in Settings
+│       │   ├── TermsModal.tsx        # First-launch ToS gate (scroll-to-bottom to accept), re-viewable in Settings
+│       │   └── ReferralModal.tsx     # Referral dashboard modal: stats, share, referred users list with pagination
 │       │
 │       ├── lib/
 │       │   ├── api.ts                # All fetch functions + TypeScript interfaces for every API response
@@ -464,6 +465,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | POST | `/api/user/evm-wallet` | `{ evmWalletAddress }` | `{ success: true }` — stores Privy EVM address |
 | GET | `/api/user/balances?walletAddress=` | — | `{ balances: [{ mint, amount, decimals }] }` |
 | GET | `/api/user/portfolio` | — | `{ totalValueUsd, tokens: [PortfolioToken], walletAddress }` |
+| GET | `/api/user/referrals?offset=&limit=` | — | `{ referrals: [ReferralItem], total, hasMore }` — paginated referred users list |
 | GET | `/api/quote?inputMint=&outputMint=&humanAmount=&slippageBps=` | — | `{ quote, display: QuoteDisplay }` |
 | POST | `/api/swap` | `{ quoteResponse, userPublicKey }` | `{ swapTransaction: base64, lastValidBlockHeight }` |
 | POST | `/api/swap/confirm` | `{ txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }` | `{ swapId, status: "SUBMITTED" }` |
@@ -683,6 +685,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ### Bot
 - `/start` — upserts user in DB (using `upsert` to prevent race conditions), sends Mini App button
+- `/start ref_<CODE>` — referral handling: links referred user, notifies referrer via bot message (v0.9.0)
 - `/help` — basic usage instructions
 - Catch-all: redirects all other messages to the Mini App
 - Rate limiting per user per command
@@ -727,8 +730,9 @@ All 7 CRITICAL security issues have been fixed. Summary:
 **Tab 4 — Settings**
 - Full wallet address + copy button + QR code (opens ReceiveModal)
 - Slippage tolerance: 0.1% / 0.5% / 1.0% / Custom chips (localStorage `solswap_slippage_bps`)
-- Referral code display + copy share link (`t.me/<bot>?start=ref_<CODE>`)
-- Referral count from `/api/user`
+- Referral dashboard card: earnings + count stats, code display + copy, "Invite Friends" share button
+- "View Details" button opens ReferralModal: full stats, how-it-works, paginated referred users list
+- Bot notification: referrer gets a Telegram message when someone joins via their link (v0.9.0)
 - About section: version, fee disclosure, non-custodial disclaimer
 - "View Terms of Use" re-opens TermsModal
 - Log Out button (Privy logout)
@@ -1071,12 +1075,30 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 |------|----------|
 | Gemini AI signal analyzer | P3 |
 | SignalsPanel component | P3 |
-| Referral earnings analytics (fees.ts, referrals.ts stubs) | P3 |
+| ~~Referral earnings analytics~~ | ~~P3~~ **DONE** — v0.9.0: referral modal, paginated list, bot notifications |
 | Exchange affiliate links | P3 |
+| Referral payout mechanism (claim earnings to wallet) | P3 |
+| Tiered referral rewards (5→25→50 referrals = higher %) | P3 |
 
 ---
 
 ## Changelog
+
+### 2026-03-09 — Referral System Complete: Backend + Dashboard + Bot Notifications (v0.9.0)
+- **New `GET /api/user/referrals` endpoint:** Returns paginated list of referred users with username, join date, swap count, and fees generated. Privacy-safe (no wallet addresses). Supports `offset`/`limit` query params.
+- **New `getReferralList()` query:** `src/db/queries/referrals.ts` — fetches referred users with aggregated swap fee data, paginated.
+- **Bot referral notification:** When a new user joins via `/start ref_<CODE>`, the referrer receives a Telegram bot message: "X just joined SolSwap using your referral link! You now earn 25% of their swap fees." Best-effort (non-blocking, never fails /start).
+- **New `ReferralModal` component:** Full-screen bottom sheet modal accessible from Settings "View Details":
+  - Stats row: earnings (green gradient), referral count, 25% fee share
+  - "Invite Friends" (Telegram share) + "Copy Link" buttons
+  - How-it-works 3-step explainer
+  - Paginated referred users list: username, join date, swap count, earned amount per referral
+  - "Load More" pagination button
+- **Settings referral section updated:** Replaced inline how-it-works with compact card + "Invite Friends" and "View Details" buttons. "View Details" opens the new ReferralModal.
+- **Frontend API:** Added `fetchReferrals()` + `ReferralItem`/`ReferralsResponse` types in `webapp/src/lib/api.ts`.
+- **CSS:** Added `ref-modal-*` styles (~250 lines) for the referral modal.
+- **Version bumped to v0.9.0.**
+- **VPS redeployment required:** `npm run build` + `pm2 restart`. No Prisma/DB changes needed.
 
 ### 2026-03-08 — Token Names in History + Modal Fix (v0.7.7)
 - **Token names now stored in Swap DB:** Added `inputSymbol` and `outputSymbol` nullable fields to Swap model.

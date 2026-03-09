@@ -419,6 +419,39 @@ export async function fetchScanHistory(): Promise<ScanHistoryItem[]> {
     return data.scans;
 }
 
+// ─── Referrals ────────────────────────────────────────────────────────────────
+
+export interface ReferralItem {
+    telegramUsername: string | null;
+    joinedAt: string;
+    swapCount: number;
+    feesGeneratedUsd: number;
+}
+
+export interface ReferralsResponse {
+    referrals: ReferralItem[];
+    total: number;
+    hasMore: boolean;
+}
+
+/** Fetch paginated list of users referred by the authenticated user */
+export async function fetchReferrals(params?: {
+    offset?: number;
+    limit?: number;
+}): Promise<ReferralsResponse> {
+    const q = new URLSearchParams();
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    const res = await fetch(`${API_BASE}/api/user/referrals?${q}`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to fetch referrals");
+    }
+    return res.json();
+}
+
 // ─── Transactions (unified history) ────────────────────────────────────────────
 
 export interface UnifiedTransaction {

@@ -3,6 +3,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { fetchUser, UserData } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { TermsModal } from "./TermsModal";
+import { ReferralModal } from "./ReferralModal";
 import { toast } from "../lib/toast";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
@@ -30,6 +31,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
     const [showCustom, setShowCustom] = useState(false);
     const [showQr, setShowQr] = useState(false);
     const [showTerms, setShowTerms] = useState(false);
+    const [showReferralModal, setShowReferralModal] = useState(false);
 
     useEffect(() => {
         fetchUser().then(setUserData).catch(() => {});
@@ -191,9 +193,8 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                 <div className="settings-section">
                     <div className="settings-section-title">Referral Program</div>
                     <div className="referral-dashboard">
-                        {/* Stats hero */}
+                        {/* Stats row */}
                         <div className="referral-hero">
-                            <div className="referral-hero-title">Your Earnings</div>
                             <div className="referral-stats">
                                 <div className="referral-stat">
                                     <span className="referral-stat-value referral-stat-value--earnings">
@@ -218,29 +219,15 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                             </button>
                         </div>
 
-                        {/* How it works */}
-                        <div className="referral-how">
-                            <div className="referral-how-title">How It Works</div>
-                            <div className="referral-steps">
-                                <div className="referral-step">
-                                    <span className="referral-step-num">1</span>
-                                    <span>Share your referral link with friends</span>
-                                </div>
-                                <div className="referral-step">
-                                    <span className="referral-step-num">2</span>
-                                    <span>They join SolSwap and start swapping</span>
-                                </div>
-                                <div className="referral-step">
-                                    <span className="referral-step-num">3</span>
-                                    <span>You earn 25% of their swap fees</span>
-                                </div>
-                            </div>
+                        {/* Action buttons */}
+                        <div className="referral-actions">
+                            <button className="referral-share-btn" onClick={handleShareRef}>
+                                {refCopied ? "✓ Link Copied!" : "Invite Friends"}
+                            </button>
+                            <button className="referral-details-btn" onClick={() => setShowReferralModal(true)}>
+                                View Details
+                            </button>
                         </div>
-
-                        {/* Share CTA */}
-                        <button className="referral-share-btn" onClick={handleShareRef}>
-                            {refCopied ? "✓ Link Copied!" : "📤 Invite Friends"}
-                        </button>
                     </div>
                 </div>
             )}
@@ -249,7 +236,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             <div className="settings-section">
                 <div className="settings-section-title">About</div>
                 <div className="settings-card settings-about">
-                    <p className="settings-about-name">SolSwap v0.8.0</p>
+                    <p className="settings-about-name">SolSwap v0.9.0</p>
                     <p className="settings-about-sub">Non-custodial · Privy MPC wallet</p>
                     <p className="settings-about-sub">Platform fee: 0.5% per swap</p>
                     <p className="settings-about-sub">Powered by Jupiter &amp; LI.FI</p>
@@ -277,6 +264,16 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             {/* Terms of Use modal (re-readable from Settings) */}
             {showTerms && (
                 <TermsModal onAccept={() => setShowTerms(false)} />
+            )}
+
+            {/* Referral detail modal */}
+            {showReferralModal && userData?.referralCode && (
+                <ReferralModal
+                    referralCode={userData.referralCode}
+                    referralCount={userData.referralCount ?? 0}
+                    referralEarningsUsd={userData.referralEarningsUsd ?? 0}
+                    onClose={() => setShowReferralModal(false)}
+                />
             )}
         </div>
     );

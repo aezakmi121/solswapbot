@@ -1,7 +1,11 @@
-import { CommandContext, Context } from "grammy";
+import { CommandContext, Context, Bot } from "grammy";
 import { findUserByReferralCode, upsertUser } from "../../db/queries/users";
 import { sanitizeInput } from "../../utils/validation";
 import { config } from "../../config";
+
+/** Bot instance reference — set by createBot() so we can send referral notifications */
+let botInstance: Bot | null = null;
+export function setBotInstance(bot: Bot) { botInstance = bot; }
 
 const miniAppUrl = () => config.MINIAPP_URL ?? "https://solswap.vercel.app";
 
@@ -24,6 +28,7 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
     // Parse referral code from /start ref_<CODE>
     const payload = sanitizeInput(ctx.match?.toString() ?? "");
     let referredById: string | undefined;
+    let referrerTelegramId: string | undefined;
 
     if (payload.startsWith("ref_")) {
       const referralCode = payload.slice(4);
@@ -31,6 +36,7 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
         const referrer = await findUserByReferralCode(referralCode);
         if (referrer && referrer.telegramId !== telegramId) {
           referredById = referrer.id;
+          referrerTelegramId = referrer.telegramId;
         }
       }
     }
@@ -41,6 +47,16 @@ export async function startCommand(ctx: CommandContext<Context>): Promise<void> 
       telegramUsername,
       referredById,
     });
+
+    // Notify referrer when a new user joins via their link
+    if (isNew && referrerTelegramId && botInstance) {
+      const newUsername = telegramUsername ? `@${telegramUsername}` : "Someone";
+      botInstance.api.sendMessage(
+        referrerTelegramId,
+        `🎉 *${newUsername}* just joined SolSwap using your referral link\\!\n\nYou now earn 25% of their swap fees\\.`,
+        { parse_mode: "MarkdownV2" }
+      ).catch(() => {}); // Non-blocking — don't fail /start if notification fails
+    }
 
     if (!isNew) {
       await ctx.reply(
