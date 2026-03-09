@@ -290,16 +290,22 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
             {/* ── Action Buttons ── */}
             <div className="wallet-actions">
                 <button className="wallet-action-btn" onClick={() => setShowReceive(true)}>
-                    <span className="wallet-action-icon">📥</span>
-                    <span>Receive</span>
+                    <span className="wallet-action-circle">
+                        <span className="wallet-action-icon">📥</span>
+                    </span>
+                    <span className="wallet-action-label">Receive</span>
                 </button>
                 <button className="wallet-action-btn" onClick={() => setShowSend(true)}>
-                    <span className="wallet-action-icon">📤</span>
-                    <span>Send</span>
+                    <span className="wallet-action-circle">
+                        <span className="wallet-action-icon">📤</span>
+                    </span>
+                    <span className="wallet-action-label">Send</span>
                 </button>
                 <button className="wallet-action-btn" onClick={onNavigateToSwap}>
-                    <span className="wallet-action-icon">🔄</span>
-                    <span>Swap</span>
+                    <span className="wallet-action-circle">
+                        <span className="wallet-action-icon">🔄</span>
+                    </span>
+                    <span className="wallet-action-label">Swap</span>
                 </button>
             </div>
 

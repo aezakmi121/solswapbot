@@ -4400,3 +4400,426 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   P0 UI OVERHAUL — Native-First Redesign (2026-03-09)
+   Overrides specific classes for a premium mobile-native feel.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Enhanced design tokens ── */
+:root {
+  --gradient-primary: linear-gradient(135deg, #7c5cfc 0%, #00d4ff 100%);
+  --gradient-accent:  linear-gradient(135deg, #7c5cfc 0%, #6c4cec 100%);
+  --glow-accent:   0 0 20px rgba(124, 92, 252, 0.45);
+  --glow-success:  0 0 12px rgba(74, 222, 128, 0.35);
+  --shadow-card:   0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  --bg-glass:      rgba(22, 23, 40, 0.88);
+  --border-glass:  rgba(255, 255, 255, 0.07);
+  --border-accent: rgba(124, 92, 252, 0.28);
+  --radius-xl:     24px;
+  --radius-full:   9999px;
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth:   cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Body — deep space background ── */
+body {
+  background:
+    radial-gradient(ellipse 100% 55% at 50% -15%, rgba(124, 92, 252, 0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 85%,   rgba(0, 212, 255, 0.06) 0%, transparent 50%),
+    #0e0f1d;
+}
+
+/* ── App wrapper ── */
+.app {
+  background: transparent;
+}
+
+/* ── Header — ultra-minimal ── */
+.header {
+  padding: 10px 16px 6px;
+  border-bottom: none;
+}
+
+.logo {
+  font-size: 1.05rem;
+  letter-spacing: -0.2px;
+}
+
+.wallet-badge {
+  background: rgba(36, 37, 60, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-glass);
+  padding: 5px 10px;
+  font-size: 0.73rem;
+  gap: 5px;
+}
+
+/* ── Glassmorphism Tab Bar ── */
+.tab-bar {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border-top: 1px solid var(--border-glass) !important;
+}
+
+.tab-item {
+  padding: 11px 4px 9px;
+  min-height: 58px;
+  gap: 4px;
+  transition: color 0.15s, transform 0.1s;
+}
+
+.tab-item:active {
+  transform: scale(0.9);
+}
+
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 0;            /* hide emoji fallback when SVG renders */
+  line-height: 0;
+}
+
+/* Active tab — glow dot below icon (replaces top line) */
+.tab-item--active {
+  color: var(--accent);
+  background: none !important;
+}
+
+.tab-item--active::before {
+  top: auto !important;
+  bottom: 7px;
+  width: 4px !important;
+  height: 4px !important;
+  border-radius: 50% !important;
+  background: var(--accent) !important;
+  box-shadow: 0 0 8px 2px rgba(124, 92, 252, 0.65);
+}
+
+.tab-item--active .tab-label {
+  color: var(--accent);
+}
+
+.tab-item--active .tab-icon svg {
+  filter: drop-shadow(0 0 4px rgba(124, 92, 252, 0.7));
+}
+
+/* ── Portfolio Hero ── */
+.portfolio-header {
+  padding: 24px 0 20px;
+}
+
+.portfolio-total {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, #ffffff 10%, #c4b5fd 55%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+  line-height: 1.1;
+}
+
+.portfolio-address {
+  font-size: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  letter-spacing: 0.4px;
+}
+
+/* ── Circular Action Buttons ── */
+.wallet-actions {
+  justify-content: center;
+  gap: 28px;
+  margin: 8px 0 28px;
+}
+
+.wallet-action-btn {
+  flex: initial;
+  width: auto;
+  min-height: unset;
+  padding: 0;
+  background: transparent;
+  border: none;
+  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wallet-action-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(124, 92, 252, 0.1);
+  border: 1px solid rgba(124, 92, 252, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease-smooth);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.wallet-action-btn:hover .wallet-action-circle {
+  background: rgba(124, 92, 252, 0.2);
+  border-color: rgba(124, 92, 252, 0.5);
+  box-shadow: 0 4px 24px rgba(124, 92, 252, 0.3);
+  transform: translateY(-2px);
+}
+
+.wallet-action-btn:active .wallet-action-circle {
+  transform: scale(0.93);
+  transition-duration: 0.08s;
+}
+
+.wallet-action-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.wallet-action-label {
+  font-size: 0.71rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+/* ── Portfolio Section — glass cards ── */
+.portfolio-section {
+  background: rgba(28, 29, 50, 0.7);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.portfolio-token-row {
+  padding: 13px 16px;
+  transition: background 0.12s;
+}
+
+.portfolio-token-row:hover {
+  background: rgba(124, 92, 252, 0.05);
+}
+
+.portfolio-token-symbol {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.portfolio-token-usd {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+/* Chain badge pill */
+.portfolio-chain-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  margin-left: 4px;
+  vertical-align: middle;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  padding: 1px 3px;
+  border: 1px solid var(--border);
+}
+
+/* ── Swap Card — elevated glass ── */
+.swap-card {
+  background: rgba(28, 29, 52, 0.92);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-elevated);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  gap: 6px;
+}
+
+/* Token sections — distinct elevated cards */
+.token-section {
+  background: rgba(20, 21, 40, 0.9);
+  border-radius: var(--radius) !important;
+  border: 1px solid var(--border) !important;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.token-section:focus-within {
+  border-color: rgba(124, 92, 252, 0.45) !important;
+  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.1), var(--shadow-card);
+}
+
+/* ── Flip Button — accent ring ── */
+.flip-btn {
+  width: 44px;
+  height: 44px;
+  background: rgba(124, 92, 252, 0.1);
+  border: 1.5px solid rgba(124, 92, 252, 0.28) !important;
+  border-radius: var(--radius-full) !important;
+  color: var(--accent);
+  font-size: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: all 0.22s var(--ease-spring);
+  margin: -10px 0;
+}
+
+.flip-btn:hover {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: white !important;
+  box-shadow: var(--glow-accent) !important;
+  transform: rotate(180deg) scale(1.1) !important;
+}
+
+.flip-btn:active {
+  transform: rotate(180deg) scale(0.95) !important;
+}
+
+/* ── CTA Swap Button — shimmer ── */
+@keyframes cta-shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+.swap-btn {
+  background: linear-gradient(
+    110deg,
+    #6c4cec 0%,
+    #7c5cfc 30%,
+    #9d7dff 50%,
+    #7c5cfc 70%,
+    #6c4cec 100%
+  );
+  background-size: 200% auto;
+  border-radius: var(--radius);
+  padding: 17px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 24px rgba(124, 92, 252, 0.4);
+  transition: box-shadow 0.3s, transform 0.15s;
+}
+
+.swap-btn:hover:not(:disabled) {
+  animation: cta-shimmer 1.6s linear infinite;
+  box-shadow: 0 6px 32px rgba(124, 92, 252, 0.58);
+  transform: translateY(-1px);
+}
+
+.swap-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 14px rgba(124, 92, 252, 0.3);
+  animation: none;
+}
+
+.swap-btn:disabled {
+  background: rgba(36, 37, 64, 0.85) !important;
+  box-shadow: none;
+  animation: none;
+  opacity: 0.4;
+}
+
+/* ── Token Button — accent tinted ── */
+.token-btn {
+  background: rgba(124, 92, 252, 0.08);
+  border: 1px solid rgba(124, 92, 252, 0.18);
+  transition: all 0.15s;
+  padding: 7px 12px;
+}
+
+.token-btn:hover {
+  background: rgba(124, 92, 252, 0.15);
+  border-color: rgba(124, 92, 252, 0.38);
+}
+
+/* ── Skeleton — refined shimmer ── */
+@keyframes skeleton-sweep {
+  0%   { background-position: -300px 0; }
+  100% { background-position: calc(300px + 100%) 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(36, 37, 62, 0.9) 25%,
+    rgba(52, 53, 82, 0.9) 50%,
+    rgba(36, 37, 62, 0.9) 75%
+  );
+  background-size: 300px 100%;
+  animation: skeleton-sweep 1.6s ease infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Quote Breakdown — glass ── */
+.breakdown {
+  background: rgba(20, 21, 40, 0.85);
+  border: 1px solid var(--border-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Error message ── */
+.error-msg {
+  background: rgba(248, 113, 113, 0.07);
+  border: 1px solid rgba(248, 113, 113, 0.16);
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.05);
+}
+
+/* ── Section header ── */
+.portfolio-section-header h3 {
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+}
+
+/* ── Activity rows ── */
+.activity-row {
+  transition: background 0.12s;
+}
+
+.activity-row:hover {
+  background: rgba(124, 92, 252, 0.04);
+}
+
+/* ── Pull-to-refresh indicator ── */
+.ptr-indicator {
+  background: rgba(36, 37, 64, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-full);
+  padding: 6px 18px;
+  margin: 4px auto 8px;
+  width: fit-content;
+  border: 1px solid var(--border-glass);
+}
+
+/* ── Hide scrollbar (keeps scroll behavior) ── */
+.tab-content {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tab-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Button press micro-animation ── */
+button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-btn) {
+  opacity: 0.82;
+  transform: scale(0.98);
+}
+
+/* ── Reset btn ── */
+.reset-btn {
+  border-color: var(--border-glass);
+}
+
+.reset-btn:hover {
+  background: rgba(124, 92, 252, 0.06);
+  border-color: rgba(124, 92, 252, 0.3);
+}

@@ -203,14 +203,10 @@ export function App() {
                     className="wallet-badge"
                     onClick={() => setActiveTab("wallet")}
                     style={{ cursor: "pointer" }}
+                    title="Go to Wallet"
                 >
                     <span className="wallet-dot" />
-                    {shortAddr(walletAddress)}
-                    {solBalance !== null && (
-                        <span className="wallet-bal">
-                            {solBalance < 0.001 ? "<0.001" : solBalance.toFixed(3)} SOL
-                        </span>
-                    )}
+                    <span>{shortAddr(walletAddress)}</span>
                 </div>
             </header>
 

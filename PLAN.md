@@ -305,13 +305,39 @@ Key changes:
 
 ## Part 4: Priority Recommendation
 
-| Priority | Task | Effort | Impact |
-|----------|------|--------|--------|
-| **P0** | UI/UX Sprint 1 (foundation + wallet) | 2-3 sessions | HIGH — first impression |
-| **P0** | UI/UX Sprint 2 (swap redesign) | 2-3 sessions | HIGH — core revenue flow |
-| **P1** | Referral dashboard (Phase A) | 1 session | MEDIUM — growth driver |
-| **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish |
-| **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement |
-| **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight |
-| **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature |
-| **P3** | Subscription payment flow | 2 sessions | LOW — monetization |
+| Priority | Task | Effort | Impact | Status |
+|----------|------|--------|--------|--------|
+| **P0** | UI/UX Sprint 1 (foundation + wallet) | 2-3 sessions | HIGH — first impression | ✅ DONE (2026-03-09) |
+| **P0** | UI/UX Sprint 2 (swap redesign) | 2-3 sessions | HIGH — core revenue flow | ✅ DONE (2026-03-09) |
+| **P1** | Referral dashboard (Phase A) | 1 session | MEDIUM — growth driver | pending |
+| **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | pending |
+| **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | pending |
+| **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight | pending |
+| **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature | pending |
+| **P3** | Subscription payment flow | 2 sessions | LOW — monetization | pending |
+
+---
+
+## P0 Implementation Log (2026-03-09)
+
+### What was done
+- **Design tokens**: Added `--gradient-primary`, `--glow-accent`, `--shadow-card`, `--shadow-elevated`, `--bg-glass`, `--border-glass`, `--radius-xl`, `--radius-full`, `--ease-spring`, `--ease-smooth`
+- **Body background**: Deep space radial gradient (purple at top, cyan at bottom-right)
+- **TabBar**: Full rewrite with SVG stroke icons (Wallet, Swap, Scan, History, Settings, Admin). Active tab: accent color + glow dot indicator at bottom. Glassmorphism background (`backdrop-filter: blur(24px) saturate(200%)`). Press scale animation.
+- **Wallet hero**: Portfolio value is now large gradient text (white→purple→indigo). Address in monospace below.
+- **Action buttons**: Circular frosted-glass buttons with glow on hover + translateY lift. Label below circle.
+- **Token rows**: Glass card section with accent hover tint. Bolder symbols, colored USD values.
+- **Swap card**: Elevated glass card (`backdrop-filter: blur(16px)`).
+- **Token sections**: Distinct elevated cards with rounded corners and accent focus ring.
+- **Flip button**: Accent-ringed circle, spring rotation on hover (180deg + 1.1x scale), glow on hover.
+- **CTA button**: Gradient shimmer animation on hover. Better disabled state.
+- **Token button**: Accent-tinted background.
+- **Skeleton**: Refined sweep animation.
+- **Scrollbar**: Hidden (scrollbar-width: none) for native feel.
+- **App header**: Simplified wallet badge (just address, no SOL balance).
+
+### Files changed
+- `webapp/src/styles/index.css` — ~200 lines appended (P0 overhaul section)
+- `webapp/src/components/TabBar.tsx` — full rewrite with SVG icons
+- `webapp/src/components/WalletTab.tsx` — action buttons wrapped in `.wallet-action-circle`
+- `webapp/src/App.tsx` — simplified header wallet badge
