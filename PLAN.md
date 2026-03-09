@@ -47,14 +47,15 @@
 - ✅ `getReferralCount()` — counts referred users
 - ✅ Settings panel shows: referral code, copy link, user count, earnings USD
 - ✅ Admin dashboard shows top referrers with earnings
+- ✅ `GET /api/user/referrals` — paginated referred users list (v0.9.0)
+- ✅ `ReferralModal` — full dashboard with stats, how-it-works, user list (v0.9.0)
+- ✅ Bot notification — referrer gets Telegram message when someone joins (v0.9.0)
+- ✅ "Invite Friends" share CTA with Telegram/Web Share/clipboard fallback (v0.9.0)
 
-**What's missing for a real referral program:**
+**What's missing (Phase C — future):**
 1. **No referral payout mechanism** — earnings are calculated but never paid out
-2. **No referral dashboard** — just a single line in Settings showing earnings
-3. **No share incentives** — no "Invite friends" CTA, no gamification
-4. **No referral tier system** — flat 25% for everyone
-5. **No notification when someone uses your referral** — silent
-6. **No referral activity feed** — can't see who joined or when
+2. **No referral tier system** — flat 25% for everyone
+3. **No referral leaderboard** — top 10 referrers
 
 ---
 
@@ -75,20 +76,20 @@ Add a dedicated referral section/modal accessible from Settings:
    - How it works: 3-step explainer (Share → Friend joins → You earn 25%)
    - Share buttons: Copy link, Telegram share, QR code
 
-### Phase B — Backend Enhancements
+### Phase B — Backend Enhancements ✅ DONE (v0.9.0)
 
-3. **New `GET /api/user/referrals`** endpoint:
+3. **New `GET /api/user/referrals`** endpoint: ✅
    - Returns list of referred users (telegramUsername, joinDate, swapCount, feesGenerated)
    - Paginated (offset/limit)
    - Privacy: only show username, not wallet address
 
-4. **Referral activity in Wallet tab**:
-   - "New referral joined!" items in activity feed
-   - Referral earnings shown as activity items
+4. **ReferralModal with referred users list**: ✅ (replaced "activity in Wallet tab" — modal is better UX)
+   - Full stats display, how-it-works explainer, paginated user list
+   - Accessible from Settings → "View Details" button
 
-5. **Referral notification** (Grammy bot):
+5. **Referral notification** (Grammy bot): ✅
    - Push notification when someone uses your referral code
-   - Weekly earnings summary (optional)
+   - Weekly earnings summary (deferred — low priority)
 
 ### Phase C — Future (Post-Launch)
 
@@ -311,7 +312,7 @@ Key changes:
 | **P0** | UI/UX Sprint 2 (swap redesign) | 2-3 sessions | HIGH — core revenue flow | ✅ DONE (2026-03-09) |
 | **P1** | Referral dashboard (Phase A) | 1 session | MEDIUM — growth driver | ✅ DONE (2026-03-09) |
 | **P1** | UI/UX Sprint 3 (secondary tabs) | 2 sessions | MEDIUM — polish | ✅ DONE (2026-03-09) |
-| **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | pending |
+| **P2** | Referral backend (Phase B) | 1 session | MEDIUM — engagement | ✅ DONE (2026-03-09) |
 | **P2** | UI/UX Sprint 4 (micro-interactions) | 1 session | LOW — delight | pending |
 | **P3** | Wire up whale tracker | 1 session | LOW — Phase 3 feature | pending |
 | **P3** | Subscription payment flow | 2 sessions | LOW — monetization | pending |
@@ -367,3 +368,38 @@ Key changes:
 ### Files changed
 - `webapp/src/styles/index.css` — ~350 lines appended (P1 overhaul section)
 - `webapp/src/components/SettingsPanel.tsx` — referral dashboard card + Telegram share
+
+---
+
+## P2 Implementation Log (2026-03-09)
+
+### What was done
+
+**Referral Backend (Phase B):**
+- **New `getReferralList()` query** in `src/db/queries/referrals.ts`: Fetches paginated referred users with join date, swap count, and fee share earned. Uses parallel Prisma queries (user list + count).
+- **New `GET /api/user/referrals` endpoint** in `src/api/routes/user.ts`: Returns paginated referral list. Supports `offset`/`limit` params. Privacy-safe (username only, no wallet addresses).
+- **Bot referral notification** in `src/bot/commands/start.ts`: When a new user joins via `/start ref_CODE`, referrer gets: "X just joined SolSwap using your referral link! You now earn 25% of their swap fees." Non-blocking (never fails /start). Uses MarkdownV2 formatting.
+- **`setBotInstance()` pattern** in `src/bot/index.ts`: Stores bot reference so startCommand can send messages without circular imports.
+
+**Referral Frontend (Phase B):**
+- **New `ReferralModal` component** (`webapp/src/components/ReferralModal.tsx`): Full-screen bottom sheet with:
+  - Stats row: earnings (green gradient), referral count, 25% fee share
+  - "Invite Friends" (Telegram share API → Web Share → clipboard) + "Copy Link" buttons
+  - How-it-works 3-step explainer
+  - Paginated referred users list: username, join date, swap count, earned per referral
+  - "Load More" button for offset-based pagination
+  - Empty state with CTA prompt
+- **Updated `SettingsPanel`**: Replaced inline how-it-works with compact card + "Invite Friends" and "View Details" buttons. "View Details" opens ReferralModal.
+- **Frontend API**: Added `fetchReferrals()` + `ReferralItem`/`ReferralsResponse` types in `webapp/src/lib/api.ts`.
+- **CSS**: Added ~250 lines of `ref-modal-*` styles + `.referral-actions`/`.referral-details-btn`.
+- **Version bumped to v0.9.0.**
+
+### Files changed
+- `src/db/queries/referrals.ts` — Added `getReferralList()` + `ReferralListItem` interface
+- `src/api/routes/user.ts` — Added `GET /api/user/referrals` endpoint
+- `src/bot/commands/start.ts` — Added referral notification + `setBotInstance()`
+- `src/bot/index.ts` — Wired `setBotInstance()` call
+- `webapp/src/components/ReferralModal.tsx` — New file
+- `webapp/src/components/SettingsPanel.tsx` — Added ReferralModal trigger + version bump
+- `webapp/src/lib/api.ts` — Added `fetchReferrals()` + types
+- `webapp/src/styles/index.css` — Added referral modal styles

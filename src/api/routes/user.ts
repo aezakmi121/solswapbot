@@ -8,7 +8,7 @@ import { getTokenPricesBatch } from "../../jupiter/price";
 import { getTokensMetadata } from "../../jupiter/tokens";
 import { addAddressToWebhook } from "../../helius/client";
 import { getEvmPortfolio } from "../../moralis/client";
-import { getReferralEarnings } from "../../db/queries/referrals";
+import { getReferralEarnings, getReferralList } from "../../db/queries/referrals";
 import { config } from "../../config";
 
 export const userRouter = Router();
@@ -330,6 +330,44 @@ userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
     } catch (err) {
         console.error("Portfolio API error:", err);
         res.status(500).json({ error: "Failed to fetch portfolio" });
+    }
+});
+
+/**
+ * GET /api/user/referrals
+ * Returns paginated list of users referred by the authenticated user.
+ * Privacy: only shows username, never wallet address.
+ *
+ * Query params: offset (default 0), limit (1-50, default 20)
+ */
+userRouter.get("/user/referrals", async (req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        const user = await findUserByTelegramId(telegramId);
+
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+
+        const { referrals, total } = await getReferralList(
+            user.id,
+            config.REFERRAL_FEE_SHARE_PERCENT,
+            offset,
+            limit
+        );
+
+        res.json({
+            referrals,
+            total,
+            hasMore: offset + limit < total,
+        });
+    } catch (err) {
+        console.error("Referrals list error:", err);
+        res.status(500).json({ error: "Failed to fetch referrals" });
     }
 });
 
