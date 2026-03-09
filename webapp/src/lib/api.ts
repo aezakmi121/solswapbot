@@ -604,8 +604,29 @@ export interface AdminUser {
 
 export interface AdminUsersResponse {
     users: AdminUser[];
-    topFeeGenerators: any[];
+    topFeeGenerators: Array<{
+        userId: string;
+        telegramId?: string;
+        telegramUsername?: string | null;
+        totalFeeUsd?: number;
+        totalFeesUsd?: number;
+        swapCount?: number;
+        swaps?: number;
+    }>;
     totalUsers: number;
+}
+
+export interface AdminReferrer {
+    telegramId: string;
+    telegramUsername: string | null;
+    referralCount: number;
+    earningsUsd: number;
+}
+
+export interface AdminReferralsResponse {
+    topReferrers: AdminReferrer[];
+    totalReferrals: number;
+    feeSharePercent: number;
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
@@ -617,5 +638,11 @@ export async function fetchAdminStats(): Promise<AdminStats> {
 export async function fetchAdminUsers(): Promise<AdminUsersResponse> {
     const res = await fetch(`${API_BASE}/api/admin/users`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Failed to fetch admin users");
+    return res.json();
+}
+
+export async function fetchAdminReferrals(): Promise<AdminReferralsResponse> {
+    const res = await fetch(`${API_BASE}/api/admin/referrals`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch admin referrals");
     return res.json();
 }

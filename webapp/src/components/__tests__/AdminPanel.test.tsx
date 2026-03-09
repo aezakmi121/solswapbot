@@ -2,12 +2,13 @@ import "@testing-library/jest-dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminPanel } from "../AdminPanel";
-import { fetchAdminStats, fetchAdminUsers } from "../../lib/api";
+import { fetchAdminStats, fetchAdminUsers, fetchAdminReferrals } from "../../lib/api";
 
 // Mock the API client
 vi.mock("../../lib/api", () => ({
     fetchAdminStats: vi.fn(),
     fetchAdminUsers: vi.fn(),
+    fetchAdminReferrals: vi.fn(),
 }));
 
 describe("AdminPanel Component", () => {
@@ -19,15 +20,17 @@ describe("AdminPanel Component", () => {
         // Return unresolved promises to keep it in loading state
         vi.mocked(fetchAdminStats).mockReturnValue(new Promise(() => {}));
         vi.mocked(fetchAdminUsers).mockReturnValue(new Promise(() => {}));
+        vi.mocked(fetchAdminReferrals).mockReturnValue(new Promise(() => {}));
 
         render(<AdminPanel />);
-        expect(screen.getByText(/Loading admin dashboard/i)).toBeInTheDocument();
+        expect(screen.getByText(/Loading dashboard/i)).toBeInTheDocument();
     });
 
     it("should gracefully degrade and show an error message if the API fails (e.g., unauthorized)", async () => {
         vi.mocked(fetchAdminStats).mockImplementation(() => Promise.reject(new Error("Unauthorized access")));
-        // Keep the second promise pending so it doesn't throw an unhandled rejection when Promise.all aborts early
+        // Keep the other promises pending so they don't throw unhandled rejections
         vi.mocked(fetchAdminUsers).mockReturnValue(new Promise(() => {}));
+        vi.mocked(fetchAdminReferrals).mockReturnValue(new Promise(() => {}));
 
         render(<AdminPanel />);
 
@@ -51,8 +54,8 @@ describe("AdminPanel Component", () => {
         vi.mocked(fetchAdminUsers).mockResolvedValue({
             totalUsers: 1,
             users: [
-                { 
-                    telegramId: "123", telegramUsername: "whale_user", 
+                {
+                    telegramId: "123", telegramUsername: "whale_user",
                     swapCount: 50, referralCount: 12, walletAddress: "So11111111111111111111111111111111",
                     hasEvmWallet: false, sendCount: 0, scanCount: 0, joinedAt: "2024-01-01T00:00:00Z"
                 }
@@ -62,6 +65,12 @@ describe("AdminPanel Component", () => {
             ]
         });
 
+        vi.mocked(fetchAdminReferrals).mockResolvedValue({
+            topReferrers: [],
+            totalReferrals: 5,
+            feeSharePercent: 25,
+        });
+
         render(<AdminPanel />);
 
         // Wait for it to finish loading
@@ -69,10 +78,9 @@ describe("AdminPanel Component", () => {
             expect(screen.queryByText(/Loading/i)).not.toBeInTheDocument();
         });
 
-        // Assert numbers are formatted and rendered
+        // Assert numbers are formatted and rendered (Overview tab is default)
         expect(screen.getByText("1,532")).toBeInTheDocument(); // total users
         expect(screen.getByText("8,400")).toBeInTheDocument(); // total swaps
         expect(screen.getByText("$125,000.50")).toBeInTheDocument(); // total revenue
-        expect(screen.getByText("@whale_user")).toBeInTheDocument(); // feed text
     });
 });
