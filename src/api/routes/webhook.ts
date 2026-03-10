@@ -3,6 +3,7 @@ import { config } from "../../config";
 import { prisma } from "../../db/client";
 import { parseHeliusEvent, IncomingTransfer } from "../../helius/parser";
 import { getTokenByMint } from "../../jupiter/tokens";
+import { formatAlert, sendTelegramAlert } from "../../tracker/alerts";
 
 export const webhookRouter = Router();
 
@@ -99,6 +100,41 @@ webhookRouter.post("/webhook/helius", async (req: Request, res: Response) => {
                 });
 
                 saved++;
+            }
+
+            // ─── NEW: Whale Tracker Alerts ───
+            const nativeTransfers = event.nativeTransfers as Array<{
+                fromUserAccount: string;
+                toUserAccount: string;
+                amount: number; // in lamports
+            }> ?? [];
+
+            for (const nt of nativeTransfers) {
+                const solAmount = nt.amount / 1e9;
+                if (solAmount < Number(config.MIN_SOL_ALERT || 10)) continue;
+
+                const addresses = [nt.fromUserAccount, nt.toUserAccount];
+                for (const address of addresses) {
+                    const watchedWallet = await prisma.watchedWallet.findFirst({
+                        where: { walletAddress: address, chain: "solana", active: true },
+                        include: { user: true }
+                    });
+
+                    if (watchedWallet) {
+                        const direction = address === nt.toUserAccount ? "received" : "sent";
+                        const alert = formatAlert({
+                            walletAddress: watchedWallet.walletAddress,
+                            label: watchedWallet.label,
+                            direction,
+                            amount: solAmount,
+                            signature: event.signature,
+                        });
+                        // Non-blocking fire-and-forget
+                        sendTelegramAlert(watchedWallet.user.telegramId, alert).catch((e: Error) =>
+                            console.error("Helius whale alert send error:", e)
+                        );
+                    }
+                }
             }
         }
 

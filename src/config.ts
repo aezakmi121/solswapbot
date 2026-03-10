@@ -39,8 +39,13 @@ const envSchema = z.object({
   HELIUS_API_KEY: z.string().optional(),
   HELIUS_WEBHOOK_SECRET: z.string().optional(),
 
-  // Moralis (EVM token balances — free tier: 120K CUs/month)
+  // Moralis (EVM token balances + Streams for whale tracking)
   MORALIS_API_KEY: z.string().optional(),
+  MORALIS_WEBHOOK_SECRET: z.string().optional(), // For verifying Moralis stream webhook calls
+
+  // Whale Tracker thresholds
+  MIN_SOL_ALERT: z.coerce.number().positive().default(10),   // Minimum SOL moved to fire alert
+  MIN_ETH_ALERT: z.coerce.number().positive().default(1),    // Minimum native ETH/BNB/MATIC moved to fire alert
 
   // AI Signals
   GEMINI_API_KEY: z.string().optional(),

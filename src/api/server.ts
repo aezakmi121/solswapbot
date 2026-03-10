@@ -32,6 +32,7 @@ import { transactionsRouter } from "./routes/transactions";
 import { webhookRouter } from "./routes/webhook";
 import { adminRouter } from "./routes/admin";
 import { trackerRouter } from "./routes/tracker";
+import { webhookMoralisRouter } from "./routes/webhookMoralis";
 
 /**
  * Creates and configures the Express API server.
@@ -77,8 +78,9 @@ export function createApiServer(): express.Express {
     app.use("/api", priceRouter);
     app.use("/api", tokensRouter);
 
-    // Webhook routes — auth via HELIUS_WEBHOOK_SECRET, not Telegram initData
-    app.use("/api", webhookRouter);
+    // Webhook routes — auth via external webhook secrets, not Telegram initData
+    app.use("/api", webhookRouter); // Helius
+    app.use("/api", webhookMoralisRouter); // Moralis
 
     // Protected routes — require valid Telegram initData (C2/C3/C5)
     app.use("/api", telegramAuthMiddleware, quoteRouter);

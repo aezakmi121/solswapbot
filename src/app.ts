@@ -4,6 +4,7 @@ import { createBot } from "./bot";
 import { startApiServer } from "./api/server";
 import { pollTransactionInBackground } from "./solana/transaction";
 import { initHeliusWebhook, isHeliusEnabled } from "./helius/client";
+import { initMoralisStream, isMoralisStreamsEnabled } from "./moralis/stream";
 import { startBridgePoller } from "./bridge/bridgePoller";
 import { initTokenCache } from "./aggregator/lifiTokens";
 import { startWalletMonitor } from "./tracker/monitor";
@@ -40,6 +41,14 @@ async function main(): Promise<void> {
     const vpsUrl = config.CORS_ORIGIN; // VPS is proxied through the same origin
     initHeliusWebhook(vpsUrl).catch((err) => {
       console.error("Helius webhook init failed (non-fatal):", err);
+    });
+  }
+
+  // Initialize Moralis Stream for EVM whale tracking (non-blocking, optional)
+  if (isMoralisStreamsEnabled()) {
+    const vpsUrl = config.CORS_ORIGIN;
+    initMoralisStream(vpsUrl).catch((err) => {
+      console.error("Moralis Stream init failed (non-fatal):", err);
     });
   }
 

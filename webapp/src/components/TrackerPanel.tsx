@@ -7,8 +7,18 @@ interface WatchedWallet {
     id: string;
     walletAddress: string;
     label: string | null;
+    chain: string;
     createdAt: string;
 }
+
+const CHAIN_LABELS: Record<string, string> = {
+    solana: "Solana",
+    ethereum: "Ethereum",
+    bsc: "BNB Chain",
+    polygon: "Polygon",
+    arbitrum: "Arbitrum",
+    base: "Base",
+};
 
 interface ListResponse {
     wallets: WatchedWallet[];
@@ -46,6 +56,7 @@ export function TrackerPanel() {
     // Add wallet form state
     const [addAddress, setAddAddress] = useState("");
     const [addLabel, setAddLabel] = useState("");
+    const [addChain, setAddChain] = useState("solana");
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
 
@@ -73,7 +84,11 @@ export function TrackerPanel() {
         try {
             await apiRequest("/tracker/watch", {
                 method: "POST",
-                body: JSON.stringify({ walletAddress: addAddress.trim(), label: addLabel.trim() || undefined }),
+                body: JSON.stringify({ 
+                    walletAddress: addAddress.trim(), 
+                    label: addLabel.trim() || undefined,
+                    chain: addChain 
+                }),
             });
             setAddAddress("");
             setAddLabel("");
@@ -111,7 +126,7 @@ export function TrackerPanel() {
                     <h2 className="tracker-title">Whale Tracker</h2>
                 </div>
                 <p className="tracker-subtitle">
-                    Get alerted when a watched wallet sends or receives ≥ 10 SOL.
+                    Get alerted in real-time when a watched wallet sends or receives large amounts.
                 </p>
                 <div className="tracker-slots">
                     <span className={`tracker-slot-badge ${atLimit ? "tracker-slot-badge--full" : ""}`}>
@@ -127,17 +142,31 @@ export function TrackerPanel() {
 
             {/* ── Add wallet form ── */}
             <form className="tracker-add-form" onSubmit={handleAdd}>
-                <input
-                    className="tracker-input"
-                    type="text"
-                    placeholder="Solana wallet address"
-                    value={addAddress}
-                    onChange={(e) => setAddAddress(e.target.value)}
-                    disabled={adding || atLimit}
-                    maxLength={44}
-                    autoComplete="off"
-                    spellCheck={false}
-                />
+                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                    <select
+                        className="tracker-input"
+                        style={{ width: "35%", cursor: "pointer" }}
+                        value={addChain}
+                        onChange={(e) => setAddChain(e.target.value)}
+                        disabled={adding || atLimit}
+                    >
+                        {Object.entries(CHAIN_LABELS).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                        ))}
+                    </select>
+                    <input
+                        className="tracker-input"
+                        style={{ width: "65%" }}
+                        type="text"
+                        placeholder="Wallet address"
+                        value={addAddress}
+                        onChange={(e) => setAddAddress(e.target.value)}
+                        disabled={adding || atLimit}
+                        maxLength={44}
+                        autoComplete="off"
+                        spellCheck={false}
+                    />
+                </div>
                 <input
                     className="tracker-input tracker-input--label"
                     type="text"
@@ -178,6 +207,9 @@ export function TrackerPanel() {
                                     <span className="tracker-wallet-label">{w.label}</span>
                                 )}
                                 <span className="tracker-wallet-addr" title={w.walletAddress}>
+                                    <span style={{ fontSize: "0.7rem", opacity: 0.6, marginRight: "4px" }}>
+                                        {CHAIN_LABELS[w.chain] ?? w.chain}
+                                    </span>
                                     {shortAddr(w.walletAddress)}
                                 </span>
                             </div>
@@ -196,7 +228,7 @@ export function TrackerPanel() {
 
             {/* ── Alert threshold note ── */}
             <p className="tracker-footer-note">
-                🔔 Alerts fire via Telegram when a tracked wallet moves ≥ 10 SOL
+                🔔 Alerts fire via Telegram (≥ 10 SOL, or ≥ 1 ETH/native EVM token)
             </p>
         </div>
     );

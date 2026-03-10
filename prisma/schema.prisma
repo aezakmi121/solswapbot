@@ -103,6 +103,7 @@ model WatchedWallet {
   user          User     @relation(fields: [userId], references: [id])
   walletAddress String
   label         String?
+  chain         String   @default("solana") // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
 

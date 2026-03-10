@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../../db/client";
 import { config } from "../../config";
+import { addAddressToWebhook } from "../../helius/client";
+import { addAddressToMoralisStream, removeAddressFromMoralisStream } from "../../moralis/stream";
 
 export const trackerRouter = Router();
 
@@ -37,17 +39,28 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
     try {
         // Use verified telegramId from auth middleware — never from req.body (prevents spoofing)
         const telegramId = res.locals.telegramId as string;
-        const { walletAddress, label } = req.body;
+        let { walletAddress, label, chain } = req.body;
 
         if (!walletAddress) {
             res.status(400).json({ error: "Missing walletAddress" });
             return;
         }
 
-        // Validate Solana address format (base58, 32-44 chars)
-        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
-            res.status(400).json({ error: "Invalid Solana wallet address" });
-            return;
+        chain = chain || "solana";
+
+        // Validate address format based on chain
+        if (chain === "solana") {
+            if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
+                res.status(400).json({ error: "Invalid Solana wallet address" });
+                return;
+            }
+        } else {
+            // EVM validation
+            if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+                res.status(400).json({ error: "Invalid EVM wallet address" });
+                return;
+            }
+            walletAddress = walletAddress.toLowerCase(); // Lowercase for SQLite case-insensitivity consistency
         }
 
         const user = await prisma.user.findUnique({ where: { telegramId } });
@@ -86,8 +99,16 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                 userId: user.id,
                 walletAddress,
                 label: label ?? null,
+                chain,
             },
         });
+
+        // Register with appropriate real-time webhook provider
+        if (chain === "solana") {
+            addAddressToWebhook(walletAddress).catch((e: Error) => console.error("Helius watch error", e));
+        } else {
+            addAddressToMoralisStream(walletAddress).catch((e: Error) => console.error("Moralis watch error", e));
+        }
 
         res.json({
             success: true,
@@ -95,6 +116,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                 id: watched.id,
                 walletAddress: watched.walletAddress,
                 label: watched.label,
+                chain: watched.chain,
                 active: watched.active,
             },
         });
@@ -115,7 +137,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
 trackerRouter.post("/tracker/unwatch", async (req: Request, res: Response) => {
     try {
         const telegramId = res.locals.telegramId as string;
-        const { walletAddress } = req.body;
+        let { walletAddress } = req.body;
 
         if (!walletAddress) {
             res.status(400).json({ error: "Missing walletAddress" });
@@ -128,10 +150,28 @@ trackerRouter.post("/tracker/unwatch", async (req: Request, res: Response) => {
             return;
         }
 
-        await prisma.watchedWallet.updateMany({
-            where: { userId: user.id, walletAddress },
-            data: { active: false },
+        // If it looks like an EVM address, lowercase it for strict equality matching
+        if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            walletAddress = walletAddress.toLowerCase();
+        }
+
+        // Find existing to know which chain it is for webhook cleanup
+        const existing = await prisma.watchedWallet.findFirst({
+            where: { userId: user.id, walletAddress }
         });
+
+        if (existing) {
+            await prisma.watchedWallet.update({
+                where: { id: existing.id },
+                data: { active: false },
+            });
+
+            // Remove from Moralis stream (EVM)
+            if (existing.chain !== "solana") {
+                removeAddressFromMoralisStream(existing.walletAddress).catch((e: Error) => console.error("Moralis unwatch", e));
+            }
+            // Note: Helius doesn't have a direct remove endpoint yet, it just keeps pushing to us and we filter it out.
+        }
 
         res.json({ success: true, walletAddress });
     } catch (err) {
@@ -168,6 +208,7 @@ trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
                 id: w.id,
                 walletAddress: w.walletAddress,
                 label: w.label,
+                chain: w.chain,
                 createdAt: w.createdAt,
             })),
             count: wallets.length,
