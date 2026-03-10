@@ -55,7 +55,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
     };
 
     const referralLink = userData?.referralCode
-        ? `https://t.me/solswapbot?start=ref_${userData.referralCode}`
+        ? `https://t.me/Swapsoulbot?start=ref_${userData.referralCode}`
         : "";
 
     const handleCopyRef = () => {

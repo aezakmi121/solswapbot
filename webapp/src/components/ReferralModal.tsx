@@ -17,7 +17,7 @@ export function ReferralModal({ referralCode, referralCount, referralEarningsUsd
     const [loadingMore, setLoadingMore] = useState(false);
 
     const tg = (window as any).Telegram?.WebApp;
-    const referralLink = `https://t.me/solswapbot?start=ref_${referralCode}`;
+    const referralLink = `https://t.me/Swapsoulbot?start=ref_${referralCode}`;
 
     useEffect(() => {
         fetchReferrals({ limit: 20 })
