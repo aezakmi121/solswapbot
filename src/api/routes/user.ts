@@ -278,7 +278,9 @@ userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
         // Build Solana token list (with chain: "solana")
         const solTokens = mints.map((mint) => {
             const bal = solanaResult.get(mint)!;
-            const priceUsd = prices[mint] ?? null;
+            const priceData = prices[mint];
+            const priceUsd = priceData?.priceUsd ?? null;
+            const priceChange24h = priceData?.priceChange24h ?? null;
             const info = metadata[mint];
             const valueUsd = priceUsd !== null ? bal.amount * priceUsd : null;
             return {
@@ -290,6 +292,7 @@ userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
                 amount: bal.amount,
                 decimals: bal.decimals,
                 priceUsd,
+                priceChange24h,
                 valueUsd,
             };
         });

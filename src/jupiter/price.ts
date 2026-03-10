@@ -42,27 +42,41 @@ export async function getTokenPriceUsd(mintAddress: string): Promise<number | nu
  * Batch-fetches USD prices for multiple token mints in a single API call.
  * Returns a map of mint → price (null if unavailable).
  */
+export interface TokenPriceData {
+  priceUsd: number | null;
+  priceChange24h: number | null;
+}
+
+/**
+ * Batch-fetches USD prices for multiple token mints in a single API call.
+ * Returns a map of mint → TokenPriceData.
+ */
 export async function getTokenPricesBatch(
   mints: string[]
-): Promise<Record<string, number | null>> {
+): Promise<Record<string, TokenPriceData>> {
   if (mints.length === 0) return {};
   try {
     const ids = mints.join(",");
-    const response = await fetch(`${getPriceUrl()}?ids=${ids}`, { headers: jupiterHeaders() });
+    // Add showExtraInfo=true to get 24h price change data
+    const response = await fetch(`${getPriceUrl()}?ids=${ids}&showExtraInfo=true`, { headers: jupiterHeaders() });
+    
     if (!response.ok) {
-      return Object.fromEntries(mints.map((m) => [m, null]));
+      return Object.fromEntries(mints.map((m) => [m, { priceUsd: null, priceChange24h: null }]));
     }
+    
     const json = (await response.json()) as JupiterPriceV3Response;
-    return Object.fromEntries(
-      mints.map((mint) => {
-        const entry = json[mint];
-        const price =
-          entry?.usdPrice && Number.isFinite(entry.usdPrice) ? entry.usdPrice : null;
-        return [mint, price];
-      })
-    );
+    const result: Record<string, TokenPriceData> = {};
+    
+    for (const mint of mints) {
+      const entry = json[mint];
+      const priceUsd = entry?.usdPrice && Number.isFinite(entry.usdPrice) ? entry.usdPrice : null;
+      const priceChange24h = entry?.priceChange24h && Number.isFinite(entry.priceChange24h) ? entry.priceChange24h : null;
+      result[mint] = { priceUsd, priceChange24h };
+    }
+    
+    return result;
   } catch {
-    return Object.fromEntries(mints.map((m) => [m, null]));
+    return Object.fromEntries(mints.map((m) => [m, { priceUsd: null, priceChange24h: null }]));
   }
 }
 

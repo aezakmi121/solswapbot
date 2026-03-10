@@ -47,11 +47,155 @@ function shortAddr(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+function formatUsd(val: number) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Portfolio Component (Accordion Content)
+// ─────────────────────────────────────────────────────────────────────────────
+interface PortfolioToken {
+    chain: string;
+    mint: string;
+    symbol: string;
+    name: string;
+    icon: string | null;
+    amount: number;
+    decimals: number;
+    priceUsd: number | null;
+    priceChange24h: number | null;
+    valueUsd: number | null;
+}
+
+interface PortfolioData {
+    totalValueUsd: number;
+    tokens: PortfolioToken[];
+}
+
+function WalletPortfolio({ address }: { address: string }) {
+    const [data, setData] = useState<PortfolioData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        const fetchPortfolio = async () => {
+            try {
+                const res = await apiRequest<{ totalValueUsd: number; tokens: PortfolioToken[] }>(
+                    `/tracker/portfolio/${address}`
+                );
+                if (mounted) setData(res);
+            } catch (err) {
+                if (mounted) setError(err instanceof Error ? err.message : "Failed to load holdings");
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        };
+        fetchPortfolio();
+        return () => { mounted = false; };
+    }, [address]);
+
+    if (loading) {
+        return (
+            <div className="tracker-portfolio-drawer">
+                <div className="spinner" style={{ width: 16, height: 16, margin: "auto" }} />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="tracker-portfolio-drawer">
+                <p className="tracker-error" style={{ fontSize: "0.8rem", margin: 0 }}>{error}</p>
+            </div>
+        );
+    }
+
+    if (!data || data.tokens.length === 0) {
+        return (
+            <div className="tracker-portfolio-drawer">
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
+                    No significant token holdings found.
+                </p>
+            </div>
+        );
+    }
+
+    // Calculate aggregated 24h change roughly
+    // (This is an approximation based on current token mix value * sum of weighted 24h changes)
+    let totalValueWithChange = 0;
+    let validWeightValue = 0;
+    for (const t of data.tokens) {
+        if (t.valueUsd && t.priceChange24h !== null) {
+            totalValueWithChange += (t.valueUsd * t.priceChange24h) / 100;
+            validWeightValue += t.valueUsd;
+        }
+    }
+    const overallChangePct = validWeightValue > 0 ? (totalValueWithChange / validWeightValue) * 100 : 0;
+    const isPositive = overallChangePct >= 0;
+
+    return (
+        <div className="tracker-portfolio-drawer">
+            <div className="tracker-portfolio-header">
+                <div>
+                    <span className="tracker-portfolio-label">Net Worth</span>
+                    <div className="tracker-portfolio-value">{formatUsd(data.totalValueUsd)}</div>
+                </div>
+                {validWeightValue > 0 && (
+                    <div style={{ textAlign: "right" }}>
+                        <span className="tracker-portfolio-label">24h Change</span>
+                        <div className={`tracker-portfolio-change ${isPositive ? 'positive' : 'negative'}`}>
+                            {isPositive ? '+' : ''}{formatUsd(totalValueWithChange)} ({isPositive ? '+' : ''}{overallChangePct.toFixed(2)}%)
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <table className="tracker-portfolio-table">
+                <tbody>
+                    {data.tokens.map((t, idx) => {
+                        const tPos = (t.priceChange24h ?? 0) >= 0;
+                        return (
+                            <tr key={`${t.mint}-${idx}`}>
+                                <td className="tracker-token-col">
+                                    {t.icon ? <img src={t.icon} alt="" className="tracker-token-icon" /> : <div className="tracker-token-icon-fallback" />}
+                                    <span>{t.symbol}</span>
+                                </td>
+                                <td className="tracker-bal-col">
+                                    {t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                </td>
+                                <td className="tracker-price-col">
+                                    <div className="tracker-token-price">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</div>
+                                    {t.priceChange24h !== null && (
+                                        <div className={`tracker-token-pxchange ${tPos ? 'positive' : 'negative'}`}>
+                                            {tPos ? '+' : ''}{t.priceChange24h.toFixed(2)}%
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="tracker-val-col">
+                                    {t.valueUsd ? formatUsd(t.valueUsd) : "—"}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Tracker Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function TrackerPanel() {
     const [wallets, setWallets] = useState<WatchedWallet[]>([]);
     const [limit, setLimit] = useState<number | null>(3);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState<"watchlist" | "add">("watchlist");
 
     // Add wallet form state
     const [addAddress, setAddAddress] = useState("");
@@ -59,6 +203,9 @@ export function TrackerPanel() {
     const [addChain, setAddChain] = useState("solana");
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+
+    // Accordion state (which wallet has its portfolio open)
+    const [openPortfolioId, setOpenPortfolioId] = useState<string | null>(null);
 
     const loadWallets = useCallback(async () => {
         try {
@@ -93,6 +240,7 @@ export function TrackerPanel() {
             setAddAddress("");
             setAddLabel("");
             await loadWallets();
+            setActiveTab("watchlist"); // switch back to list
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to add wallet");
         } finally {
@@ -107,10 +255,17 @@ export function TrackerPanel() {
                 body: JSON.stringify({ walletAddress }),
             });
             setWallets((prev) => prev.filter((w) => w.walletAddress !== walletAddress));
+            if (openPortfolioId === walletAddress) {
+                setOpenPortfolioId(null);
+            }
         } catch {
             // Silently retry on next reload
             loadWallets();
         }
+    };
+
+    const togglePortfolio = (address: string) => {
+        setOpenPortfolioId(prev => prev === address ? null : address);
     };
 
     const slotsUsed = wallets.length;
@@ -130,7 +285,7 @@ export function TrackerPanel() {
                 </p>
                 <div className="tracker-slots">
                     <span className={`tracker-slot-badge ${atLimit ? "tracker-slot-badge--full" : ""}`}>
-                        {slotsUsed} / {slotsTotal} wallets
+                        {slotsUsed} / {slotsTotal} slots
                     </span>
                     {atLimit && limit === 3 && (
                         <span className="tracker-upgrade-hint">
@@ -140,94 +295,137 @@ export function TrackerPanel() {
                 </div>
             </div>
 
-            {/* ── Add wallet form ── */}
-            <form className="tracker-add-form" onSubmit={handleAdd}>
-                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                    <select
-                        className="tracker-input"
-                        style={{ width: "35%", cursor: "pointer" }}
-                        value={addChain}
-                        onChange={(e) => setAddChain(e.target.value)}
-                        disabled={adding || atLimit}
-                    >
-                        {Object.entries(CHAIN_LABELS).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                        ))}
-                    </select>
-                    <input
-                        className="tracker-input"
-                        style={{ width: "65%" }}
-                        type="text"
-                        placeholder="Wallet address"
-                        value={addAddress}
-                        onChange={(e) => setAddAddress(e.target.value)}
-                        disabled={adding || atLimit}
-                        maxLength={44}
-                        autoComplete="off"
-                        spellCheck={false}
-                    />
-                </div>
-                <input
-                    className="tracker-input tracker-input--label"
-                    type="text"
-                    placeholder="Label (optional, e.g. Whale A)"
-                    value={addLabel}
-                    onChange={(e) => setAddLabel(e.target.value)}
-                    disabled={adding || atLimit}
-                    maxLength={40}
-                />
-                <button
-                    className="tracker-add-btn swap-btn"
-                    type="submit"
-                    disabled={adding || atLimit || !addAddress.trim()}
+            {/* ── Tabs ── */}
+            <div className="tracker-tabs">
+                <button 
+                    className={`tracker-tab ${activeTab === "watchlist" ? "active" : ""}`}
+                    onClick={() => setActiveTab("watchlist")}
                 >
-                    {adding ? "Adding…" : atLimit ? "Limit reached" : "Watch Wallet"}
+                    My Watchlist
                 </button>
-                {addError && <p className="tracker-error">{addError}</p>}
-            </form>
+                <button 
+                    className={`tracker-tab ${activeTab === "add" ? "active" : ""}`}
+                    onClick={() => setActiveTab("add")}
+                >
+                    Add New
+                </button>
+            </div>
 
-            {/* ── Wallet list ── */}
-            {loading ? (
-                <div className="tracker-loading">
-                    <div className="spinner" />
-                </div>
-            ) : error ? (
-                <p className="tracker-error">{error}</p>
-            ) : wallets.length === 0 ? (
-                <div className="tracker-empty">
-                    <p>No wallets watched yet.</p>
-                    <p className="tracker-empty-hint">Add a whale's address above to start tracking.</p>
-                </div>
-            ) : (
-                <ul className="tracker-wallet-list">
-                    {wallets.map((w) => (
-                        <li key={w.id} className="tracker-wallet-item">
-                            <div className="tracker-wallet-info">
-                                {w.label && (
-                                    <span className="tracker-wallet-label">{w.label}</span>
-                                )}
-                                <span className="tracker-wallet-addr" title={w.walletAddress}>
-                                    <span style={{ fontSize: "0.7rem", opacity: 0.6, marginRight: "4px" }}>
-                                        {CHAIN_LABELS[w.chain] ?? w.chain}
-                                    </span>
-                                    {shortAddr(w.walletAddress)}
-                                </span>
-                            </div>
-                            <button
-                                className="tracker-remove-btn"
-                                onClick={() => handleRemove(w.walletAddress)}
-                                title="Stop watching"
-                                aria-label={`Remove ${w.label ?? w.walletAddress}`}
+            {/* ── Add New Tab ── */}
+            {activeTab === "add" && (
+                <div className="tracker-tab-content">
+                    <form className="tracker-add-form" onSubmit={handleAdd}>
+                        <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                            <select
+                                className="tracker-input"
+                                style={{ width: "35%", cursor: "pointer" }}
+                                value={addChain}
+                                onChange={(e) => setAddChain(e.target.value)}
+                                disabled={adding || atLimit}
                             >
-                                ✕
+                                {Object.entries(CHAIN_LABELS).map(([key, label]) => (
+                                    <option key={key} value={key}>{label}</option>
+                                ))}
+                            </select>
+                            <input
+                                className="tracker-input"
+                                style={{ width: "65%" }}
+                                type="text"
+                                placeholder="Wallet address"
+                                value={addAddress}
+                                onChange={(e) => setAddAddress(e.target.value)}
+                                disabled={adding || atLimit}
+                                maxLength={44}
+                                autoComplete="off"
+                                spellCheck={false}
+                            />
+                        </div>
+                        <input
+                            className="tracker-input tracker-input--label"
+                            type="text"
+                            placeholder="Label (optional, e.g. Whale A)"
+                            value={addLabel}
+                            onChange={(e) => setAddLabel(e.target.value)}
+                            disabled={adding || atLimit}
+                            maxLength={40}
+                        />
+                        <button
+                            className="tracker-add-btn swap-btn"
+                            type="submit"
+                            disabled={adding || atLimit || !addAddress.trim()}
+                        >
+                            {adding ? "Adding…" : atLimit ? "Limit reached" : "Watch Wallet"}
+                        </button>
+                        {addError && <p className="tracker-error">{addError}</p>}
+                    </form>
+                </div>
+            )}
+
+            {/* ── Watchlist Tab ── */}
+            {activeTab === "watchlist" && (
+                <div className="tracker-tab-content">
+                    {loading ? (
+                        <div className="tracker-loading">
+                            <div className="spinner" />
+                        </div>
+                    ) : error ? (
+                        <p className="tracker-error">{error}</p>
+                    ) : wallets.length === 0 ? (
+                        <div className="tracker-empty">
+                            <p>No wallets watched yet.</p>
+                            <button className="tracker-empty-btn" onClick={() => setActiveTab("add")}>
+                                + Add a Wallet
                             </button>
-                        </li>
-                    ))}
-                </ul>
+                        </div>
+                    ) : (
+                        <ul className="tracker-wallet-list">
+                            {wallets.map((w) => {
+                                const isOpen = openPortfolioId === w.walletAddress;
+                                return (
+                                    <li key={w.id} className="tracker-wallet-item-container">
+                                        <div className="tracker-wallet-item">
+                                            <div className="tracker-wallet-info">
+                                                {w.label && (
+                                                    <span className="tracker-wallet-label">{w.label}</span>
+                                                )}
+                                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                    <span className="tracker-wallet-addr" title={w.walletAddress}>
+                                                        <span style={{ fontSize: "0.7rem", opacity: 0.6, marginRight: "4px" }}>
+                                                            {CHAIN_LABELS[w.chain] ?? w.chain}
+                                                        </span>
+                                                        {shortAddr(w.walletAddress)}
+                                                    </span>
+                                                    <button 
+                                                        className={`tracker-portfolio-btn ${isOpen ? 'active' : ''}`}
+                                                        onClick={() => togglePortfolio(w.walletAddress)}
+                                                    >
+                                                        {isOpen ? "✕ Close" : "📊 Holdings"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="tracker-remove-btn"
+                                                onClick={() => handleRemove(w.walletAddress)}
+                                                title="Stop watching"
+                                                aria-label={`Remove ${w.label ?? w.walletAddress}`}
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                        {/* Portfolio Accordion Drawer */}
+                                        {isOpen && (
+                                            <WalletPortfolio address={w.walletAddress} />
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </div>
             )}
 
             {/* ── Alert threshold note ── */}
-            <p className="tracker-footer-note">
+            <p className="tracker-footer-note" style={{ marginTop: "1rem" }}>
                 🔔 Alerts fire via Telegram (≥ 10 SOL, or ≥ 1 ETH/native EVM token)
             </p>
         </div>

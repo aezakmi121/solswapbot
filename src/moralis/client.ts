@@ -34,6 +34,7 @@ export interface EvmToken {
     amount: number;
     decimals: number;
     priceUsd: number | null;
+    priceChange24h: number | null;
     valueUsd: number | null;
 }
 
@@ -76,6 +77,7 @@ async function fetchChainPortfolio(
                     amount,
                     decimals: chain.nativeDecimals,
                     priceUsd: null,
+                    priceChange24h: null,
                     valueUsd: null,
                 });
             }
@@ -100,7 +102,16 @@ async function fetchChainPortfolio(
 
                 // Assign $1 price for known stablecoins (covers the main bridge-use case)
                 const symbol = (t.symbol ?? "").toUpperCase();
-                const priceUsd = STABLECOINS.has(symbol) ? 1.0 : null;
+                
+                // Usually Moralis includes usd_price and usd_price_24hr_percent_change
+                // If it's a stablecoin and Moralis failed to price it, default to $1 and 0% change.
+                let priceUsd: number | null = t.usd_price ? parseFloat(t.usd_price) : null;
+                let priceChange24h: number | null = t.usd_price_24hr_percent_change !== undefined ? parseFloat(t.usd_price_24hr_percent_change) : null;
+
+                if (priceUsd === null && STABLECOINS.has(symbol)) {
+                    priceUsd = 1.0;
+                    priceChange24h = 0;
+                }
 
                 tokens.push({
                     chain: chain.name,
@@ -111,6 +122,7 @@ async function fetchChainPortfolio(
                     amount,
                     decimals,
                     priceUsd,
+                    priceChange24h,
                     valueUsd: priceUsd !== null ? amount * priceUsd : null,
                 });
             }
