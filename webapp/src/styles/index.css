@@ -163,7 +163,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0 20px;
+  padding: 8px 0 16px;
+  gap: 8px;
 }
 
 .logo {
@@ -173,6 +174,15 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  flex-shrink: 0;
+}
+
+/* Right-side cluster: wallet badge + icon buttons */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .wallet-badge {
@@ -182,10 +192,13 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 6px 12px;
-  font-size: 0.78rem;
+  padding: 5px 10px;
+  font-size: 0.76rem;
   color: var(--text-secondary);
   font-weight: 500;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .wallet-dot {
@@ -202,6 +215,47 @@ body {
   padding-left: 6px;
   border-left: 1px solid var(--border);
 }
+
+/* ── Header icon buttons (History / Settings / Admin) ── */
+.header-icon-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+
+.header-icon-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(124, 92, 252, 0.35);
+  background: var(--bg-secondary);
+}
+
+/* Active — accent outline ring when that panel is open */
+.header-icon-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(124, 92, 252, 0.12);
+}
+
+/* Admin button — amber tint to stand out */
+.header-icon-btn--admin {
+  color: var(--warning);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.header-icon-btn--admin.header-icon-btn--active {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: var(--warning);
+}
+
 
 /* ── Swap Card ── */
 .swap-card {

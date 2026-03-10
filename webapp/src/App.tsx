@@ -200,14 +200,58 @@ export function App() {
             {/* ── Shared header ── */}
             <header className="header">
                 <h1 className="logo">⚡ SolSwap</h1>
-                <div
-                    className="wallet-badge"
-                    onClick={() => setActiveTab("wallet")}
-                    style={{ cursor: "pointer" }}
-                    title="Go to Wallet"
-                >
-                    <span className="wallet-dot" />
-                    <span>{shortAddr(walletAddress)}</span>
+                <div className="header-actions">
+                    {/* Wallet address badge — tap to go to Wallet tab */}
+                    <div
+                        className="wallet-badge"
+                        onClick={() => handleTabChange("wallet")}
+                        style={{ cursor: "pointer" }}
+                        title="Go to Wallet"
+                    >
+                        <span className="wallet-dot" />
+                        <span>{shortAddr(walletAddress)}</span>
+                    </div>
+
+                    {/* History icon */}
+                    <button
+                        className={`header-icon-btn${activeTab === "history" ? " header-icon-btn--active" : ""}`}
+                        onClick={() => handleTabChange("history")}
+                        title="Transaction History"
+                        aria-label="History"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+                            <path d="M12 7v5l3.5 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </button>
+
+                    {/* Settings icon */}
+                    <button
+                        className={`header-icon-btn${activeTab === "settings" ? " header-icon-btn--active" : ""}`}
+                        onClick={() => handleTabChange("settings")}
+                        title="Settings"
+                        aria-label="Settings"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.75" />
+                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="1.75" />
+                        </svg>
+                    </button>
+
+                    {/* Admin icon — only shown to admins */}
+                    {isAdmin && (
+                        <button
+                            className={`header-icon-btn header-icon-btn--admin${activeTab === "admin" ? " header-icon-btn--active" : ""}`}
+                            onClick={() => handleTabChange("admin")}
+                            title="Admin Panel"
+                            aria-label="Admin"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -258,8 +302,8 @@ export function App() {
                 )}
             </main>
 
-            {/* ── Bottom tab bar ── */}
-            <TabBar activeTab={activeTab} onTabChange={handleTabChange} isAdmin={isAdmin} />
+            {/* ── Bottom tab bar (4 core tabs only) ── */}
+            <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
 
             {/* ── Toast notifications ── */}
             <Toast />

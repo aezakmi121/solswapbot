@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-10 | Version: 1.0.0
+> Updated: 2026-03-10 | Version: 1.0.1
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -71,9 +71,9 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │ Telegram Client                                                        │
 │  ┌─────────────────┐          ┌─────────────────────────────────────┐ │
 │  │  Grammy Bot      │          │  Mini App (Vite + React)            │ │
-│  │  /start → opens  │          │  6 tabs: Wallet | Swap | Scan |     │ │
-│  │  Mini App        │          │  Tracker | History | Settings        │ │
-│  └────────┬─────────┘          └──────────────────┬──────────────────┘ │
+│  │  /start → opens  │          │  4 core tabs: Wallet | Swap | Scan | Tracker │ │
+│  │  Mini App        │          │  Header icons: 🕐 History ┃ ⚙️ Settings        │ │
+│  └────────┬─────────┘          └──────────────────┬────────────────────┘ │
 └───────────┼──────────────────────────────────────┼────────────────────┘
             │                                       │
             ▼                                       ▼
@@ -259,12 +259,12 @@ solswapbot/
 │       ├── TokenSelector.tsx     # Reusable token search modal (Jupiter-powered, used in SwapPanel)
 │       │
 │       ├── components/
-│       │   ├── TabBar.tsx            # Fixed bottom nav: Wallet | Swap | Scan | Tracker | History | Settings (6 tabs) [v1.0.0]
+│       │   ├── TabBar.tsx            # Bottom nav: Wallet | Swap | Scan | Tracker only (4 tabs). History/Settings/Admin in header [v1.0.1]
 │       │   ├── WalletTab.tsx         # Portfolio home: total USD, address, action buttons, token list, activity feed, pull-to-refresh
 │       │   ├── SwapPanel.tsx         # Full swap UI: quote, slippage, AbortController, history slide-up, cross-chain mode
 │       │   ├── ScanPanel.tsx         # Token scanner: address input, RiskGauge, check results, recent scans
 │       │   ├── TrackerPanel.tsx      # Whale Tracker tab: list/add/remove watched wallets, slot badge, tier limit, upgrade hint [v1.0.0]
-│       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, referral code, about, logout
+│       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, referral code, about, logout (opened via header ⚙️ icon)
 │       │   ├── TransactionsTab.tsx   # 5th tab: paginated history, type chips, date chips, load more, detail modal
 │       │   ├── ReceiveModal.tsx      # Bottom sheet: QR code, full address, copy, share
 │       │   ├── SendFlow.tsx          # Multi-step send: select token → recipient+amount → confirm → executing → done
@@ -733,7 +733,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Legal disclaimer shown below every scan result
 - Scan saved to DB for `/api/scan/history`
 
-**Tab 4 — Settings**
+**Settings (formerly Tab) —** moved to header ⚙️ icon [v1.0.1]
 - Full wallet address + copy button + QR code (opens ReceiveModal)
 - Slippage tolerance: 0.1% / 0.5% / 1.0% / Custom chips (localStorage `solswap_slippage_bps`)
 - Referral dashboard card: earnings + count stats, code display + copy, "Invite Friends" share button
