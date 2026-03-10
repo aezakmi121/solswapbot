@@ -1,20 +1,46 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../../db/client";
+import { config } from "../../config";
 
 export const trackerRouter = Router();
+
+/** Wallet limits per subscription tier */
+const WALLET_LIMITS = {
+    free:     3,   // Free users: 3 wallets
+    paid:     20,  // WHALE_TRACKER / ALL_ACCESS subscribers: 20 wallets
+    admin:    Infinity, // Admin: unlimited
+} as const;
+
+/**
+ * Returns the wallet limit for a given user.
+ * Admin > Paid subscriber > Free
+ */
+async function getWalletLimit(telegramId: string, userId: string): Promise<number> {
+    // Admin bypass
+    if (config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID) {
+        return WALLET_LIMITS.admin;
+    }
+    // Check subscription tier
+    const sub = await prisma.subscription.findUnique({ where: { userId } });
+    const isPaid = sub && (sub.tier === "WHALE_TRACKER" || sub.tier === "ALL_ACCESS");
+    return isPaid ? WALLET_LIMITS.paid : WALLET_LIMITS.free;
+}
 
 /**
  * POST /api/tracker/watch
  * Add a wallet to the user's watch list.
+ * Auth: Telegram initData via telegramAuthMiddleware (res.locals.telegramId).
  *
- * Body: { telegramId, walletAddress, label? }
+ * Body: { walletAddress, label? }
  */
 trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
     try {
-        const { telegramId, walletAddress, label } = req.body;
+        // Use verified telegramId from auth middleware — never from req.body (prevents spoofing)
+        const telegramId = res.locals.telegramId as string;
+        const { walletAddress, label } = req.body;
 
-        if (!telegramId || !walletAddress) {
-            res.status(400).json({ error: "Missing telegramId or walletAddress" });
+        if (!walletAddress) {
+            res.status(400).json({ error: "Missing walletAddress" });
             return;
         }
 
@@ -24,22 +50,28 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
             return;
         }
 
-        // Find or create user
-        const user = await prisma.user.findUnique({ where: { telegramId: String(telegramId) } });
+        const user = await prisma.user.findUnique({ where: { telegramId } });
         if (!user) {
             res.status(404).json({ error: "User not found. Send /start to the bot first." });
             return;
         }
 
-        // Check limit (free tier: 3 wallets)
+        const limit = await getWalletLimit(telegramId, user.id);
+
+        // Check against the user's tier limit
         const existingCount = await prisma.watchedWallet.count({
             where: { userId: user.id, active: true },
         });
 
-        if (existingCount >= 3) {
+        if (existingCount >= limit) {
+            const isAdmin = limit === WALLET_LIMITS.admin;
+            const limitDisplay = isAdmin ? "unlimited" : String(limit);
             res.status(403).json({
-                error: "Free tier limit: 3 watched wallets. Upgrade to track more!",
+                error: limit === WALLET_LIMITS.free
+                    ? `Free tier: max ${WALLET_LIMITS.free} watched wallets. Upgrade to Whale Tracker for ${WALLET_LIMITS.paid}!`
+                    : `Limit reached: ${limitDisplay} wallets for your tier`,
                 currentCount: existingCount,
+                limit: limit === Infinity ? null : limit,
             });
             return;
         }
@@ -75,20 +107,22 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
 
 /**
  * POST /api/tracker/unwatch
- * Remove a wallet from the user's watch list (soft delete — sets active=false).
+ * Remove a wallet from the user's watch list (soft delete).
+ * Auth: Telegram initData via telegramAuthMiddleware.
  *
- * Body: { telegramId, walletAddress }
+ * Body: { walletAddress }
  */
 trackerRouter.post("/tracker/unwatch", async (req: Request, res: Response) => {
     try {
-        const { telegramId, walletAddress } = req.body;
+        const telegramId = res.locals.telegramId as string;
+        const { walletAddress } = req.body;
 
-        if (!telegramId || !walletAddress) {
-            res.status(400).json({ error: "Missing telegramId or walletAddress" });
+        if (!walletAddress) {
+            res.status(400).json({ error: "Missing walletAddress" });
             return;
         }
 
-        const user = await prisma.user.findUnique({ where: { telegramId: String(telegramId) } });
+        const user = await prisma.user.findUnique({ where: { telegramId } });
         if (!user) {
             res.status(404).json({ error: "User not found" });
             return;
@@ -108,23 +142,21 @@ trackerRouter.post("/tracker/unwatch", async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/tracker/list?telegramId=xxx
- * List all watched wallets for a user.
+ * GET /api/tracker/list
+ * List all watched wallets for the authenticated user.
+ * Auth: Telegram initData via telegramAuthMiddleware.
  */
-trackerRouter.get("/tracker/list", async (req: Request, res: Response) => {
+trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
     try {
-        const telegramId = req.query.telegramId as string;
-
-        if (!telegramId) {
-            res.status(400).json({ error: "Missing telegramId" });
-            return;
-        }
+        const telegramId = res.locals.telegramId as string;
 
         const user = await prisma.user.findUnique({ where: { telegramId } });
         if (!user) {
             res.status(404).json({ error: "User not found" });
             return;
         }
+
+        const limit = await getWalletLimit(telegramId, user.id);
 
         const wallets = await prisma.watchedWallet.findMany({
             where: { userId: user.id, active: true },
@@ -139,7 +171,7 @@ trackerRouter.get("/tracker/list", async (req: Request, res: Response) => {
                 createdAt: w.createdAt,
             })),
             count: wallets.length,
-            limit: 3,
+            limit: limit === Infinity ? null : limit,
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";

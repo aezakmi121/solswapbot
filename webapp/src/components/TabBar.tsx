@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-export type TabId = "wallet" | "swap" | "scan" | "history" | "settings" | "admin";
+export type TabId = "wallet" | "swap" | "scan" | "tracker" | "history" | "settings" | "admin";
 
 interface TabBarProps {
     activeTab: TabId;
@@ -43,6 +43,20 @@ function ScanIcon({ active }: { active: boolean }): ReactElement {
     );
 }
 
+/** Whale Tracker — eye with a wave beneath it */
+function TrackerIcon({ active }: { active: boolean }): ReactElement {
+    const w = active ? 2 : 1.75;
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            {/* Eye shape */}
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={w} />
+            {/* Dot in the pupil when active */}
+            {active && <circle cx="12" cy="12" r="1.2" fill="currentColor" />}
+        </svg>
+    );
+}
+
 function HistoryIcon({ active }: { active: boolean }): ReactElement {
     const w = active ? 2 : 1.75;
     return (
@@ -80,10 +94,11 @@ function AdminIcon({ active }: { active: boolean }): ReactElement {
 type IconComponent = (props: { active: boolean }) => ReactElement;
 
 const TABS: Array<{ id: TabId; label: string; Icon: IconComponent }> = [
-    { id: "wallet",   label: "Wallet",   Icon: WalletIcon },
-    { id: "swap",     label: "Swap",     Icon: SwapIcon },
-    { id: "scan",     label: "Scan",     Icon: ScanIcon },
-    { id: "history",  label: "History",  Icon: HistoryIcon },
+    { id: "wallet",   label: "Wallet",  Icon: WalletIcon },
+    { id: "swap",     label: "Swap",    Icon: SwapIcon },
+    { id: "scan",     label: "Scan",    Icon: ScanIcon },
+    { id: "tracker",  label: "Tracker", Icon: TrackerIcon },
+    { id: "history",  label: "History", Icon: HistoryIcon },
     { id: "settings", label: "Settings", Icon: SettingsIcon },
 ];
 

@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-09 | Version: 0.9.0
+> Updated: 2026-03-10 | Version: 1.0.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -71,8 +71,8 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │ Telegram Client                                                        │
 │  ┌─────────────────┐          ┌─────────────────────────────────────┐ │
 │  │  Grammy Bot      │          │  Mini App (Vite + React)            │ │
-│  │  /start → opens  │          │  5 tabs: Wallet | Swap | Scan |     │ │
-│  │  Mini App        │          │  Settings | History                 │ │
+│  │  /start → opens  │          │  6 tabs: Wallet | Swap | Scan |     │ │
+│  │  Mini App        │          │  Tracker | History | Settings        │ │
 │  └────────┬─────────┘          └──────────────────┬──────────────────┘ │
 └───────────┼──────────────────────────────────────┼────────────────────┘
             │                                       │
@@ -94,6 +94,8 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  GET  /api/activity           POST /api/send                          │
 │  POST /api/transfer/confirm   GET  /api/transactions                  │
 │  GET  /api/user/referrals    DELETE /api/user                         │
+│  POST /api/tracker/watch      POST /api/tracker/unwatch               │
+│  GET  /api/tracker/list                                               │
 ├───────────────────────────────────────────────────────────────────────┤
 │ SQLite via Prisma ORM  (6 models, see Database Schema)                │
 └───────────────────────────────────────────────────────────────────────┘
@@ -177,10 +179,11 @@ solswapbot/
 │   │       ├── history.ts        # GET /api/history (last 20 swaps) + GET /api/activity (swaps+sends merged)
 │   │       ├── price.ts          # GET /api/price/:mint  (Jupiter Price V3, public)
 │   │       ├── quote.ts          # GET /api/quote  (Jupiter quote + USD breakdown + slippageBps support)
-│   │       ├── scan.ts           # GET /api/scan (5/day free limit) + GET /api/scan/history [limit: v0.8.0]
+│   │       ├── scan.ts           # GET /api/scan (10/day free limit) + GET /api/scan/history [v1.0.0: was 5]
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
+│   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + GET /api/tracker/list  [v1.0.0: fully wired]
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
 │   │       ├── webhook.ts        # POST /api/webhook/helius  (Helius enhanced tx webhook receiver)
@@ -256,10 +259,11 @@ solswapbot/
 │       ├── TokenSelector.tsx     # Reusable token search modal (Jupiter-powered, used in SwapPanel)
 │       │
 │       ├── components/
-│       │   ├── TabBar.tsx            # Fixed bottom nav: Wallet | Swap | Scan | Settings | History (5 tabs)
+│       │   ├── TabBar.tsx            # Fixed bottom nav: Wallet | Swap | Scan | Tracker | History | Settings (6 tabs) [v1.0.0]
 │       │   ├── WalletTab.tsx         # Portfolio home: total USD, address, action buttons, token list, activity feed, pull-to-refresh
 │       │   ├── SwapPanel.tsx         # Full swap UI: quote, slippage, AbortController, history slide-up, cross-chain mode
 │       │   ├── ScanPanel.tsx         # Token scanner: address input, RiskGauge, check results, recent scans
+│       │   ├── TrackerPanel.tsx      # Whale Tracker tab: list/add/remove watched wallets, slot badge, tier limit, upgrade hint [v1.0.0]
 │       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, referral code, about, logout
 │       │   ├── TransactionsTab.tsx   # 5th tab: paginated history, type chips, date chips, load more, detail modal
 │       │   ├── ReceiveModal.tsx      # Bottom sheet: QR code, full address, copy, share
@@ -375,7 +379,8 @@ model TokenScan {
 }
 
 model WatchedWallet {
-  // Schema exists. No API routes yet. Reserved for Phase 3 (Whale Tracker).
+  // Fully live as of v1.0.0. API routes: POST /tracker/watch|unwatch, GET /tracker/list
+  // Limits: free=3, WHALE_TRACKER/ALL_ACCESS sub=20, admin=unlimited
   userId        String
   walletAddress String
   label         String?
@@ -384,7 +389,7 @@ model WatchedWallet {
 }
 
 model Subscription {
-  // Schema exists. No enforcement logic yet. Reserved for Phase 3.
+  // Tier enforcement active for Scanner (10/day free) and Whale Tracker (3 free, 20 paid).
   userId    String    @unique
   tier      SubTier   @default(FREE)
   expiresAt DateTime?
@@ -399,8 +404,9 @@ enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
 - `Transfer.direction` is `"SEND"` (user sent tokens) or `"RECEIVE"` (incoming via Helius webhook).
 - `Transfer.senderAddress` is only set for receives (who sent the tokens to the user).
 - `Swap.status` uses the `SwapStatus` enum; `Transfer.status` uses a plain `String`.
-- `fees.ts` and `referrals.ts` in `db/queries/` are stubs with no active logic.
-- `WatchedWallet` and `Subscription` are schema-only — no enforcement anywhere in the codebase.
+- `fees.ts` and `referrals.ts` in `db/queries/` are wired via `/api/admin/*` and `/api/user/referrals`.
+- `WatchedWallet`: fully live (v1.0.0). API: POST /tracker/watch|unwatch, GET /tracker/list.
+- `Subscription.tier`: enforced for scanner (10 free/day) and tracker (3 free / 20 paid).
 
 ---
 
@@ -737,6 +743,17 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - "View Terms of Use" re-opens TermsModal
 - Log Out button (Privy logout)
 
+**Tab 4 — Tracker (Whale Tracker)** [v1.0.0 — NEW]
+- Add/remove Solana wallet addresses to watch for large movements
+- Optional label per wallet (e.g. "Whale A", "DEV wallet")
+- Slot counter badge: shows `X / Y wallets` (turns amber when full)
+- Tier limits: Free = 3 wallets, WHALE_TRACKER/ALL_ACCESS sub = 20 wallets, Admin = unlimited
+- "Upgrade" hint shown when free tier is at limit
+- Soft-delete (unwatch sets active=false, not DB delete)
+- Eye SVG icon in tab bar; active state shows filled pupil
+- Alerts fire via Telegram when tracked wallet moves ≥ 10 SOL (polling every 30s)
+- First poll sets baseline — no alerts on startup, only on NEW transactions
+
 **Tab 5 — History (Transactions)**
 - Type chips: All / Swaps / Sends / Receives (via Helius webhook)
 - Date preset chips: Today / 7 days / 30 days / Custom
@@ -785,7 +802,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | AUD-M3 | ~~MEDIUM~~ **FIXED** | Quote display used `Number(outAmount)` causing precision loss for values > 2^53 | `api/routes/quote.ts` | **DONE** — v0.5.3 audit fix |
 | AUD-L2 | ~~LOW~~ **FIXED** | `/api/transactions` silently accepted unknown preset values | `api/routes/transactions.ts` | **DONE** — v0.5.3 audit fix |
 | DB-1 | ~~INFO~~ **FIXED** | `fees.ts` and `referrals.ts` now wired via `/api/admin/*` routes + referral earnings in `/api/user` | `api/routes/admin.ts`, `api/routes/user.ts` | **DONE** — v0.8.0 |
-| DB-2 | ~~INFO~~ **PARTIAL** | `Subscription.tier` now checked in scanner (5/day free limit). `WatchedWallet` still unused. | `api/routes/scan.ts` | Scanner gate done v0.8.0. Whale tracker reserved Phase 3. |
+| DB-2 | ~~INFO~~ **FIXED** | `Subscription.tier` enforced in scanner (10/day free) and whale tracker (3 free / 20 paid). `WatchedWallet` fully live. | `api/routes/scan.ts`, `api/routes/tracker.ts` | **DONE** — v1.0.0 |
+| TRK-1 | ~~HIGH~~ **FIXED** | `trackerRouter` was never registered in `server.ts` — all `/api/tracker/*` returned 404. | `api/server.ts` | **DONE** — v1.0.0 |
+| TRK-2 | ~~HIGH~~ **FIXED** | `tracker.ts` read `telegramId` from `req.body` instead of auth middleware — any user could spoof another's ID. | `api/routes/tracker.ts` | **DONE** — v1.0.0 |
+| SEC-1 | ~~MEDIUM~~ **FIXED** | No body size limit on Express JSON parser — oversized payloads accepted. | `api/server.ts` | **DONE** — `express.json({ limit: "100kb" })` — v1.0.0 |
+| SVC-1 | ~~HIGH~~ **FIXED** | `startWalletMonitor()` implemented but never called — Whale Tracker never ran in production. | `src/app.ts` | **DONE** — v1.0.0 |
 | MON-1 | ~~MEDIUM~~ **FIXED** | Uptime monitoring configured (UptimeRobot) | VPS | **DONE** — user configured externally |
 | TEST-1 | ~~HIGH~~ **FIXED** | Unit test suite exists (`npm test`, 23 tests: auth, fee bypass, address validation). Integration smoke tests exist (`npm run test:live`, 13 tests). No end-to-end Privy/swap signing tests. | `src/__tests__/smoke.test.ts`, `scripts/smoke-test.sh` | Unit + integration + React frontend testing COMPLETE. |
 | RECV-1 | ~~MEDIUM~~ **FIXED** | Backend + Frontend: Helius webhook records incoming transfers. `TransactionsTab.tsx` placeholder removed, early return removed, `type=receive` API calls fully wired up. `api.ts` type updated to accept `"receive"`. | `helius/client.ts`, `helius/parser.ts`, `api/routes/webhook.ts`, `webapp/src/components/TransactionsTab.tsx`, `webapp/src/lib/api.ts` | **DONE** — v0.7.1 |
@@ -1356,3 +1377,162 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ### 2026-02-24 — Phase 1: Privy Integration
 - Privy embedded wallet + in-app swap signing
 - POST /api/user/wallet, GET /api/history, swap history panel
+
+---
+
+## 2026-03-10 — Production Audit + v1.0.0 Fixes (this session)
+
+### What Was Audited
+
+Full production-readiness audit run after pulling latest (29 files, 4991 insertions). Full report
+in `AUDIT_REPORT_2026-02-27.md`. Summary of findings and fixes from this session:
+
+### Bugs Fixed
+
+#### 1. Whale Tracker never started (`app.ts`)
+`startWalletMonitor()` was implemented in `src/tracker/monitor.ts` but **never called** from
+`app.ts`. The whale tracker would never run in any deployment. Fixed by adding the import
+and call after `startBridgePoller()` in `main()`.
+
+```typescript
+// ADDED to src/app.ts:
+import { startWalletMonitor } from "./tracker/monitor";
+// ...
+startWalletMonitor(); // polls watched wallets every 30s
+```
+
+#### 2. `trackerRouter` never registered (`server.ts`)
+`src/api/routes/tracker.ts` existed but was **never imported or mounted** in `server.ts`.
+All `/api/tracker/*` endpoints returned 404 to every client. Fixed by adding:
+```typescript
+import { trackerRouter } from "./routes/tracker";
+// ...
+app.use("/api", telegramAuthMiddleware, trackerRouter);
+```
+
+#### 3. `tracker.ts` auth bypass vulnerability (`tracker.ts`)
+The original `tracker.ts` read `telegramId` from `req.body.telegramId` instead of using
+`res.locals.telegramId` set by `telegramAuthMiddleware`. This allowed any authenticated
+Telegram user to watch/unwatch wallets on behalf of any other user by spoofing the
+`telegramId` field in the request body.
+
+Fixed: entire `tracker.ts` rewritten to use `res.locals.telegramId` throughout. The
+`telegramId` field is no longer accepted from request bodies.
+
+#### 4. No request body size limit (`server.ts`)
+Express was configured with `express.json()` (no limit). A malicious actor could send
+arbitrarily large JSON bodies. Fixed:
+```typescript
+app.use(express.json({ limit: "100kb" }));
+```
+
+### Features Added
+
+#### Whale Tracker: Tiered Wallet Limits (`tracker.ts`)
+The previously hardcoded `3`-wallet limit is now tier-aware:
+
+| Tier | Wallet Limit |
+|---|---|
+| `FREE` | 3 wallets |
+| `WHALE_TRACKER` or `ALL_ACCESS` subscription | 20 wallets |
+| Admin (`ADMIN_TELEGRAM_ID`) | Unlimited |
+
+The limit is checked against the live `Subscription` record for the authenticated user.
+Limit check happens BEFORE the upsert to prevent race conditions.
+
+#### Whale Tracker Tab in Bottom Nav (`TabBar.tsx`, `App.tsx`, `TrackerPanel.tsx`)
+Added a 6th tab to the Mini App bottom navigation:
+- **TabBar**: `"tracker"` added to `TabId` union and `TABS` array between Scan and History.
+  Uses an eye SVG icon (active state shows filled pupil).
+- **TrackerPanel** (new component): wallet list, add-wallet form, slot badge, upgrade hint,
+  remove button per wallet, loading/empty/error states, footer note about alert threshold.
+- **App.tsx**: imports `TrackerPanel`, renders it for `activeTab === "tracker"`.
+- **index.css**: TrackerPanel styles added (`.tracker-*` class family).
+
+---
+
+## PostgreSQL Migration Plan (Future — NOT yet needed)
+
+This section documents the migration path when SQLite becomes a bottleneck.
+**Do NOT migrate until DAU consistently exceeds ~1,000 users.**
+
+### Why PostgreSQL?
+
+SQLite constraints that matter at scale:
+- Single writer (PM2 `instances: 1` enforces this)
+- No connection pooling
+- No read replicas
+- File-based (VPS disk, not redundant)
+
+PostgreSQL handles millions of users. Discord, Instagram, GitHub, Shopify all use it.
+
+### Recommended Host: Neon (neon.tech)
+
+Reason: serverless PostgreSQL with scale-to-zero, Vercel partnership, generous free tier,
+best developer experience, no idle billing.
+
+| Scale | Host | Monthly Cost |
+|---|---|---|
+| 0–10K users | Neon Free | $0 |
+| 10K–100K users | Neon Scale | ~$20–50 |
+| 100K–1M users | Neon with read replicas | ~$100–300 |
+| 1M+ | Neon Enterprise | Custom |
+
+Alternatives in order: Supabase (500 MB free, good UI), Railway ($5 credits/month).
+
+### Migration Steps (When Ready)
+
+Because the entire codebase uses Prisma ORM, the migration is **2 config changes + 1 command**:
+
+**Step 1 — Create the Neon database:**
+1. Go to neon.tech → Create Project → Copy connection string.
+   Format: `postgresql://user:pass@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require`
+
+**Step 2 — Update `schema.prisma`:**
+```diff
+ datasource db {
+-  provider = "sqlite"
++  provider = "postgresql"
+   url      = env("DATABASE_URL")
+ }
+```
+
+**Step 3 — Update `.env` (on VPS):**
+```bash
+DATABASE_URL=postgresql://user:pass@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require
+```
+
+**Step 4 — Apply schema:**
+```bash
+npx prisma migrate deploy   # applies all existing migrations to postgres
+# OR if you haven't used migrate (db push only):
+npx prisma db push
+```
+
+**Step 5 — Migrate existing data (one-time):**
+```bash
+# Export from SQLite
+npx prisma db execute --file scripts/export.sql  # generates CSV
+# Import to Postgres
+# Use Neon Console SQL editor or pg tools
+```
+Or use `pgloader` for automated SQLite → PostgreSQL migration.
+
+**Application code: zero changes needed.** Prisma abstracts the DB entirely.
+
+### Things to Watch After Migration
+- `BigInt` serialization: Prisma handles this but verify `JSON.stringify` still works in responses
+  (BigInt isn't JSON-serializable natively — but `feeAmountUsd` is `Decimal` not `BigInt`)
+- `Transfer.direction` and `Transfer.status` are plain strings in SQLite; consider converting
+  to proper Prisma enums in a migration (cleaner in Postgres, was harder in SQLite)
+- PM2 `instances: 1` constraint can be lifted with PostgreSQL (supports concurrent writes)
+- Connection pooling: use Prisma Accelerate or pgBouncer for serverless functions
+
+### Readiness Checklist (check before migrating)
+- [ ] DAU consistently > 1000
+- [ ] VPS SQLite file backed up
+- [ ] Neon project created, connection string in hand
+- [ ] `schema.prisma` provider changed to `postgresql`
+- [ ] `npx prisma migrate deploy` runs successfully on staging
+- [ ] All existing tests pass against new DB
+- [ ] Data migrated and row counts verified

@@ -6,6 +6,7 @@ import { pollTransactionInBackground } from "./solana/transaction";
 import { initHeliusWebhook, isHeliusEnabled } from "./helius/client";
 import { startBridgePoller } from "./bridge/bridgePoller";
 import { initTokenCache } from "./aggregator/lifiTokens";
+import { startWalletMonitor } from "./tracker/monitor";
 
 async function main(): Promise<void> {
   console.log(`Starting SolSwap Bot (${config.NODE_ENV})...`);
@@ -44,6 +45,9 @@ async function main(): Promise<void> {
 
   // Start background bridge status poller (checks SUBMITTED cross-chain swaps every 60s)
   startBridgePoller();
+
+  // Start whale tracker (polls watched wallets every 30s for large transactions)
+  startWalletMonitor();
 
   // Pre-warm the LI.FI token cache (non-blocking, refreshes every 30 min)
   initTokenCache();

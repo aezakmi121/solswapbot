@@ -13,6 +13,7 @@ import { TabBar, TabId } from "./components/TabBar";
 import { SwapPanel } from "./components/SwapPanel";
 import { WalletTab } from "./components/WalletTab";
 import { ScanPanel } from "./components/ScanPanel";
+import { TrackerPanel } from "./components/TrackerPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { AdminPanel } from "./components/AdminPanel";
 import { Toast } from "./components/Toast";
@@ -237,6 +238,9 @@ export function App() {
                         if (token) setPendingSwapToken(token);
                         setActiveTab("swap");
                     }} />
+                )}
+                {activeTab === "tracker" && (
+                    <TrackerPanel />
                 )}
                 {activeTab === "history" && (
                     <TransactionsTab walletAddress={walletAddress} />

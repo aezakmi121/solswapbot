@@ -31,6 +31,7 @@ import { transferRouter } from "./routes/transfer";
 import { transactionsRouter } from "./routes/transactions";
 import { webhookRouter } from "./routes/webhook";
 import { adminRouter } from "./routes/admin";
+import { trackerRouter } from "./routes/tracker";
 
 /**
  * Creates and configures the Express API server.
@@ -46,8 +47,8 @@ export function createApiServer(): express.Express {
     // Security headers (M2)
     app.use(helmet());
 
-    // Body parsing
-    app.use(express.json());
+    // Body parsing — 100kb limit prevents large-payload attacks
+    app.use(express.json({ limit: "100kb" }));
 
     // CORS — locked to specific origin in production (C4)
     app.use(
@@ -90,6 +91,7 @@ export function createApiServer(): express.Express {
     app.use("/api", telegramAuthMiddleware, transferRouter);
     app.use("/api", telegramAuthMiddleware, transactionsRouter);
     app.use("/api", telegramAuthMiddleware, adminRouter);
+    app.use("/api", telegramAuthMiddleware, trackerRouter);
 
     // Global error handler (improved: logs full error object)
     app.use(
