@@ -64,8 +64,8 @@ export function AdminPanel() {
     if (!stats || !usersData) return null;
 
     const formatUsd = (val: number) =>
-        "$" + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const formatNum = (val: number) => val.toLocaleString();
+        "$" + val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatNum = (val: number) => val.toLocaleString("en-US");
     const timeAgo = lastUpdated
         ? `${Math.floor((Date.now() - lastUpdated.getTime()) / 1000)}s ago`
         : "";

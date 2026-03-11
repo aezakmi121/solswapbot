@@ -83,9 +83,9 @@ describe('GET /api/scan', () => {
         expect(prisma.tokenScan.create).toHaveBeenCalled(); // Should log history
     });
 
-    it('should return 429 when FREE user hits 5 scans', async () => {
-        // Mock that the user has reached 5 scans today
-        vi.mocked(prisma.tokenScan.count).mockResolvedValue(5);
+    it('should return 429 when FREE user hits 10 scans', async () => {
+        // Mock that the user has reached 10 scans today
+        vi.mocked(prisma.tokenScan.count).mockResolvedValue(10);
         
         const res = await request(app)
             .get(`/api/scan?mint=${VALID_MINT}`)
@@ -96,7 +96,7 @@ describe('GET /api/scan', () => {
     });
 
     it('should bypass limit if user has PRO subscription', async () => {
-        vi.mocked(prisma.tokenScan.count).mockResolvedValue(10); // Over limit
+        vi.mocked(prisma.tokenScan.count).mockResolvedValue(15); // Over limit
         vi.mocked(prisma.subscription.findUnique).mockResolvedValue({ tier: 'PRO' } as any);
         
         const res = await request(app)

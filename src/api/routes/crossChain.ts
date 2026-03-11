@@ -8,6 +8,9 @@ import { prisma } from "../../db/client";
 
 /** Convert a human-readable amount string to smallest unit string using BigInt arithmetic. */
 function toSmallestUnit(humanAmount: string, decimals: number): string {
+    if (humanAmount.startsWith(".")) {
+        humanAmount = "0" + humanAmount;
+    }
     const [intPart, fracPart = ""] = humanAmount.split(".");
     const padded = fracPart.padEnd(decimals, "0").slice(0, decimals);
     return (BigInt(intPart) * BigInt(10 ** decimals) + BigInt(padded || "0")).toString();

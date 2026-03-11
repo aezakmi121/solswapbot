@@ -78,7 +78,7 @@ sendRouter.post("/send", async (req: Request, res: Response) => {
             const mintPubkey = new PublicKey(tokenMint);
 
             // Fetch decimals from on-chain mint account
-            let decimals = 6;
+            let decimals: number | null = null;
             try {
                 const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
                 const parsed = (mintInfo.value?.data as any)?.parsed;
@@ -86,7 +86,22 @@ sendRouter.post("/send", async (req: Request, res: Response) => {
                     decimals = parsed.info.decimals;
                 }
             } catch {
-                // Use fallback decimals
+                // Ignore RPC fail
+            }
+
+            if (decimals === null) {
+                try {
+                    const { getTokenByMint } = await import("../../jupiter/tokens");
+                    const cached = await getTokenByMint(tokenMint);
+                    if (cached) decimals = cached.decimals;
+                } catch {
+                    // Ignore
+                }
+            }
+
+            if (decimals === null || decimals === undefined) {
+                res.status(500).json({ error: "Failed to fetch token decimals. Transfer aborted for safety." });
+                return;
             }
 
             const rawAmount = BigInt(Math.round(amountNum * 10 ** decimals));

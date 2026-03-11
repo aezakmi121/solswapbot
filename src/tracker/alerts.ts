@@ -9,7 +9,8 @@ export interface AlertData {
     walletAddress: string;
     label: string | null;
     direction: "sent" | "received";
-    amount: number;          // SOL amount
+    amount: number;          // Token or SOL amount
+    symbol?: string;         // Token symbol (e.g. USDC, SOL)
     signature: string;       // Transaction signature
 }
 
@@ -20,14 +21,15 @@ export function formatAlert(data: AlertData): string {
     const emoji = data.direction === "received" ? "🟢" : "🔴";
     const verb = data.direction === "received" ? "Received" : "Sent";
     const walletLabel = data.label ?? shortenAddress(data.walletAddress);
-    const solAmount = data.amount.toFixed(2);
+    const amountStr = data.amount.toLocaleString("en-US", { maximumFractionDigits: 4 });
+    const symbol = data.symbol ?? "SOL";
 
     const solscanUrl = `https://solscan.io/tx/${data.signature}`;
 
     return [
         `${emoji} *Whale Alert*`,
         ``,
-        `*${walletLabel}* ${verb.toLowerCase()} *${solAmount} SOL*`,
+        `*${walletLabel}* ${verb.toLowerCase()} *${amountStr} ${symbol}*`,
         ``,
         `💼 Wallet: \`${shortenAddress(data.walletAddress)}\``,
         `🔗 [View TX on Solscan](${solscanUrl})`,

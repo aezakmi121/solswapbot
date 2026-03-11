@@ -280,10 +280,15 @@ trackerRouter.get("/tracker/portfolio/:walletAddress", async (req: Request, res:
                 const info = account.account.data.parsed.info;
                 const uiAmount = info.tokenAmount.uiAmount;
                 if (uiAmount > 0) {
-                    balanceMap.set(info.mint, {
-                        amount: uiAmount,
-                        decimals: info.tokenAmount.decimals,
-                    });
+                    const existing = balanceMap.get(info.mint);
+                    if (existing) {
+                        existing.amount += uiAmount;
+                    } else {
+                        balanceMap.set(info.mint, {
+                            amount: uiAmount,
+                            decimals: info.tokenAmount.decimals,
+                        });
+                    }
                 }
             }
 

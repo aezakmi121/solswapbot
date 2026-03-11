@@ -1110,6 +1110,12 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 
 ## Changelog
 
+### 2026-03-11 — Production QA & Bug Hunts (v1.0.1)
+- **send.ts Fix:** Removed silent decimals fallback (defaults to 6). Now properly fetches from Jupiter cache or aborts transfer if on-chain fetch fails for safety.
+- **tracker.ts Fix:** Replaced `balanceMap.set` with `balanceMap.get` check to cleanly accumulate balance if overlapping mints (e.g. wrapped SOL) are present natively, preventing native SOL balance overwrites.
+- **webhook.ts Fix:** Added Whale Alerts for large SPL token transfers by dynamically calculating their USD equivalent using `getTokenPricesBatch`.
+- **crossChain.ts Fix:** Patched a BigInt string parsing crash caused by omitting the leading zero when manually entering fractional cross-chain input amounts (e.g., .5).
+
 ### 2026-03-09 — EVM-Origin Bridge Signing: Full Cross-Chain in All Directions (v0.9.1)
 - **EVM-origin bridges now live:** Users can bridge from any EVM chain (Ethereum, BSC, Polygon, Arbitrum, Base) to Solana or other EVM chains. Previously gated with "coming soon" banner.
 - **PrivyProvider chain config:** Added `supportedChains: [mainnet, polygon, bsc, arbitrum, base]` from `@privy-io/chains`. No `viem` dependency needed — Privy already bundles compatible chain objects.

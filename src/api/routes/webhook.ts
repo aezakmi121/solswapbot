@@ -127,6 +127,7 @@ webhookRouter.post("/webhook/helius", async (req: Request, res: Response) => {
                             label: watchedWallet.label,
                             direction,
                             amount: solAmount,
+                            symbol: "SOL",
                             signature: event.signature,
                         });
                         // Non-blocking fire-and-forget
@@ -134,6 +135,57 @@ webhookRouter.post("/webhook/helius", async (req: Request, res: Response) => {
                             console.error("Helius whale alert send error:", e)
                         );
                     }
+                }
+            }
+
+            // Whale Tracker for SPL tokens
+            const minUsdValue = Number(config.MIN_SOL_ALERT || 10) * 150; // Approximating 1 SOL = $150
+            const tokenTransfers = event.tokenTransfers as Array<{
+                fromUserAccount: string;
+                toUserAccount: string;
+                tokenAmount: number;
+                mint: string;
+            }> ?? [];
+
+            if (tokenTransfers.length > 0) {
+                try {
+                    const { getTokenPricesBatch } = await import("../../jupiter/price");
+                    const mintsToPrice = Array.from(new Set(tokenTransfers.map(t => t.mint)));
+                    const prices = await getTokenPricesBatch(mintsToPrice);
+
+                    for (const tt of tokenTransfers) {
+                        const price = prices[tt.mint]?.priceUsd || 0;
+                        const usdValue = tt.tokenAmount * price;
+                        if (usdValue < minUsdValue) continue;
+
+                        const addresses = [tt.fromUserAccount, tt.toUserAccount];
+                        for (const address of addresses) {
+                            const watchedWallet = await prisma.watchedWallet.findFirst({
+                                where: { walletAddress: address, chain: "solana", active: true },
+                                include: { user: true }
+                            });
+
+                            if (watchedWallet) {
+                                const direction = address === tt.toUserAccount ? "received" : "sent";
+                                const meta = await getTokenByMint(tt.mint);
+                                const symbol = meta?.symbol || "SPL Token";
+
+                                const alert = formatAlert({
+                                    walletAddress: watchedWallet.walletAddress,
+                                    label: watchedWallet.label,
+                                    direction,
+                                    amount: tt.tokenAmount,
+                                    symbol: symbol,
+                                    signature: event.signature,
+                                });
+                                sendTelegramAlert(watchedWallet.user.telegramId, alert).catch((e: Error) =>
+                                    console.error("Helius SPL whale alert send error:", e)
+                                );
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("SPL whale alert processing error:", e);
                 }
             }
         }
