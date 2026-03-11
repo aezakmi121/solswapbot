@@ -6195,3 +6195,8 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   font-weight: 500;
   color: var(--text-primary);
 }
+
+/* Modern Icon Sizing & Overrides */
+svg.lucide {
+  transition: opacity 0.2s, color 0.2s;
+}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Search, Copy, CheckCircle2, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { fetchTokenScan, ScanResult } from "../lib/api";
 import { RiskGauge } from "./RiskGauge";
 import { toast } from "../lib/toast";
@@ -120,7 +121,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                             if (text.trim()) setMint(text.trim());
                         }}
                     >
-                        📋
+                        <Copy size={16} />
                     </button>
                 </div>
                 <button
@@ -131,7 +132,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                     {loading ? (
                         <><span className="btn-spinner" /> Scanning...</>
                     ) : (
-                        "🔍 Scan Token"
+                        <span style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}><Search size={16} /> Scan Token</span>
                     )}
                 </button>
             </div>
@@ -162,7 +163,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                             <div key={i} className="scan-check-wrap">
                                 <div className="scan-check-row">
                                     <span className={`scan-check-icon ${check.safe ? "scan-check-safe" : "scan-check-warn"}`}>
-                                        {check.safe ? "✅" : "⚠️"}
+                                        {check.safe ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
                                     </span>
                                     <span className="scan-check-name">{check.name}</span>
                                     <span className="scan-check-detail">{check.detail}</span>
@@ -222,13 +223,13 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                                 icon: result.tokenInfo.icon || "",
                             })}
                         >
-                            🔄 Swap This Token
+                            <span style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}><ArrowRightLeft size={16} /> Swap This Token</span>
                         </button>
                     )}
 
                     {/* Disclaimer */}
                     <div className="scan-disclaimer">
-                        <span className="scan-disclaimer-icon">⚠️</span>
+                        <span className="scan-disclaimer-icon"><AlertTriangle size={16} /></span>
                         <div className="scan-disclaimer-text">
                             <strong>Disclaimer:</strong> Results are based on automated on-chain data only.
                             This scanner cannot detect team malice, off-chain agreements, social engineering,

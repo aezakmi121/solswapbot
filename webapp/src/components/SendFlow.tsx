@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useWallets, useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import { Copy, CheckCircle2, XCircle } from "lucide-react";
 import { PortfolioToken, fetchSendTransaction, confirmTransfer } from "../lib/api";
 import { toast } from "../lib/toast";
 
@@ -174,8 +175,8 @@ export function SendFlow({ portfolioTokens, walletAddress, onClose, onSent }: Se
                                     value={recipient}
                                     onChange={(e) => setRecipient(e.target.value)}
                                 />
-                                <button className="send-paste-btn" onClick={handlePaste} title="Paste">
-                                    📋
+                                <button className="send-paste-btn" onClick={handlePaste} title="Paste" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Copy size={16} />
                                 </button>
                             </div>
                         </div>
@@ -261,7 +262,7 @@ export function SendFlow({ portfolioTokens, walletAddress, onClose, onSent }: Se
                 {/* ── Done ── */}
                 {step === "done" && (
                     <div className="send-status send-status--done">
-                        <div className="send-status-icon">✅</div>
+                        <div className="send-status-icon"><CheckCircle2 size={48} className="text-green-500" /></div>
                         <p>Transaction sent!</p>
                         {txSig && (
                             <a
@@ -282,7 +283,7 @@ export function SendFlow({ portfolioTokens, walletAddress, onClose, onSent }: Se
                 {/* ── Error ── */}
                 {step === "error" && (
                     <div className="send-status send-status--error">
-                        <div className="send-status-icon">❌</div>
+                        <div className="send-status-icon"><XCircle size={48} className="text-red-500" /></div>
                         <p className="send-error-msg">{error || "Transaction failed"}</p>
                         <button className="swap-btn" onClick={() => { setStep("confirm"); setError(""); }}>
                             Try Again

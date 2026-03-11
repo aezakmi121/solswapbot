@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { CheckCircle2, XCircle, AlertCircle, Clock, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, Trash2, Copy, Search, FileText } from "lucide-react";
 import { UnifiedTransaction, fetchTransactions, recheckSwap, hideTransaction } from "../lib/api";
 import { toast } from "../lib/toast";
 
@@ -42,13 +43,13 @@ function groupByMonth(
     return Array.from(map.entries()).map(([month, items]) => ({ month, items }));
 }
 
-function statusEmoji(status: string): string {
+function statusEmoji(status: string): React.ReactNode {
     switch (status.toUpperCase()) {
-        case "CONFIRMED":  return "✅";
-        case "FAILED":     return "❌";
-        case "TIMEOUT":    return "⚠️";
-        case "SUBMITTED":  return "⏳";
-        case "PENDING":    return "⏳";
+        case "CONFIRMED":  return <CheckCircle2 size={16} />;
+        case "FAILED":     return <XCircle size={16} />;
+        case "TIMEOUT":    return <AlertCircle size={16} />;
+        case "SUBMITTED":  return <Clock size={16} />;
+        case "PENDING":    return <Clock size={16} />;
         default:           return "•";
     }
 }
@@ -73,7 +74,7 @@ function shortAddr(addr: string): string {
 function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () => void; onHide: (e: React.MouseEvent) => void }) {
     return (
         <button className="tx-row" onClick={onClick}>
-            <span className="tx-row-icon">{tx.type === "swap" ? "🔄" : "📤"}</span>
+            <span className="tx-row-icon">{tx.type === "swap" ? <ArrowRightLeft size={20} /> : <ArrowUpRight size={20} />}</span>
             <div className="tx-row-body">
                 {tx.type === "swap" ? (
                     <>
@@ -103,7 +104,7 @@ function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () =>
                 <span className="tx-row-status-icon">{statusEmoji(tx.status)}</span>
                 <span className="tx-row-date">{formatTimestamp(tx.createdAt)}</span>
                 <span className="tx-row-hide" onClick={onHide} title="Hide transaction">
-                    🗑️
+                    <Trash2 size={16} />
                 </span>
             </div>
         </button>
@@ -161,8 +162,8 @@ function TxDetailModal({ tx, onClose, onStatusUpdate }: { tx: UnifiedTransaction
             <div className="tx-detail-sheet" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="tx-detail-header">
-                    <span className="tx-detail-title">
-                        {tx.type === "swap" ? "🔄 Swap Details" : "📤 Send Details"}
+                    <span className="tx-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {tx.type === "swap" ? <><ArrowRightLeft size={18} /> Swap Details</> : <><ArrowUpRight size={18} /> Send Details</>}
                     </span>
                     <button className="tx-detail-close" onClick={onClose}>✕</button>
                 </div>
@@ -241,8 +242,8 @@ function TxDetailModal({ tx, onClose, onStatusUpdate }: { tx: UnifiedTransaction
                 {tx.txSignature && (
                     <div className="tx-detail-sig-row">
                         <div className="tx-detail-sig-label">Transaction ID</div>
-                        <button className="tx-detail-sig-copy" onClick={copyTx}>
-                            {shortAddr(tx.txSignature)} 📋
+                        <button className="tx-detail-sig-copy" onClick={copyTx} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            {shortAddr(tx.txSignature)} <Copy size={14} />
                         </button>
                     </div>
                 )}
@@ -387,9 +388,9 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                 {(
                     [
                         { id: "all",     label: "All" },
-                        { id: "swap",    label: "🔄 Swaps" },
-                        { id: "send",    label: "📤 Sends" },
-                        { id: "receive", label: "📥 Receives" },
+                        { id: "swap",    label: <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><ArrowRightLeft size={14} /> Swaps</span> },
+                        { id: "send",    label: <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><ArrowUpRight size={14} /> Sends</span> },
+                        { id: "receive", label: <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><ArrowDownLeft size={14} /> Receives</span> },
                     ] as const
                 ).map(({ id, label }) => (
                     <button
@@ -457,8 +458,8 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                         <TxSkeleton />
                     ) : transactions.length === 0 ? (
                         <div className="tx-empty">
-                            <div className="tx-empty-icon">
-                                {typeFilter === "swap" ? "🔄" : typeFilter === "send" ? "📤" : typeFilter === "receive" ? "📥" : "📋"}
+                            <div className="tx-empty-icon" style={{ display: "flex", justifyContent: "center", marginBottom: "12px", color: "var(--text-muted)" }}>
+                                {typeFilter === "swap" ? <ArrowRightLeft size={32} /> : typeFilter === "send" ? <ArrowUpRight size={32} /> : typeFilter === "receive" ? <ArrowDownLeft size={32} /> : <FileText size={32} />}
                             </div>
                             <p className="tx-empty-title">No transactions found</p>
                             <p className="tx-empty-sub">

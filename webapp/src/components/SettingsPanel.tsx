@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { Copy, Check, QrCode, LogOut } from "lucide-react";
 import { fetchUser, UserData } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { TermsModal } from "./TermsModal";
@@ -115,11 +116,11 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                         <span className="settings-label">🟣 Solana</span>
                         <div className="settings-addr-row">
                             <span className="settings-addr">{shortAddr(walletAddress)}</span>
-                            <button className="settings-icon-btn" onClick={handleCopyAddr} title="Copy Solana address">
-                                {addrCopied ? "✓" : "📋"}
+                            <button className="settings-icon-btn" onClick={handleCopyAddr} title="Copy Solana address" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {addrCopied ? <Check size={16} /> : <Copy size={16} />}
                             </button>
-                            <button className="settings-icon-btn" onClick={() => setShowQr(true)} title="Show QR code">
-                                🔲
+                            <button className="settings-icon-btn" onClick={() => setShowQr(true)} title="Show QR code" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <QrCode size={16} />
                             </button>
                         </div>
                     </div>
@@ -130,8 +131,8 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                             <span className="settings-label">🔷 EVM</span>
                             <div className="settings-addr-row">
                                 <span className="settings-addr">{shortAddr(evmWalletAddress)}</span>
-                                <button className="settings-icon-btn" onClick={handleCopyEvmAddr} title="Copy EVM address">
-                                    {evmAddrCopied ? "✓" : "📋"}
+                                <button className="settings-icon-btn" onClick={handleCopyEvmAddr} title="Copy EVM address" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    {evmAddrCopied ? <Check size={16} /> : <Copy size={16} />}
                                 </button>
                             </div>
                         </div>
@@ -214,8 +215,8 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                         {/* Referral code */}
                         <div className="referral-code-row">
                             <span className="referral-code-value">{userData.referralCode.slice(0, 8)}</span>
-                            <button className="referral-code-copy" onClick={handleCopyRef} title="Copy referral link">
-                                {refCopied ? "✓" : "📋"}
+                            <button className="referral-code-copy" onClick={handleCopyRef} title="Copy referral link" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {refCopied ? <Check size={16} /> : <Copy size={16} />}
                             </button>
                         </div>
 
@@ -249,10 +250,9 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                 </div>
             </div>
 
-            {/* ── Logout ── */}
             <div className="settings-section">
-                <button className="logout-btn logout-btn--settings" onClick={logout}>
-                    🚪 Log Out
+                <button className="logout-btn logout-btn--settings" onClick={logout} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                    <LogOut size={16} /> Log Out
                 </button>
             </div>
 

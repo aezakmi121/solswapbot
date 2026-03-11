@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Activity, PieChart, X } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const tg = (window as any).Telegram?.WebApp;
@@ -72,7 +73,7 @@ interface PortfolioData {
     tokens: PortfolioToken[];
 }
 
-function WalletPortfolio({ address }: { address: string }) {
+function WalletPortfolio({ address, onClose }: { address: string; onClose: () => void }) {
     const [data, setData] = useState<PortfolioData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -95,91 +96,107 @@ function WalletPortfolio({ address }: { address: string }) {
         return () => { mounted = false; };
     }, [address]);
 
-    if (loading) {
-        return (
-            <div className="tracker-portfolio-drawer">
-                <div className="spinner" style={{ width: 16, height: 16, margin: "auto" }} />
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="tracker-portfolio-drawer">
-                <p className="tracker-error" style={{ fontSize: "0.8rem", margin: 0 }}>{error}</p>
-            </div>
-        );
-    }
-
-    if (!data || data.tokens.length === 0) {
-        return (
-            <div className="tracker-portfolio-drawer">
-                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
-                    No significant token holdings found.
-                </p>
-            </div>
-        );
-    }
-
-    // Calculate aggregated 24h change roughly
-    // (This is an approximation based on current token mix value * sum of weighted 24h changes)
-    let totalValueWithChange = 0;
-    let validWeightValue = 0;
-    for (const t of data.tokens) {
-        if (t.valueUsd && t.priceChange24h !== null) {
-            totalValueWithChange += (t.valueUsd * t.priceChange24h) / 100;
-            validWeightValue += t.valueUsd;
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <div className="spinner" style={{ width: 16, height: 16, margin: "auto" }} />
+                </div>
+            );
         }
-    }
-    const overallChangePct = validWeightValue > 0 ? (totalValueWithChange / validWeightValue) * 100 : 0;
-    const isPositive = overallChangePct >= 0;
+
+        if (error) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p className="tracker-error" style={{ fontSize: "0.8rem", margin: 0 }}>{error}</p>
+                </div>
+            );
+        }
+
+        if (!data || data.tokens.length === 0) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
+                        No significant token holdings found.
+                    </p>
+                </div>
+            );
+        }
+
+        let totalValueWithChange = 0;
+        let validWeightValue = 0;
+        for (const t of data.tokens) {
+            if (t.valueUsd && t.priceChange24h !== null) {
+                totalValueWithChange += (t.valueUsd * t.priceChange24h) / 100;
+                validWeightValue += t.valueUsd;
+            }
+        }
+        const overallChangePct = validWeightValue > 0 ? (totalValueWithChange / validWeightValue) * 100 : 0;
+        const isPositive = overallChangePct >= 0;
+
+        return (
+            <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent', padding: 0 }}>
+                <div className="tracker-portfolio-header" style={{ marginBottom: "1rem" }}>
+                    <div>
+                        <span className="tracker-portfolio-label">Net Worth</span>
+                        <div className="tracker-portfolio-value">{formatUsd(data.totalValueUsd)}</div>
+                    </div>
+                    {validWeightValue > 0 && (
+                        <div style={{ textAlign: "right" }}>
+                            <span className="tracker-portfolio-label">24h Change</span>
+                            <div className={`tracker-portfolio-change ${isPositive ? 'positive' : 'negative'}`}>
+                                {isPositive ? '+' : ''}{formatUsd(totalValueWithChange)} ({isPositive ? '+' : ''}{overallChangePct.toFixed(2)}%)
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <table className="tracker-portfolio-table">
+                    <tbody>
+                        {data.tokens.map((t, idx) => {
+                            const tPos = (t.priceChange24h ?? 0) >= 0;
+                            return (
+                                <tr key={`${t.mint}-${idx}`}>
+                                    <td className="tracker-token-col">
+                                        {t.icon ? <img src={t.icon} alt="" className="tracker-token-icon" /> : <div className="tracker-token-icon-fallback" />}
+                                        <span>{t.symbol}</span>
+                                    </td>
+                                    <td className="tracker-bal-col">
+                                        {t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                    </td>
+                                    <td className="tracker-price-col">
+                                        <div className="tracker-token-price">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</div>
+                                        {t.priceChange24h !== null && (
+                                            <div className={`tracker-token-pxchange ${tPos ? 'positive' : 'negative'}`}>
+                                                {tPos ? '+' : ''}{t.priceChange24h.toFixed(2)}%
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="tracker-val-col">
+                                        {t.valueUsd ? formatUsd(t.valueUsd) : "—"}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
 
     return (
-        <div className="tracker-portfolio-drawer">
-            <div className="tracker-portfolio-header">
-                <div>
-                    <span className="tracker-portfolio-label">Net Worth</span>
-                    <div className="tracker-portfolio-value">{formatUsd(data.totalValueUsd)}</div>
+        <div className="tx-detail-overlay" onClick={onClose} style={{ zIndex: 100 }}>
+            <div className="tx-detail-sheet" onClick={(e) => e.stopPropagation()}>
+                <div className="tx-detail-header">
+                    <span className="tx-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <PieChart size={18} /> Portfolio Holdings
+                    </span>
+                    <button className="tx-detail-close" onClick={onClose}><X size={20} /></button>
                 </div>
-                {validWeightValue > 0 && (
-                    <div style={{ textAlign: "right" }}>
-                        <span className="tracker-portfolio-label">24h Change</span>
-                        <div className={`tracker-portfolio-change ${isPositive ? 'positive' : 'negative'}`}>
-                            {isPositive ? '+' : ''}{formatUsd(totalValueWithChange)} ({isPositive ? '+' : ''}{overallChangePct.toFixed(2)}%)
-                        </div>
-                    </div>
-                )}
+                <div className="tx-detail-body">
+                    {renderContent()}
+                </div>
             </div>
-
-            <table className="tracker-portfolio-table">
-                <tbody>
-                    {data.tokens.map((t, idx) => {
-                        const tPos = (t.priceChange24h ?? 0) >= 0;
-                        return (
-                            <tr key={`${t.mint}-${idx}`}>
-                                <td className="tracker-token-col">
-                                    {t.icon ? <img src={t.icon} alt="" className="tracker-token-icon" /> : <div className="tracker-token-icon-fallback" />}
-                                    <span>{t.symbol}</span>
-                                </td>
-                                <td className="tracker-bal-col">
-                                    {t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                </td>
-                                <td className="tracker-price-col">
-                                    <div className="tracker-token-price">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</div>
-                                    {t.priceChange24h !== null && (
-                                        <div className={`tracker-token-pxchange ${tPos ? 'positive' : 'negative'}`}>
-                                            {tPos ? '+' : ''}{t.priceChange24h.toFixed(2)}%
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="tracker-val-col">
-                                    {t.valueUsd ? formatUsd(t.valueUsd) : "—"}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
         </div>
     );
 }
@@ -277,7 +294,7 @@ export function TrackerPanel() {
             {/* ── Header ── */}
             <div className="tracker-header">
                 <div className="tracker-title-row">
-                    <span className="tracker-eye-icon">👁</span>
+                    <span className="tracker-eye-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><Activity size={24} /></span>
                     <h2 className="tracker-title">Whale Tracker</h2>
                 </div>
                 <p className="tracker-subtitle">
@@ -396,10 +413,11 @@ export function TrackerPanel() {
                                                         {shortAddr(w.walletAddress)}
                                                     </span>
                                                     <button 
-                                                        className={`tracker-portfolio-btn ${isOpen ? 'active' : ''}`}
+                                                        className="tracker-portfolio-btn"
                                                         onClick={() => togglePortfolio(w.walletAddress)}
+                                                        style={{ display: "flex", alignItems: "center", gap: "6px" }}
                                                     >
-                                                        {isOpen ? "✕ Close" : "📊 Holdings"}
+                                                        <PieChart size={14} /> Holdings
                                                     </button>
                                                 </div>
                                             </div>
@@ -408,14 +426,11 @@ export function TrackerPanel() {
                                                 onClick={() => handleRemove(w.walletAddress)}
                                                 title="Stop watching"
                                                 aria-label={`Remove ${w.label ?? w.walletAddress}`}
+                                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
                                             >
-                                                ✕
+                                                <X size={14} />
                                             </button>
                                         </div>
-                                        {/* Portfolio Accordion Drawer */}
-                                        {isOpen && (
-                                            <WalletPortfolio address={w.walletAddress} />
-                                        )}
                                     </li>
                                 );
                             })}
@@ -428,6 +443,14 @@ export function TrackerPanel() {
             <p className="tracker-footer-note" style={{ marginTop: "1rem" }}>
                 🔔 Alerts fire via Telegram (≥ 10 SOL, or ≥ 1 ETH/native EVM token)
             </p>
+
+            {/* Floating Portfolio Modal */}
+            {openPortfolioId && (
+                <WalletPortfolio 
+                    address={openPortfolioId} 
+                    onClose={() => setOpenPortfolioId(null)} 
+                />
+            )}
         </div>
     );
 }

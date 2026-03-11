@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ArrowRightLeft, ArrowUpRight, ArrowDownLeft, Copy, Check } from "lucide-react";
 import { fetchPortfolio, fetchActivity, Portfolio, PortfolioToken, ActivityItem } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { SendFlow } from "./SendFlow";
@@ -41,7 +42,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     if (item.type === "swap") {
         return (
             <div className="activity-row">
-                <span className="activity-type-icon">🔄</span>
+                <span className="activity-type-icon"><ArrowRightLeft size={16} /></span>
                 <div className="activity-info">
                     <span className="activity-desc">{item.inputSymbol} → {item.outputSymbol}</span>
                     <span className="activity-time">{timeAgo(item.createdAt)}</span>
@@ -63,7 +64,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
     return (
         <div className="activity-row">
-            <span className="activity-type-icon">📤</span>
+            <span className="activity-type-icon"><ArrowUpRight size={16} /></span>
             <div className="activity-info">
                 <span className="activity-desc">
                     Sent {item.humanAmount} {item.tokenSymbol}
@@ -282,7 +283,7 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
                 <div className="portfolio-address-row">
                     <span className="portfolio-address">{shortAddr(walletAddress)}</span>
                     <button className="portfolio-copy-btn" onClick={handleCopyAddr} title="Copy address">
-                        {addrCopied ? "✓" : "📋"}
+                        {addrCopied ? <Check size={16} /> : <Copy size={16} />}
                     </button>
                 </div>
             </div>
@@ -291,19 +292,19 @@ export function WalletTab({ walletAddress, solBalance, onNavigateToSwap }: Walle
             <div className="wallet-actions">
                 <button className="wallet-action-btn" onClick={() => setShowReceive(true)}>
                     <span className="wallet-action-circle">
-                        <span className="wallet-action-icon">📥</span>
+                        <span className="wallet-action-icon"><ArrowDownLeft size={24} /></span>
                     </span>
                     <span className="wallet-action-label">Receive</span>
                 </button>
                 <button className="wallet-action-btn" onClick={() => setShowSend(true)}>
                     <span className="wallet-action-circle">
-                        <span className="wallet-action-icon">📤</span>
+                        <span className="wallet-action-icon"><ArrowUpRight size={24} /></span>
                     </span>
                     <span className="wallet-action-label">Send</span>
                 </button>
                 <button className="wallet-action-btn" onClick={onNavigateToSwap}>
                     <span className="wallet-action-circle">
-                        <span className="wallet-action-icon">🔄</span>
+                        <span className="wallet-action-icon"><ArrowRightLeft size={24} /></span>
                     </span>
                     <span className="wallet-action-label">Swap</span>
                 </button>

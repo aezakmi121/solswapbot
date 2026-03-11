@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { Copy, Check, ArrowUpRight, AlertTriangle } from "lucide-react";
 import { toast } from "../lib/toast";
 
 interface ReceiveModalProps {
@@ -62,16 +63,17 @@ export function ReceiveModal({ walletAddress, onClose }: ReceiveModalProps) {
                 <div className="receive-address">{walletAddress}</div>
 
                 <div className="receive-actions">
-                    <button className="receive-btn receive-btn--primary" onClick={handleCopy}>
-                        {copied ? "✓ Copied!" : "📋 Copy Address"}
+                    <button className="receive-btn receive-btn--primary" onClick={handleCopy} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                        {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Address</>}
                     </button>
-                    <button className="receive-btn receive-btn--secondary" onClick={handleShare}>
-                        📤 Share
+                    <button className="receive-btn receive-btn--secondary" onClick={handleShare} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                        <ArrowUpRight size={16} /> Share
                     </button>
                 </div>
 
-                <p className="receive-warning">
-                    ⚠️ Only send Solana (SPL) tokens to this address.
+                <p className="receive-warning" style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                    <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span>Only send Solana (SPL) tokens to this address.</span>
                 </p>
             </div>
         </div>
