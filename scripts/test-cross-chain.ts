@@ -103,7 +103,7 @@ async function runMockSwapSimulations() {
             toToken: "11111111111111111111111111111111", // Native SOL representation in LI.FI on Solana is often 1111... or So111... We use 111... for lifi.
             fromAmount: fromAmountWei,
             fromAddress: "0x0000000000000000000000000000000000000001", 
-            toAddress: "11111111111111111111111111111111111111111", // mock dummy destination
+            toAddress: "GsbwXfJraMomNxBcjYLcG3mxkBUiyWXAB32fGbSMQRdW", // valid Solana dummy destination
         });
 
         if (quoteETH.error) throw new Error(quoteETH.error);
