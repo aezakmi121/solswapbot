@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { UnifiedTransaction, fetchTransactions, recheckSwap } from "../lib/api";
+import { UnifiedTransaction, fetchTransactions, recheckSwap, hideTransaction } from "../lib/api";
 import { toast } from "../lib/toast";
 
 const tg = (window as any).Telegram?.WebApp;
@@ -70,7 +70,7 @@ function shortAddr(addr: string): string {
 
 // ── Transaction Row ───────────────────────────────────────────────────────────
 
-function TxRow({ tx, onClick }: { tx: UnifiedTransaction; onClick: () => void }) {
+function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () => void; onHide: (e: React.MouseEvent) => void }) {
     return (
         <button className="tx-row" onClick={onClick}>
             <span className="tx-row-icon">{tx.type === "swap" ? "🔄" : "📤"}</span>
@@ -102,6 +102,9 @@ function TxRow({ tx, onClick }: { tx: UnifiedTransaction; onClick: () => void })
             <div className="tx-row-right">
                 <span className="tx-row-status-icon">{statusEmoji(tx.status)}</span>
                 <span className="tx-row-date">{formatTimestamp(tx.createdAt)}</span>
+                <span className="tx-row-hide" onClick={onHide} title="Hide transaction">
+                    🗑️
+                </span>
             </div>
         </button>
     );
@@ -484,6 +487,21 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                                             key={tx.id}
                                             tx={tx}
                                             onClick={() => setSelectedTx(tx)}
+                                            onHide={async (e) => {
+                                                e.stopPropagation();
+                                                const rawId = tx.id.startsWith("swap_") ? tx.id.slice(5) : tx.id.startsWith("send_") ? tx.id.slice(5) : tx.id;
+                                                
+                                                // Optimistic UI update
+                                                setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
+                                                setTotal((prev) => Math.max(0, prev - 1));
+                                                
+                                                try {
+                                                    await hideTransaction(rawId, tx.type);
+                                                    toast("Transaction hidden", "success");
+                                                } catch (err) {
+                                                    toast("Failed to hide transaction", "error");
+                                                }
+                                            }}
                                         />
                                     ))}
                                 </div>

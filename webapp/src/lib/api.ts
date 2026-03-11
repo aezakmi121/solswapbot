@@ -375,6 +375,19 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
     return data.activity;
 }
 
+/** Soft-delete a transaction from the user's history */
+export async function hideTransaction(id: string, type: "swap" | "send"): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/history/hide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ id, type }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || "Failed to hide transaction");
+    }
+}
+
 /** Build an unsigned transfer transaction for SOL or SPL tokens */
 export async function fetchSendTransaction(params: {
     tokenMint: string;

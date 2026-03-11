@@ -45,6 +45,7 @@ model Swap {
   feeAmountUsd  Decimal?  // M20: Decimal avoids floating-point precision loss for USD fee values
   txSignature   String?
   status        SwapStatus @default(PENDING)
+  isHidden      Boolean    @default(false)
   createdAt     DateTime   @default(now())
 
   @@index([userId, status])
@@ -73,6 +74,7 @@ model Transfer {
   direction        String   @default("SEND") // "SEND" or "RECEIVE"
   txSignature      String?
   status           String   @default("CONFIRMED")
+  isHidden         Boolean  @default(false)
   createdAt        DateTime @default(now())
 
   @@index([userId, createdAt])
