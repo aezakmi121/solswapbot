@@ -45,11 +45,11 @@ function groupByMonth(
 
 function statusEmoji(status: string): React.ReactNode {
     switch (status.toUpperCase()) {
-        case "CONFIRMED":  return <CheckCircle2 size={16} />;
-        case "FAILED":     return <XCircle size={16} />;
-        case "TIMEOUT":    return <AlertCircle size={16} />;
-        case "SUBMITTED":  return <Clock size={16} />;
-        case "PENDING":    return <Clock size={16} />;
+        case "CONFIRMED":  return <CheckCircle2 size={16} color="#22c55e" />;
+        case "FAILED":     return <XCircle size={16} color="#ef4444" />;
+        case "TIMEOUT":    return <AlertCircle size={16} color="#f59e0b" />;
+        case "SUBMITTED":  return <Clock size={16} color="var(--text-muted)" />;
+        case "PENDING":    return <Clock size={16} color="var(--text-muted)" />;
         default:           return "•";
     }
 }
@@ -74,7 +74,7 @@ function shortAddr(addr: string): string {
 function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () => void; onHide: (e: React.MouseEvent) => void }) {
     return (
         <button className="tx-row" onClick={onClick}>
-            <span className="tx-row-icon">{tx.type === "swap" ? <ArrowRightLeft size={20} /> : <ArrowUpRight size={20} />}</span>
+            <span className="tx-row-icon">{tx.type === "swap" ? <ArrowRightLeft size={20} color="var(--accent)" /> : <ArrowUpRight size={20} color="var(--accent)" />}</span>
             <div className="tx-row-body">
                 {tx.type === "swap" ? (
                     <>
@@ -103,7 +103,7 @@ function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () =>
             <div className="tx-row-right">
                 <span className="tx-row-status-icon">{statusEmoji(tx.status)}</span>
                 <span className="tx-row-date">{formatTimestamp(tx.createdAt)}</span>
-                <span className="tx-row-hide" onClick={onHide} title="Hide transaction">
+                <span className="tx-row-hide" onClick={onHide} title="Hide transaction" style={{ color: "var(--text-muted)" }}>
                     <Trash2 size={16} />
                 </span>
             </div>
