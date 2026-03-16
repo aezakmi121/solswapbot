@@ -817,14 +817,20 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | DOC-2 | ~~LOW~~ **FIXED** | `.env.example` updated: correct `JUPITER_API_URL`, added `MORALIS_API_KEY`, `NODE_ENV`, `JUPITER_API_KEY` | `.env.example` | **DONE** — v0.7.1 |
 | FE-4 | ~~MEDIUM~~ **FIXED** | "You Receive" amount overflows token button on long decimals (no overflow/ellipsis) | `webapp/src/styles/index.css` | **DONE** — v0.7.4 |
 | FE-5 | ~~MEDIUM~~ **FIXED** | "Swap This Token" from Scan tab navigates to Swap but doesn't pre-select the scanned token. Root cause: `searchTokens()` only searched Jupiter verified list — memecoins not found. Fix: pass full token info from scan result directly. | `ScanPanel.tsx`, `App.tsx`, `SwapPanel.tsx` | **DONE** — v0.7.6 |
+| RL-1 | ~~MEDIUM~~ **FIXED** | `express-rate-limit` CVE-2026-30827: IPv4-mapped IPv6 bypass collapsed all IPv4 clients into one rate-limit bucket (DoS vector) | `package.json` | **DONE** — upgraded to 8.3.1 (v1.0.2) |
+| LIFI-1 | ~~HIGH~~ **FIXED** | LI.FI token cache retry storm: when all chain fetches fail, `cache.lastFetch` never updated, hammering LI.FI API on every request | `aggregator/lifiTokens.ts` | **DONE** — always update `lastFetch` even on empty results (v1.0.2) |
+| DEDUP-1 | ~~MEDIUM~~ **FIXED** | No txSignature deduplication on Swap/Transfer confirm — client retries create duplicate DB records | `api/routes/swap.ts`, `api/routes/transfer.ts` | **DONE** — idempotent check-before-insert (v1.0.2) |
+| TRK-3 | ~~MEDIUM~~ **FIXED** | Tracker wallet limit check-then-act race condition — concurrent requests could exceed wallet cap | `api/routes/tracker.ts` | **DONE** — wrapped in `prisma.$transaction()` (v1.0.2) |
+| TRK-4 | ~~HIGH~~ **FIXED** | Whale tracker false alerts after restart — in-memory `lastSeenSignatures` lost on restart, stale txs trigger alerts | `tracker/monitor.ts` | **DONE** — added timestamp tracking + 5-min blockTime filter (v1.0.2) |
+| TRK-5 | ~~MEDIUM~~ **FIXED** | SPL token amounts in whale alerts divided by 1e9 regardless of actual decimals — USDC/BONK amounts shown 1000x wrong | `tracker/monitor.ts` | **DONE** — uses `postTokenBalances` for correct decimals + USD price lookup (v1.0.2) |
 
 ---
 
 ## Production Readiness Assessment
 
-### Current Status: **v0.8.0 — PRODUCTION READY + REVENUE FEATURES (admin analytics, scanner monetization, bridge reliability)**
+### Current Status: **v1.0.2 — PRODUCTION READY (final audit bug fixes applied)**
 
-#### Full Audit (2026-03-08) — Rating: 9.8/10
+#### Full Audit (2026-03-16) — Rating: 9.0/10
 
 #### What IS production-ready:
 - All 7 CRITICAL security issues fixed (auth, fee bypass, CORS, etc.)
@@ -851,6 +857,11 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - `.env.example` up to date (v0.7.1)
 - LI.FI API key configured + `solswap` integrator tag recognized (v0.7.3)
 - API key validator script confirms all 20 service checks pass (v0.7.3)
+- CVE-2026-30827 patched: express-rate-limit upgraded to 8.3.1 (v1.0.2)
+- LI.FI token cache retry storm fixed (v1.0.2)
+- Swap/Transfer confirm endpoints are idempotent — no duplicate records on retry (v1.0.2)
+- Tracker wallet limit enforced atomically via Prisma $transaction (v1.0.2)
+- Whale tracker: no false alerts after restart, correct SPL token amounts (v1.0.2)
 
 #### What is NOT yet production-ready:
 
@@ -1109,6 +1120,16 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-16 — Final Audit Bug Fixes (v1.0.2)
+- **CVE-2026-30827 FIXED:** Upgraded `express-rate-limit` from 8.2.1 to 8.3.1. The default `keyGenerator` in 8.2.x applied a `/56` IPv6 subnet mask to IPv4-mapped addresses, collapsing all IPv4 clients into one rate-limit bucket (DoS vector). Fixed in 8.3.1 — no code changes needed.
+- **LI.FI cache retry storm FIXED:** `aggregator/lifiTokens.ts` — when all chain fetches failed, `cache.lastFetch` was never updated, causing every subsequent API request to trigger a new `refreshCache()` call (effectively DDoS-ing LI.FI). Fix: always update `lastFetch` even when `newTokens.size === 0`. Now retries every 30 min instead of every request.
+- **Swap/Transfer dedup FIXED:** `api/routes/swap.ts` and `api/routes/transfer.ts` — added idempotent check-before-insert on `txSignature`. If the same `txSignature` is submitted twice (client retry, network hiccup), the second call returns the existing record instead of creating a duplicate. Lookup uses `txSignature + userId` index.
+- **Tracker wallet limit race condition FIXED:** `api/routes/tracker.ts` — wrapped the count check + upsert in `prisma.$transaction()`. SQLite's Serializable isolation ensures the count won't change between the check and the insert, preventing concurrent requests from exceeding the wallet cap.
+- **Whale tracker false alerts FIXED:** `tracker/monitor.ts` — replaced flat `lastSeenSignatures` Map with `lastSeenData` Map that stores `{ signature, timestamp }`. Added `MAX_ALERT_AGE_S = 300` (5 min) filter — transactions with `blockTime` older than 5 min are skipped. Prevents false alerts after process restart when baseline is stale.
+- **SPL token amount miscalculation FIXED:** `tracker/monitor.ts` — replaced the broken `Number(info.amount) / 1e9` (which assumed 9 decimals for all tokens) with `meta.postTokenBalances` which provides correct `uiTokenAmount` per token. Added USD price lookup via `getTokenPricesBatch` + symbol lookup via `getTokensMetadata`. Alerts now trigger on `>= $150 USD` value instead of raw amount, and display the correct token symbol.
+- **Silent catch blocks replaced:** `tracker/monitor.ts` — empty `catch (err) {}` blocks in `processWallet` and `checkTransaction` now log warnings with wallet address and error message for operational visibility.
+- **VPS redeployment required:** `npm install` (updates express-rate-limit) + `npm run build` + `pm2 restart`. No Prisma/DB changes needed.
 
 ### 2026-03-11 — Production QA & Bug Hunts (v1.0.1)
 - **send.ts Fix:** Removed silent decimals fallback (defaults to 6). Now properly fetches from Jupiter cache or aborts transfer if on-chain fetch fails for safety.

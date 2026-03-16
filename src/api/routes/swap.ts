@@ -80,6 +80,19 @@ swapRouter.post("/swap/confirm", async (req: Request, res: Response) => {
             return;
         }
 
+        // Idempotent: if this tx was already confirmed, return existing record
+        // Prevents duplicate Swap rows on client retry / network hiccup
+        if (txSignature) {
+            const existing = await prisma.swap.findFirst({
+                where: { txSignature, userId: user.id },
+                select: { id: true, status: true },
+            });
+            if (existing) {
+                res.json({ swapId: existing.id, status: existing.status });
+                return;
+            }
+        }
+
         // Create the swap record
         const swap = await prisma.swap.create({
             data: {

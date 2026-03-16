@@ -77,37 +77,48 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
 
         const limit = await getWalletLimit(telegramId, user.id);
 
-        // Check against the user's tier limit
-        const existingCount = await prisma.watchedWallet.count({
-            where: { userId: user.id, active: true },
+        // Atomic count + upsert in a transaction to prevent race conditions.
+        // SQLite Serializable isolation ensures the count won't change between
+        // the check and the insert, even under concurrent requests.
+        const txResult = await prisma.$transaction(async (tx) => {
+            const existingCount = await tx.watchedWallet.count({
+                where: { userId: user.id, active: true },
+            });
+
+            if (existingCount >= limit) {
+                return { limitExceeded: true as const, count: existingCount };
+            }
+
+            const watched = await tx.watchedWallet.upsert({
+                where: {
+                    userId_walletAddress: { userId: user.id, walletAddress },
+                },
+                update: { active: true, label: label ?? undefined },
+                create: {
+                    userId: user.id,
+                    walletAddress,
+                    label: label ?? null,
+                    chain,
+                },
+            });
+
+            return { limitExceeded: false as const, watched };
         });
 
-        if (existingCount >= limit) {
+        if (txResult.limitExceeded) {
             const isAdmin = limit === WALLET_LIMITS.admin;
             const limitDisplay = isAdmin ? "unlimited" : String(limit);
             res.status(403).json({
                 error: limit === WALLET_LIMITS.free
                     ? `Free tier: max ${WALLET_LIMITS.free} watched wallets. Upgrade to Whale Tracker for ${WALLET_LIMITS.paid}!`
                     : `Limit reached: ${limitDisplay} wallets for your tier`,
-                currentCount: existingCount,
+                currentCount: txResult.count,
                 limit: limit === Infinity ? null : limit,
             });
             return;
         }
 
-        // Upsert — reactivate if previously unwatched
-        const watched = await prisma.watchedWallet.upsert({
-            where: {
-                userId_walletAddress: { userId: user.id, walletAddress },
-            },
-            update: { active: true, label: label ?? undefined },
-            create: {
-                userId: user.id,
-                walletAddress,
-                label: label ?? null,
-                chain,
-            },
-        });
+        const watched = txResult.watched!;
 
         // Register with appropriate real-time webhook provider
         if (chain === "solana") {

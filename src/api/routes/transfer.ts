@@ -37,6 +37,17 @@ transferRouter.post("/transfer/confirm", async (req: Request, res: Response) => 
         const { txSignature, tokenMint, tokenSymbol, humanAmount, recipientAddress } =
             parsed.data;
 
+        // Idempotent: if this tx was already recorded, return existing record
+        // Prevents duplicate Transfer rows on client retry / network hiccup
+        const existing = await prisma.transfer.findFirst({
+            where: { txSignature, userId: user.id },
+            select: { id: true, status: true },
+        });
+        if (existing) {
+            res.json({ transferId: existing.id, status: existing.status });
+            return;
+        }
+
         const transfer = await prisma.transfer.create({
             data: {
                 userId: user.id,
