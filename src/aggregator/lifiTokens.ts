@@ -100,6 +100,11 @@ async function refreshCache(): Promise<void> {
         cache = { tokens: newTokens, lastFetch: Date.now() };
         const total = Array.from(newTokens.values()).reduce((sum, t) => sum + t.length, 0);
         console.log(`LI.FI token cache refreshed: ${total} tokens across ${newTokens.size} chains`);
+    } else {
+        // Prevent retry storm: update timestamp even on empty results so we wait
+        // the full TTL before retrying, instead of hammering LI.FI every request.
+        cache = { ...cache, lastFetch: Date.now() };
+        console.warn("LI.FI token cache refresh returned 0 tokens (will retry in 30 min)");
     }
 }
 
