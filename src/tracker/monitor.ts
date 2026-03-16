@@ -42,8 +42,9 @@ export function startWalletMonitor(): void {
  */
 async function pollWatchedWallets(): Promise<void> {
     try {
+        // Only poll Solana wallets — EVM wallets are monitored via Moralis webhooks
         const watchedWallets = await prisma.watchedWallet.findMany({
-            where: { active: true },
+            where: { active: true, chain: "solana" },
             include: { user: true },
         });
 
