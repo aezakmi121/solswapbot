@@ -28,6 +28,22 @@ interface WalletBaseline {
 }
 const lastSeenData = new Map<string, WalletBaseline>();
 
+// Overlap guard — prevents concurrent poll cycles from piling up
+let isPolling = false;
+
+// Log throttle — limit warnings to once per wallet per 10 minutes
+const warnTimestamps = new Map<string, number>();
+const WARN_THROTTLE_MS = 600_000; // 10 minutes
+
+function throttledWarn(key: string, msg: string): void {
+    const now = Date.now();
+    const lastWarn = warnTimestamps.get(key) ?? 0;
+    if (now - lastWarn >= WARN_THROTTLE_MS) {
+        console.warn(msg);
+        warnTimestamps.set(key, now);
+    }
+}
+
 /**
  * Start polling all active watched wallets.
  * Called once when the bot starts.
@@ -41,6 +57,13 @@ export function startWalletMonitor(): void {
  * Poll all active watched wallets for new transactions.
  */
 async function pollWatchedWallets(): Promise<void> {
+    // Overlap guard — skip if previous cycle is still running
+    if (isPolling) {
+        console.log("Whale tracker: previous poll still running, skipping cycle");
+        return;
+    }
+    isPolling = true;
+
     try {
         // Only poll Solana wallets — EVM wallets are monitored via Moralis webhooks
         const watchedWallets = await prisma.watchedWallet.findMany({
@@ -50,19 +73,36 @@ async function pollWatchedWallets(): Promise<void> {
 
         if (watchedWallets.length === 0) return;
 
-        // Process wallets in small batches to avoid RPC rate limits
+        // Prune lastSeenData for wallets no longer active
+        const activeAddresses = new Set(watchedWallets.map(w => w.walletAddress));
+        for (const addr of lastSeenData.keys()) {
+            if (!activeAddresses.has(addr)) {
+                lastSeenData.delete(addr);
+            }
+        }
+        // Also prune stale warn timestamps
+        for (const key of warnTimestamps.keys()) {
+            if (!activeAddresses.has(key) && !key.startsWith("tx:")) {
+                warnTimestamps.delete(key);
+            }
+        }
+
+        // Scale batch delay with wallet count to avoid RPC overload
         const batchSize = 5;
+        const batchDelayMs = Math.min(2000, Math.max(500, watchedWallets.length * 10));
         for (let i = 0; i < watchedWallets.length; i += batchSize) {
             const batch = watchedWallets.slice(i, i + batchSize);
             await Promise.all(batch.map(processWallet));
 
-            // Small delay between batches
+            // Delay between batches — scales with total wallet count
             if (i + batchSize < watchedWallets.length) {
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, batchDelayMs));
             }
         }
     } catch (err) {
         console.error("Whale tracker poll error:", err instanceof Error ? err.message : err);
+    } finally {
+        isPolling = false;
     }
 }
 
@@ -105,8 +145,8 @@ async function processWallet(wallet: {
             await checkTransaction(wallet, sig.signature);
         }
     } catch (err) {
-        console.warn(`Whale tracker: failed to process ${wallet.walletAddress}:`,
-            err instanceof Error ? err.message : err);
+        throttledWarn(wallet.walletAddress,
+            `Whale tracker: failed to process ${wallet.walletAddress}: ${err instanceof Error ? err.message : err}`);
     }
 }
 
@@ -217,7 +257,7 @@ async function checkTransaction(
             }
         }
     } catch (err) {
-        console.warn(`Whale tracker: failed to parse tx ${signature}:`,
-            err instanceof Error ? err.message : err);
+        throttledWarn(`tx:${signature}`,
+            `Whale tracker: failed to parse tx ${signature}: ${err instanceof Error ? err.message : err}`);
     }
 }
