@@ -103,6 +103,77 @@ adminRouter.get("/admin/referrals", async (_req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/admin/set-tier
+ * Set subscription tier for one or more users by Telegram ID.
+ * Body: { telegramId: string, tier: SubTier }           — single user
+ *    OR { telegramIds: string[], tier: SubTier }         — bulk (up to 100)
+ *
+ * Valid tiers: FREE, SCANNER_PRO, WHALE_TRACKER, SIGNALS, ALL_ACCESS
+ */
+adminRouter.post("/admin/set-tier", async (req: Request, res: Response) => {
+    if (!isAdmin(res)) return;
+
+    try {
+        const { telegramId, telegramIds, tier } = req.body;
+
+        const VALID_TIERS = ["FREE", "SCANNER_PRO", "WHALE_TRACKER", "SIGNALS", "ALL_ACCESS"];
+        if (!tier || !VALID_TIERS.includes(tier)) {
+            res.status(400).json({ error: `Invalid tier. Must be one of: ${VALID_TIERS.join(", ")}` });
+            return;
+        }
+
+        // Normalize to array
+        const ids: string[] = telegramIds
+            ? (Array.isArray(telegramIds) ? telegramIds : [telegramIds])
+            : telegramId
+                ? [telegramId]
+                : [];
+
+        if (ids.length === 0) {
+            res.status(400).json({ error: "Provide telegramId (string) or telegramIds (string[])" });
+            return;
+        }
+
+        if (ids.length > 100) {
+            res.status(400).json({ error: "Max 100 users per request" });
+            return;
+        }
+
+        const results: { telegramId: string; status: string }[] = [];
+
+        for (const tgId of ids) {
+            const user = await prisma.user.findUnique({ where: { telegramId: String(tgId) } });
+            if (!user) {
+                results.push({ telegramId: String(tgId), status: "not_found" });
+                continue;
+            }
+
+            await prisma.subscription.upsert({
+                where: { userId: user.id },
+                update: { tier },
+                create: { userId: user.id, tier },
+            });
+
+            results.push({ telegramId: String(tgId), status: `set_to_${tier}` });
+        }
+
+        const updated = results.filter(r => r.status.startsWith("set_to_")).length;
+        const notFound = results.filter(r => r.status === "not_found").length;
+
+        res.json({
+            success: true,
+            tier,
+            updated,
+            notFound,
+            results,
+        });
+    } catch (err) {
+        console.error("Admin set-tier error:", err);
+        res.status(500).json({ error: "Failed to set tier" });
+    }
+});
+
+/**
  * GET /api/admin/users?limit=20
  * Latest users with their swap count and fees generated.
  */
@@ -123,12 +194,20 @@ adminRouter.get("/admin/users", async (req: Request, res: Response) => {
         const topFeeGenerators = await getTopFeeGenerators(10);
         const totalUsers = await prisma.user.count();
 
+        // Fetch subscription tiers for these users
+        const userIds = users.map((u: any) => u.id);
+        const subs = await prisma.subscription.findMany({
+            where: { userId: { in: userIds } },
+        });
+        const tierMap = new Map(subs.map(s => [s.userId, s.tier]));
+
         res.json({
             users: users.map((u: any) => ({
                 telegramId: u.telegramId,
                 telegramUsername: u.telegramUsername,
                 walletAddress: u.walletAddress ? `${u.walletAddress.slice(0, 6)}...${u.walletAddress.slice(-4)}` : null,
                 hasEvmWallet: !!u.evmWalletAddress,
+                tier: tierMap.get(u.id) ?? "FREE",
                 swapCount: u._count.swaps,
                 sendCount: u._count.transfers,
                 scanCount: u._count.scans,
