@@ -653,11 +653,14 @@ export interface AdminStats {
     fees30d: { totalUsd: number; swapCount: number };
 }
 
+export type SubTier = "FREE" | "SCANNER_PRO" | "WHALE_TRACKER" | "SIGNALS" | "ALL_ACCESS";
+
 export interface AdminUser {
     telegramId: string;
     telegramUsername: string | null;
     walletAddress: string | null;
     hasEvmWallet: boolean;
+    tier: SubTier;
     swapCount: number;
     sendCount: number;
     scanCount: number;
@@ -707,5 +710,29 @@ export async function fetchAdminUsers(): Promise<AdminUsersResponse> {
 export async function fetchAdminReferrals(): Promise<AdminReferralsResponse> {
     const res = await fetch(`${API_BASE}/api/admin/referrals`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Failed to fetch admin referrals");
+    return res.json();
+}
+
+export interface SetTierResult {
+    success: boolean;
+    tier: SubTier;
+    updated: number;
+    notFound: number;
+    results: Array<{ telegramId: string; status: string }>;
+}
+
+export async function setUserTier(telegramIds: string[], tier: SubTier): Promise<SetTierResult> {
+    const body = telegramIds.length === 1
+        ? { telegramId: telegramIds[0], tier }
+        : { telegramIds, tier };
+    const res = await fetch(`${API_BASE}/api/admin/set-tier`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to set tier");
+    }
     return res.json();
 }
