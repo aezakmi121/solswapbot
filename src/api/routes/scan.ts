@@ -46,7 +46,8 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
             if (todayScans >= FREE_SCANS_PER_DAY) {
                 // Check subscription tier — paid users bypass the limit
                 const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
-                if (!sub || sub.tier === "FREE") {
+                const isExpired = sub?.expiresAt && sub.expiresAt < new Date();
+                if (!sub || sub.tier === "FREE" || isExpired) {
                     res.status(429).json({
                         error: "Daily scan limit reached (10 free scans/day)",
                         todayScans,

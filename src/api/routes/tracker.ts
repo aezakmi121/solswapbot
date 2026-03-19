@@ -30,7 +30,8 @@ async function getWalletLimit(telegramId: string, userId: string): Promise<numbe
     }
     // Check subscription tier
     const sub = await prisma.subscription.findUnique({ where: { userId } });
-    const isPaid = sub && (sub.tier === "WHALE_TRACKER" || sub.tier === "ALL_ACCESS");
+    const isExpired = sub?.expiresAt && sub.expiresAt < new Date();
+    const isPaid = sub && !isExpired && (sub.tier === "WHALE_TRACKER" || sub.tier === "ALL_ACCESS");
     return isPaid ? WALLET_LIMITS.paid : WALLET_LIMITS.free;
 }
 
