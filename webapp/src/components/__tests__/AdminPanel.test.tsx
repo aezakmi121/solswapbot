@@ -57,7 +57,7 @@ describe("AdminPanel Component", () => {
                 {
                     telegramId: "123", telegramUsername: "whale_user",
                     swapCount: 50, referralCount: 12, walletAddress: "So11111111111111111111111111111111",
-                    hasEvmWallet: false, sendCount: 0, scanCount: 0, joinedAt: "2024-01-01T00:00:00Z"
+                    hasEvmWallet: false, tier: "FREE" as const, sendCount: 0, scanCount: 0, joinedAt: "2024-01-01T00:00:00Z"
                 }
             ],
             topFeeGenerators: [
