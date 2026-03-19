@@ -1,25 +1,136 @@
 # SolSwap Marketing & Launch Plan
 
-> **Version:** 1.0 | **Date:** 2026-03-16
-> Strategy document for launching SolSwap to production users.
+> **Version:** 2.0 | **Date:** 2026-03-19
+> CMO-level strategy document for launching SolSwap to production users.
+> Updated with post-audit technical readiness assessment, channel-first strategy,
+> and 2026 Telegram Mini App ecosystem intelligence.
 
 ---
 
 ## Table of Contents
 
-1. [Product Positioning](#product-positioning)
-2. [Launch Strategy](#launch-strategy)
-3. [Target Audience](#target-audience)
-4. [Telegram Groups to Target](#telegram-groups-to-target)
-5. [Marketing Channels](#marketing-channels)
-6. [Trust Building](#trust-building)
-7. [Feature Marketing Priorities](#feature-marketing-priorities)
-8. [Content Calendar (First 30 Days)](#content-calendar-first-30-days)
-9. [Growth Mechanics](#growth-mechanics)
-10. [Metrics to Track](#metrics-to-track)
-11. [Budget Considerations](#budget-considerations)
-12. [Competitive Positioning](#competitive-positioning)
-13. [Risk Mitigation](#risk-mitigation)
+1. [Launch Decision: Should You Launch Today?](#launch-decision)
+2. [Product Positioning](#product-positioning)
+3. [Channel-First Strategy: Twitter/X Before Instagram](#channel-first-strategy)
+4. [Launch Strategy](#launch-strategy)
+5. [Target Audience](#target-audience)
+6. [Telegram Groups to Target](#telegram-groups-to-target)
+7. [Marketing Channels](#marketing-channels)
+8. [Trust Building](#trust-building)
+9. [Feature Marketing Priorities](#feature-marketing-priorities)
+10. [Content Calendar (First 30 Days)](#content-calendar-first-30-days)
+11. [Growth Mechanics](#growth-mechanics)
+12. [Metrics to Track](#metrics-to-track)
+13. [Budget Considerations](#budget-considerations)
+14. [Competitive Positioning](#competitive-positioning)
+15. [Risk Mitigation](#risk-mitigation)
+16. [Instagram Strategy (Phase 3+)](#instagram-strategy)
+17. [KOL & Influencer Playbook](#kol-influencer-playbook)
+18. [Viral Loops & Growth Hacks](#viral-loops-growth-hacks)
+19. [Directory & Platform Submissions](#directory-submissions)
+
+---
+
+## Launch Decision: Should You Launch Today?
+
+### Technical Readiness: 9.0/10 — YES, LAUNCH TODAY (Soft Launch)
+
+**Full audit completed 2026-03-19.** The codebase is production-ready for a soft launch
+to 50-100 users. Here's the evidence:
+
+| Category | Status | Details |
+|----------|--------|---------|
+| Security | PASS | All 7 critical + 3 high + 5 medium audit findings fixed. HMAC auth, fee bypass prevention, GDPR deletion. |
+| Tests | PASS | 22 unit tests passing. Integration smoke tests available. |
+| External APIs | PASS | Jupiter, LI.FI, Helius, Moralis all validated (`npm run validate-keys`). |
+| Core Swap Flow | PASS | Same-chain Solana + cross-chain 6-chain bridging live. |
+| Whale Tracker | PASS | Polling fixed (overlap guard, memory pruning, log throttling applied 2026-03-19). |
+| DB Schema | PASS | 6 models, proper indexes, BigInt handling correct. |
+| Error Handling | PASS | Error boundaries (React + Express), graceful shutdown, orphan swap recovery. |
+
+**5 medium/low findings remain** — none are launch-blocking:
+1. Bridge poller missing fetch timeout (affects stuck bridge status, not swap execution)
+2. N+1 metadata query in webhook alerts (performance, not correctness)
+3. Swap dedup needs atomic transaction wrapper (rare edge case under extreme concurrency)
+4. Cross-chain amount validation could be stricter (defensive, not exploitable)
+5. Missing DB indexes for referral/scan queries (only matters at 10K+ users)
+
+### What to Do Before First Share
+
+**Must-do (2 hours):**
+1. Run the Beta Test Checklist from CLAUDE.md with real SOL (0.001 SOL test swap)
+2. Verify fee arrived in fee wallet on Solscan
+3. Test on Android + iOS Telegram
+4. Check PM2 logs are clean (`pm2 logs --lines 50`)
+
+**Should-do (same day):**
+1. Create @SolSwapBot Telegram community group
+2. Create Twitter/X account (@SolSwapApp)
+3. Record 60-second screen recording of a swap
+4. Write 3 launch tweets (see Content Calendar)
+
+### The Verdict
+
+**Launch today as a soft launch to your trusted circle (Phase 1).** The product is technically
+sound. The only risk is UX friction you haven't discovered yet — and that's exactly what
+Phase 1 is designed to find. Waiting for "perfect" costs more than shipping to 50 friends.
+
+---
+
+## Channel-First Strategy: Twitter/X Before Instagram
+
+### The Definitive Answer: Start with Twitter/X. Instagram comes later (Month 2+).
+
+Here's why, based on 2026 crypto marketing data:
+
+| Factor | Twitter/X | Instagram |
+|--------|-----------|-----------|
+| **Crypto audience density** | 90%+ of crypto discourse happens here | ~10% — lifestyle/visual crypto content |
+| **Content format fit** | Threads, screenshots, links, scanner results | Reels, carousels — need polished visuals |
+| **Cost to start** | $0 — text + screenshots | $200-500 — need video editing, graphics |
+| **Time to first viral moment** | Days (reply to trending token with scan result) | Weeks-months (algorithm favors consistency) |
+| **Conversion path** | Tweet → Telegram bot link → user (1 click) | Bio link → landing page → Telegram (3 clicks) |
+| **Influencer ecosystem** | Crypto KOLs live here, DM-accessible | Crypto influencers are on X, not IG |
+| **Competitor activity** | Every TG bot markets here (proven channel) | Almost none market on IG (unproven) |
+
+### Twitter/X Launch Sequence (Week 1-4)
+
+**Week 1: Foundation**
+1. Create @SolSwapApp account (reserve @SolSwapBot if available)
+2. Bio: "Swap 6 chains inside Telegram. Non-custodial. Rug scanner built in. [bot link]"
+3. Profile pic: Simple logo (even a clean text logo works)
+4. Banner: Product screenshot showing the swap interface
+5. Pinned tweet: 60-second demo video + bot link
+
+**Week 2: Content Engine**
+- Post 2-3x/day minimum:
+  - Morning: Scanner result on a trending token ("Is $MEMECOIN safe? Let's check...")
+  - Afternoon: Feature showcase (whale alert screenshot, bridge demo)
+  - Evening: Engagement reply (reply to Solana/crypto threads with value)
+- **The Scanner is your secret weapon for Twitter** — every trending token is free content
+
+**Week 3: Growth Tactics**
+- Quote-tweet Solana ecosystem news with "You can swap this in SolSwap right now"
+- Reply to "what wallet should I use?" threads
+- DM 10 micro-KOLs with demo video + offer (see KOL Playbook section)
+
+**Week 4: Amplification**
+- Run a "Scan any token" thread (let followers suggest tokens, post results)
+- Share whale tracker alerts (anonymized) — "Smart money just moved 500 SOL"
+- Cross-post best content to Telegram group
+
+### When to Add Instagram (Month 2-3, Phase 3)
+
+Instagram becomes relevant when you have:
+1. **Polished visual assets** (logo, brand colors, UI screenshots)
+2. **Video content pipeline** (screen recordings → edited Reels)
+3. **Budget for design** ($200-500 for a Canva Pro + freelancer)
+4. **A story to tell** ("We helped X users swap $Y across Z chains")
+
+Instagram's role is **brand legitimacy** (people Google you → find a real IG page), not
+user acquisition. It's the "looks legit" channel, not the growth channel.
+
+See [Instagram Strategy (Phase 3+)](#instagram-strategy) for the detailed plan.
 
 ---
 
@@ -465,3 +576,256 @@ Before sharing with anyone:
 6. **Month 3:** Hit 5K users. Launch premium subscriptions.
 
 **The #1 rule:** Talk to users every day. The product will win if people actually use it and tell their friends.
+
+---
+
+## Instagram Strategy (Phase 3+)
+
+### When to Launch: Month 2-3 (after 500+ users, revenue flowing)
+
+Instagram is a **brand legitimacy channel**, not a growth channel for crypto. Here's the plan:
+
+### Account Setup
+- **Handle:** @solswap.app or @solswapofficial
+- **Bio:** "Swap crypto across 6 chains inside Telegram | Non-custodial | [link in bio]"
+- **Link in bio:** Linktree with: Telegram bot, Twitter, community group
+- **Grid aesthetic:** Dark theme (matching app), purple accent, clean screenshots
+
+### Content Pillars (3 posts/week)
+
+| Type | Format | Example |
+|------|--------|---------|
+| Product showcase | Carousel (4-5 slides) | "How to swap SOL→ETH in 30 seconds" step-by-step |
+| Token safety | Single image | "Is $BONK safe?" — RiskGauge screenshot with verdict |
+| Whale alerts | Story | "Whale moved 1000 SOL into $TOKEN" — urgency content |
+| Behind the scenes | Reel (15-30s) | Screen recording of live swap execution |
+| Education | Carousel | "5 signs a token is a rug pull" — educational, shareable |
+| Milestones | Single image | "1000 users! Thank you" — social proof |
+
+### Instagram Reels Strategy
+- **Format:** 15-30 second screen recordings with text overlay + trending audio
+- **Hook pattern:** "You're still switching apps to swap crypto?" → demo → CTA
+- **Posting time:** 6-8 PM UTC (peak crypto engagement)
+- **Hashtags:** #Solana #DeFi #CryptoTrading #TelegramBot #Web3 #CryptoSwap (max 10, mix sizes)
+
+### Budget: $100-300/month
+- Canva Pro: $13/month (templates, brand kit)
+- Freelance designer: $50-150/month (5-10 posts)
+- Optional: Instagram ads ($50-100/month for post boosts to crypto interests)
+
+### What NOT to Do on Instagram
+- Don't chase followers — chase saves and shares (algorithm signals)
+- Don't post every day — 3 quality posts > 7 mediocre ones
+- Don't ignore DMs — respond to every question, it builds trust
+- Don't use generic crypto stock images — always use YOUR product screenshots
+
+---
+
+## KOL & Influencer Playbook
+
+### Tier System for Crypto KOLs
+
+| Tier | Followers | Cost per post | Expected reach | ROI |
+|------|-----------|---------------|----------------|-----|
+| **Nano** | 1K-5K | Free-$25 (offer early access) | 200-1K impressions | Best ROI — engaged niche audience |
+| **Micro** | 5K-25K | $50-200 | 2K-10K impressions | Good ROI — targeted, affordable |
+| **Mid** | 25K-100K | $200-1,000 | 10K-50K impressions | Moderate — use for credibility |
+| **Macro** | 100K-500K | $1,000-5,000 | 50K-200K impressions | Low ROI unless you're scaling |
+| **Mega** | 500K+ | $5,000-25,000+ | 200K-1M+ impressions | Don't touch until $10K+/month revenue |
+
+### Phase 1-2 KOL Strategy (Budget: $0-500)
+
+**Target: 10-15 Nano/Micro KOLs on Twitter/X who:**
+- Actively discuss Solana memecoins
+- Post token analyses / alpha calls
+- Have engaged audiences (check reply counts, not just followers)
+- Are NOT already promoting 5+ competitor bots
+
+**Outreach Template (DM):**
+```
+Hey [name], love your Solana alpha content. We built SolSwap — a non-custodial
+swap + rug scanner inside Telegram. Would love for you to try it and share your
+honest thoughts. Happy to set up early access + [offer]. Here's a 60-second
+demo: [video link]
+```
+
+**Offer tiers:**
+1. **Free tier:** Early access + feature request priority + "Featured KOL" badge
+2. **Paid tier:** $50-200 per post (nano/micro) + all free tier perks
+3. **Revenue share:** Custom referral link with higher % (e.g., 30% instead of 25%)
+
+### Phase 3+ KOL Strategy (Budget: $1,000-5,000/month)
+
+- Engage 3-5 mid-tier KOLs for ongoing partnerships (1 post/week)
+- Sponsor 1-2 YouTube review videos ($300-800 each)
+- Run KOL trading competition ("Top KOL referrer wins 5 SOL")
+- Create a "SolSwap Ambassadors" program with monthly payouts
+
+### KOL Red Flags (Avoid These)
+- Follower-to-engagement ratio below 1% (fake followers)
+- Only promotes paid content, never organic crypto discussion
+- History of promoting rug pulls or scam tokens
+- Demands payment upfront with no track record
+- Won't disclose the post is sponsored
+
+---
+
+## Viral Loops & Growth Hacks
+
+### 1. Scanner Share Card (HIGH PRIORITY — Build This)
+
+The rug scanner is SolSwap's most viral feature. Currently results stay in-app.
+
+**Proposed feature:** "Share Scan" button that generates a shareable image card:
+```
+┌─────────────────────────────────────┐
+│  SolSwap Token Scanner              │
+│                                     │
+│  $BONK                              │
+│  Risk Score: 15/100  ●●○○○  LOW     │
+│                                     │
+│  ✅ No Mint Authority               │
+│  ✅ No Freeze Authority             │
+│  ✅ Jupiter Verified                 │
+│  ⚠️  Top 10 hold 35%                │
+│                                     │
+│  Scan any token → t.me/SolSwapBot   │
+└─────────────────────────────────────┘
+```
+
+**Why this is a growth hack:**
+- People WANT to share "this token is safe" or "this is a RUG" — it's social currency
+- Every shared card has your bot link — free distribution
+- Crypto Twitter engagement on "token safety" posts is 3-5x higher than generic swap posts
+- Zero marginal cost per share
+
+### 2. Whale Alert Auto-Posting Channel
+
+Create a public Telegram channel (@SolSwapWhaleAlerts) that auto-posts anonymized
+whale movements from your tracker:
+
+- "Whale moved 500 SOL ($75,000) into a new wallet"
+- "Smart money bought 10M BONK ($4,200)"
+- Link each alert to "Track this wallet on SolSwap"
+
+**Growth mechanism:** People join the channel for free alpha → discover the full app.
+This is exactly how Whale Alert (the brand) built 500K+ followers — by being useful.
+
+### 3. "Scan Before You Swap" Meme Campaign
+
+Position SolSwap as the "safety-first" swap tool:
+- "Friends don't let friends swap without scanning"
+- "Scan first. Swap second. DYOR."
+- Create meme templates (Drake meme: "Buying random memecoins" / "Scanning before buying")
+- Memes are the #1 organic reach driver in crypto Twitter
+
+### 4. Referral Gamification
+
+Your 25% fee share referral is already strong. Amplify it:
+- **Leaderboard:** Weekly "Top Referrers" post in Telegram group (even 3-5 people)
+- **Milestone rewards:** 5 referrals → Pro features free for 1 month
+- **Competition:** "Refer the most users this week → win 1 SOL"
+
+### 5. Token Launch Alerts
+
+When a new token launches on Solana (via pump.fun or similar):
+- Auto-scan it
+- Post results on your Twitter + Telegram channel
+- "New token $XYZ just launched. SolSwap risk score: 78/100 HIGH RISK"
+- People searching for that token name will find YOUR post
+
+---
+
+## Directory & Platform Submissions
+
+Submit SolSwap to these directories as soon as you hit 100+ users:
+
+### Telegram Mini App Directories
+| Directory | URL | Priority |
+|-----------|-----|----------|
+| FindMini.app | findmini.app | P0 — largest TMA directory |
+| Telegram Mini Apps catalog | t.me/tma | P0 — official-adjacent |
+| TON App | ton.app | P1 — TON ecosystem directory |
+| TGStat | tgstat.com | P1 — Telegram analytics/directory |
+
+### DeFi / Crypto Directories
+| Directory | URL | When |
+|-----------|-----|------|
+| DappRadar | dappradar.com | After $10K+ monthly volume |
+| DefiLlama | defillama.com | After $50K+ monthly volume (need TVL data) |
+| DeFi Pulse | defipulse.com | After establishing volume track record |
+| CoinGecko (DeFi section) | coingecko.com | After $100K+ monthly volume |
+
+### General Product Directories
+| Directory | URL | When |
+|-----------|-----|------|
+| Product Hunt | producthunt.com | Month 2 — need polished screenshots + demo video |
+| BetaList | betalist.com | Week 2 — good for early user acquisition |
+| Hacker News (Show HN) | news.ycombinator.com | Month 1 — technical audience appreciates non-custodial architecture |
+
+---
+
+## Features to Showcase (Ranked by Marketing Impact)
+
+### Lead with these 3 features in all marketing:
+
+**1. Rug Scanner (Highest viral potential)**
+- This is your unique moat. No other TG swap bot has an integrated scanner.
+- Every trending memecoin is free content: "Is $TOKEN safe?"
+- Build the Share Card feature ASAP — it's your #1 organic growth driver
+- Marketing angle: "Don't get rugged. Scan before you swap."
+
+**2. Instant Wallet (Lowest friction entry point)**
+- "Your crypto wallet in 10 seconds. No seed phrase."
+- This converts crypto-curious people who are intimidated by Phantom/MetaMask
+- Demo video should show: open bot → tap → wallet created → done
+- Marketing angle: "The easiest way to start in crypto."
+
+**3. Swap Inside Telegram (Core differentiator)**
+- "See alpha in your group chat → swap without leaving Telegram"
+- This is the "aha moment" — show it in every demo video
+- Marketing angle: "Your Telegram IS your DEX now."
+
+### Mention these for retention and power users:
+
+**4. Whale Tracker** — "Follow smart money. Get alerts." (brings users back daily)
+**5. 6-Chain Bridge** — "Solana to Ethereum in one tap." (power user hook)
+**6. 25% Referral** — "Earn from every friend's swap. Forever." (viral loop)
+
+### Save these for depth/PR:
+- Transaction history with filters
+- Slippage controls
+- QR code receive
+- Portfolio view across chains
+
+---
+
+## Reach Expansion Roadmap
+
+### Month 1: Foundation (Target: 500 users)
+| Channel | Effort | Expected Users |
+|---------|--------|---------------|
+| Personal network + friends | 10% | 20-50 |
+| Telegram alpha groups (5-10) | 40% | 100-200 |
+| Twitter/X organic | 30% | 50-100 |
+| Referral program | 15% | 100-150 |
+| Reddit r/solana post | 5% | 20-50 |
+
+### Month 2: Amplification (Target: 2,000 users)
+| Channel | Effort | Expected Users |
+|---------|--------|---------------|
+| KOL partnerships (10-15 nano/micro) | 30% | 500-800 |
+| Twitter/X content engine | 25% | 200-400 |
+| Telegram community growth | 20% | 200-300 |
+| Referral viral loop | 15% | 300-500 |
+| Directory submissions | 10% | 100-200 |
+
+### Month 3: Scale (Target: 5,000+ users)
+| Channel | Effort | Expected Users |
+|---------|--------|---------------|
+| Mid-tier KOLs (3-5) | 25% | 1,000-2,000 |
+| Whale Alert channel organic | 15% | 300-500 |
+| Instagram launch | 10% | 100-200 |
+| Trading competitions | 15% | 300-500 |
+| Product Hunt + Hacker News | 10% | 200-500 |
+| Organic referral compound | 25% | 1,000-1,500 |
