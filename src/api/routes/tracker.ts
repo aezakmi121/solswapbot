@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { prisma } from "../../db/client";
 import { config } from "../../config";
 import { connection } from "../../solana/connection";
@@ -278,9 +278,10 @@ trackerRouter.get("/tracker/portfolio/:walletAddress", async (req: Request, res:
             const pubkey = new PublicKey(walletAddress);
             const WSOL_MINT = "So11111111111111111111111111111111111111112";
 
-            const [lamports, tokenAccounts] = await Promise.all([
+            const [lamports, tokenAccounts, token2022Accounts] = await Promise.all([
                 connection.getBalance(pubkey),
                 connection.getParsedTokenAccountsByOwner(pubkey, { programId: TOKEN_PROGRAM_ID }),
+                connection.getParsedTokenAccountsByOwner(pubkey, { programId: TOKEN_2022_PROGRAM_ID }),
             ]);
 
             const balanceMap = new Map<string, { amount: number; decimals: number }>();
@@ -288,7 +289,9 @@ trackerRouter.get("/tracker/portfolio/:walletAddress", async (req: Request, res:
                 balanceMap.set(WSOL_MINT, { amount: lamports / 1e9, decimals: 9 });
             }
 
-            for (const account of tokenAccounts.value) {
+            // Process both SPL Token and Token-2022 accounts
+            const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+            for (const account of allAccounts) {
                 const info = account.account.data.parsed.info;
                 const uiAmount = info.tokenAmount.uiAmount;
                 if (uiAmount > 0) {

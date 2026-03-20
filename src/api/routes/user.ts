@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { findUserByTelegramId, updateUserWallet, updateUserEvmWallet, getUserWithReferralCount, deleteUserAndData } from "../../db/queries/users";
 import { connection } from "../../solana/connection";
 import { PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { isValidSolanaAddress } from "../../utils/validation";
 import { getTokenPricesBatch } from "../../jupiter/price";
 import { getTokensMetadata } from "../../jupiter/tokens";
@@ -177,11 +177,14 @@ userRouter.get("/user/balances", async (req: Request, res: Response) => {
 
         const pubkey = new PublicKey(walletAddress);
 
-        // Fetch SOL balance and SPL token accounts in parallel
-        const [lamports, tokenAccounts] = await Promise.all([
+        // Fetch SOL balance, SPL token accounts, and Token-2022 accounts in parallel
+        const [lamports, tokenAccounts, token2022Accounts] = await Promise.all([
             connection.getBalance(pubkey),
             connection.getParsedTokenAccountsByOwner(pubkey, {
                 programId: TOKEN_PROGRAM_ID,
+            }),
+            connection.getParsedTokenAccountsByOwner(pubkey, {
+                programId: TOKEN_2022_PROGRAM_ID,
             }),
         ]);
 
@@ -198,7 +201,9 @@ userRouter.get("/user/balances", async (req: Request, res: Response) => {
             { mint: WSOL_MINT, amount: solBalance, decimals: 9 },
         ];
 
-        for (const account of tokenAccounts.value) {
+        // Process both SPL Token and Token-2022 accounts
+        const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+        for (const account of allAccounts) {
             const parsed = account.account.data.parsed;
             const info = parsed.info;
             const uiAmount = info.tokenAmount.uiAmount;
@@ -242,15 +247,18 @@ userRouter.get("/user/portfolio", async (_req: Request, res: Response) => {
         const [solanaResult, evmTokens] = await Promise.all([
             // Solana: SOL balance + SPL tokens
             (async () => {
-                const [lamports, tokenAccounts] = await Promise.all([
+                const [lamports, tokenAccounts, token2022Accounts] = await Promise.all([
                     connection.getBalance(pubkey),
                     connection.getParsedTokenAccountsByOwner(pubkey, { programId: TOKEN_PROGRAM_ID }),
+                    connection.getParsedTokenAccountsByOwner(pubkey, { programId: TOKEN_2022_PROGRAM_ID }),
                 ]);
 
                 const balanceMap = new Map<string, { amount: number; decimals: number }>();
                 balanceMap.set(WSOL_MINT, { amount: lamports / 1e9, decimals: 9 });
 
-                for (const account of tokenAccounts.value) {
+                // Process both SPL Token and Token-2022 accounts
+                const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+                for (const account of allAccounts) {
                     const info = account.account.data.parsed.info;
                     const uiAmount = info.tokenAmount.uiAmount;
                     if (uiAmount > 0) {
