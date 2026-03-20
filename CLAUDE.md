@@ -875,12 +875,13 @@ All 7 CRITICAL security issues have been fixed. Summary:
 | TRK-3 | ~~MEDIUM~~ **FIXED** | Tracker wallet limit check-then-act race condition — concurrent requests could exceed wallet cap | `api/routes/tracker.ts` | **DONE** — wrapped in `prisma.$transaction()` (v1.0.2) |
 | TRK-4 | ~~HIGH~~ **FIXED** | Whale tracker false alerts after restart — in-memory `lastSeenSignatures` lost on restart, stale txs trigger alerts | `tracker/monitor.ts` | **DONE** — added timestamp tracking + 5-min blockTime filter (v1.0.2) |
 | TRK-5 | ~~MEDIUM~~ **FIXED** | SPL token amounts in whale alerts divided by 1e9 regardless of actual decimals — USDC/BONK amounts shown 1000x wrong | `tracker/monitor.ts` | **DONE** — uses `postTokenBalances` for correct decimals + USD price lookup (v1.0.2) |
+| T22-1 | ~~HIGH~~ **FIXED** | Token-2022 tokens (including pump.fun tokens) missing from all portfolio views — only `TOKEN_PROGRAM_ID` was queried, not `TOKEN_2022_PROGRAM_ID` | `api/routes/tracker.ts`, `api/routes/user.ts` | **DONE** — both programs queried in parallel (v1.1.1) |
 
 ---
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.1.0 — PRODUCTION READY (Scanner V2: 12-check normalized scoring)**
+### Current Status: **v1.1.1 — PRODUCTION READY (Token-2022 portfolio fix)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -914,6 +915,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Swap/Transfer confirm endpoints are idempotent — no duplicate records on retry (v1.0.2)
 - Tracker wallet limit enforced atomically via Prisma $transaction (v1.0.2)
 - Whale tracker: no false alerts after restart, correct SPL token amounts (v1.0.2)
+- Token-2022 (pump.fun) tokens visible in all portfolio views (v1.1.1)
 
 #### What is NOT yet production-ready:
 
@@ -1177,6 +1179,15 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-20 — Token-2022 Portfolio Fix (v1.1.1)
+- **T22-1 FIXED:** Token-2022 tokens (including pump.fun tokens) were completely invisible in all portfolio views. `getParsedTokenAccountsByOwner` only queried `TOKEN_PROGRAM_ID`, missing all tokens on the Token-2022 program (`TOKEN_2022_PROGRAM_ID`). Fixed in 3 places:
+  - `api/routes/tracker.ts` — whale tracker portfolio accordion
+  - `api/routes/user.ts` — user balances endpoint (`GET /api/user/balances`)
+  - `api/routes/user.ts` — user portfolio endpoint (`GET /api/user/portfolio`)
+- Both token programs are now queried in parallel (no extra latency) and results merged.
+- **Impact:** Wallets holding pump.fun tokens (e.g. `4xFcvQ46...pump`) now show correct holdings and USD values.
+- **VPS redeployment required:** `npm run build` + `pm2 restart`. No Prisma/DB changes needed.
 
 ### 2026-03-20 — Scanner V2: 12-Check Normalized Scoring (v1.1.0)
 - **6 new scanner checks added** to `src/scanner/checks.ts`, doubling coverage from 6 to 12 checks:
