@@ -1,318 +1,163 @@
-# SolSwap — Bug Fix Plan (Critical & Medium)
-
-> Updated: 2026-03-16 | Pre-production bug quashing sprint
-> Branch: `claude/codebase-review-audit-xeqkA`
-> Previous plan content archived — see git history for UI/UX and referral plans.
-
----
+# Scanner V2: Multi-Chain Token Safety Scanner — Implementation Plan
 
 ## Overview
 
-6 bugs identified in final audit. Execution order: lowest risk first, highest complexity last.
-
-| # | Severity | Bug | File(s) | Effort |
-|---|----------|-----|---------|--------|
-| 1 | MEDIUM | express-rate-limit IPv6 bypass (CVE-2026-30827) | `package.json` | 2 min |
-| 2 | HIGH | LI.FI token cache retry storm | `src/aggregator/lifiTokens.ts` | 5 min |
-| 3 | MEDIUM | Duplicate swap/transfer records on retry | `src/api/routes/swap.ts`, `transfer.ts` | 15 min |
-| 4 | MEDIUM | Tracker wallet limit race condition | `src/api/routes/tracker.ts` | 15 min |
-| 5 | HIGH | Whale tracker false alerts after restart | `src/tracker/monitor.ts` | 20 min |
-| 6 | MEDIUM | SPL token amount miscalculation in whale alerts | `src/tracker/monitor.ts` | 30 min |
+Upgrade the token scanner from 6 Solana-only checks (max 105 points) to a comprehensive
+multi-chain scanner covering **Solana (12 checks)** and **EVM tokens (8 checks)** — all
+in-house using existing RPC endpoints. No external APIs.
 
 ---
 
-## Bug 1: express-rate-limit IPv6 Bypass [MEDIUM]
+## Phase 1: Fix Build Error + New Solana Checks (this session)
 
-**CVE-2026-30827** (CVSS 7.5) — On dual-stack servers, the default `keyGenerator` applies a `/56` IPv6 subnet mask to IPv4-mapped addresses (`::ffff:x.x.x.x`). All IPv4 clients share one rate-limit bucket. One attacker can trigger 429 for all IPv4 users.
+### Step 0: Fix Vercel Build Error
+- [x] Add missing `tier` property to AdminPanel test mock
 
-**Current:** `"express-rate-limit": "^8.2.1"` — version 8.2.1 is affected.
+### Step 1: New Solana Scanner Checks (in `src/scanner/checks.ts`)
 
-**Fix:** Upgrade to 8.3.1. No code changes. The fix corrects the default `keyGenerator` to handle IPv4-mapped addresses.
+Add 6 new checks to the existing scanner. All use the existing Helius RPC — no new API keys.
 
-```bash
-npm install express-rate-limit@8.3.1
+| # | Check | Weight | What it detects | How to implement |
+|---|-------|--------|----------------|-----------------|
+| 1 | **Liquidity Burned/Locked** | 25 | LP tokens not burned = dev can rug by removing liquidity | Find Raydium/Orca pool for the mint → get `lpMint` → check if LP tokens sent to burn address (`1111...1111`) or held by a known locker program. If no pool found, flag as "No liquidity pool detected". |
+| 2 | **Metadata Mutability** | 15 | Dev can change token name/symbol/image after launch to impersonate legit tokens | Derive Metaplex metadata PDA → fetch account → read `isMutable` byte (offset varies by version). Safe if `isMutable === false`. |
+| 3 | **Update Authority** | 10 | Dev can modify metadata at will | Same Metaplex metadata account → read `updateAuthority` field. Safe if set to `11111111111111111111111111111111` (system program = revoked). |
+| 4 | **Honeypot Detection** | 20 | Token can be bought but not sold | Call Jupiter quote API for a SELL direction (token → SOL). If no route found or error, it's likely a honeypot. Use existing `getQuote()` from `jupiter/quote.ts`. |
+| 5 | **Creator Token Holdings** | 15 | Deployer still holds large % = dump risk | Walk mint's signature history to find deployer (first signer). Check their current token balance vs total supply. Unsafe if >10%. |
+| 6 | **Token-2022 Transfer Fee** | 10 | Hidden tax on every transfer | If token is Token-2022 program, parse extension data for `TransferFee` extension. Report fee % if present. |
+
+**Updated weight table after Phase 1:**
+
+```
+Existing:                    New:
+Mint Authority        30     Liquidity Burned/Locked  25
+Freeze Authority      20     Honeypot Detection       20
+Top Holders           20     Metadata Mutability      15
+Token Metadata        15     Creator Holdings         15
+Jupiter Verified      10     Update Authority         10
+Token Age             10     Token-2022 Transfer Fee  10
+                    ────                             ────
+Subtotal:            105     Subtotal:               95
+
+Combined max:        200 → clamped to 100
 ```
 
-**Verify:** `npm audit` should show 0 high-severity issues for express-rate-limit. Rate limiting still works (send 101 rapid requests → 429 on 101st).
+**Scoring adjustment:** With 12 checks totaling 200 max weight, we normalize:
+`riskScore = Math.round((rawScore / totalPossibleWeight) * 100)` — this way adding
+checks doesn't inflate the score. Only count weights from non-errored checks in the
+denominator.
 
----
+### Step 2: Update `analyze.ts`
 
-## Bug 2: LI.FI Token Cache Retry Storm [HIGH]
+- Fetch Metaplex metadata PDA in initial `Promise.all()` (shared by mutability + update authority checks)
+- Add honeypot check (Jupiter sell quote)
+- Add liquidity check (Raydium pool lookup)
+- Add creator holdings check
+- Add Token-2022 extension check
+- Update scoring to use normalized percentage instead of raw sum
 
-**File:** `src/aggregator/lifiTokens.ts`, lines 99-103
+### Step 3: Update Frontend — Check Explanations
 
-**Problem:** When all 6 chain fetches fail (`newTokens.size === 0`), `cache.lastFetch` is never updated. Since `Date.now() - 0 > CACHE_TTL_MS` is always true, every single API request triggers a new `refreshCache()` call — effectively DDoS-ing LI.FI and degrading our own response times.
-
-**Fix:** Always update `cache.lastFetch` after a refresh attempt, even on failure.
+Add entries to `CHECK_INFO` in `ScanPanel.tsx` for all 6 new checks:
 
 ```typescript
-// CURRENT (line 99-103):
-if (newTokens.size > 0) {
-    cache = { tokens: newTokens, lastFetch: Date.now() };
-    const total = ...;
-    console.log(...);
-}
-
-// FIXED:
-if (newTokens.size > 0) {
-    cache = { tokens: newTokens, lastFetch: Date.now() };
-    const total = Array.from(newTokens.values()).reduce((sum, t) => sum + t.length, 0);
-    console.log(`LI.FI token cache refreshed: ${total} tokens across ${newTokens.size} chains`);
-} else {
-    cache = { ...cache, lastFetch: Date.now() };
-    console.warn("LI.FI token cache refresh returned 0 tokens (will retry in 30 min)");
-}
+"Liquidity Burned": "Liquidity pool tokens (LP) should be burned or locked. If the creator still holds LP tokens, they can withdraw all liquidity at any time, making the token unsellable.",
+"Metadata Mutability": "If metadata is mutable, the creator can change the token's name, symbol, and image after launch — potentially impersonating legitimate tokens.",
+"Update Authority": "The update authority controls who can modify the token's on-chain metadata. It should be revoked (set to the system program) for maximum safety.",
+"Honeypot Detection": "We simulate selling this token back to SOL. If no sell route exists, the token may be a honeypot — you can buy but never sell.",
+"Creator Holdings": "Shows what percentage of the supply the token creator still holds. Large creator holdings (>10%) mean they could dump at any time.",
+"Transfer Fee": "Some Token-2022 tokens have a built-in transfer fee that takes a percentage on every transfer. This is a hidden tax most buyers don't expect.",
 ```
 
-**Verify:** Temporarily block LI.FI (or disconnect network). Logs should show ONE "0 tokens" warning per 30 min, not per request. Hardcoded tokens still served as fallback.
+### Step 4: Update `ScanResult` Response
+
+Add a `category` field to `CheckResult` for grouping in the UI:
+- `"authority"` — Mint Authority, Freeze Authority, Update Authority, Metadata Mutability
+- `"liquidity"` — Liquidity Burned, Honeypot Detection
+- `"distribution"` — Top Holders, Creator Holdings
+- `"identity"` — Token Metadata, Jupiter Verified, Token Age, Transfer Fee
+
+Frontend groups checks by category with section headers.
 
 ---
 
-## Bug 3: Duplicate Swap/Transfer Records [MEDIUM]
+## Phase 2: EVM Token Scanner (future session)
 
-**Files:** `src/api/routes/swap.ts` (POST /swap/confirm), `src/api/routes/transfer.ts` (POST /transfer/confirm)
+### Architecture
 
-**Problem:** No deduplication on `txSignature`. If the client retries the confirm call (network timeout, user double-tap), duplicate records are created. The existing `@@index([txSignature])` helps lookups but doesn't enforce uniqueness.
+The scan route detects chain by address format:
+- Solana address (base58, 32-44 chars) → existing Solana scanner
+- EVM address (`0x` + 40 hex chars) → new EVM scanner
 
-**Why not `@unique` on schema?** `txSignature` is nullable on Swap (starts null for PENDING). While SQLite treats multiple NULLs as distinct (which is correct), adding `@unique` would require a migration and is fragile if we switch to Postgres. Idempotent API design is cleaner.
+Backend needs one free RPC per chain (no API key required):
+- Ethereum: `https://eth.llamarpc.com` or Infura free tier
+- BSC: `https://bsc-dataseed.binance.org`
+- Polygon: `https://polygon-rpc.com`
+- Arbitrum: `https://arb1.arbitrum.io/rpc`
+- Base: `https://mainnet.base.org`
 
-**Fix — swap.ts** (add before `prisma.swap.create` at line 84):
+### EVM Checks (8 checks, all via `eth_call` / `eth_getStorageAt`)
 
-```typescript
-// Idempotent: if this tx was already confirmed, return existing record
-if (txSignature) {
-    const existing = await prisma.swap.findFirst({
-        where: { txSignature, userId: user.id },
-        select: { id: true, status: true },
-    });
-    if (existing) {
-        res.json({ swapId: existing.id, status: existing.status });
-        return;
-    }
-}
-```
+| # | Check | Weight | How |
+|---|-------|--------|-----|
+| 1 | **Owner Renounced** | 25 | Call `owner()` selector `0x8da5cb5b` → check if `address(0)` |
+| 2 | **Proxy Contract** | 20 | Read EIP-1967 implementation slot. If proxy, flag as upgradeable (dev can change logic) |
+| 3 | **Honeypot Simulation** | 20 | Use LI.FI quote API to simulate a sell. No route = honeypot. |
+| 4 | **Contract Verified** | 15 | Check if contract has code (`eth_getCode`). Can't verify source without explorer API, but can flag if code is suspiciously small/large. |
+| 5 | **Total Supply / Top Holders** | 15 | Call `totalSupply()` + check if any single holder has >20% |
+| 6 | **Mint Function** | 15 | Call `totalSupply()` at two points or check if contract has `mint` selector in bytecode |
+| 7 | **Transfer Tax** | 10 | Simulate transfer and compare input/output amounts |
+| 8 | **Liquidity** | 10 | Check if main DEX pair has reasonable TVL |
 
-**Fix — transfer.ts** (add before `prisma.transfer.create` at line 40):
-
-```typescript
-// Idempotent: if this tx was already recorded, return existing record
-const existing = await prisma.transfer.findFirst({
-    where: { txSignature: parsed.data.txSignature, userId: user.id },
-    select: { id: true, status: true },
-});
-if (existing) {
-    res.json({ transferId: existing.id, status: existing.status });
-    return;
-}
-```
-
-**Verify:** Call `POST /api/swap/confirm` twice with the same body. Second response should return the existing record (same swapId), not create a duplicate. Check DB: `SELECT COUNT(*) FROM Swap WHERE txSignature = '...'` should be 1.
+### Frontend Changes for EVM
+- Input field accepts both Solana and EVM addresses
+- Chain auto-detected from address format
+- Chain badge shown on results (🟣 Solana / 🔷 Ethereum / etc.)
+- Check names may differ per chain but categories stay the same
 
 ---
 
-## Bug 4: Tracker Wallet Limit Race Condition [MEDIUM]
+## Phase 3: Scanner UI Polish (can be done alongside Phase 1 or 2)
 
-**File:** `src/api/routes/tracker.ts`, lines 78-96
-
-**Problem:** Count check (line 81-83) and upsert (line 99) are separate queries. Two concurrent requests can both pass the limit check and exceed the cap.
-
-**Research confirms:** Prisma interactive `$transaction` works on SQLite with Serializable isolation. The count-then-upsert becomes effectively atomic.
-
-**Fix:** Wrap the count check + upsert in a `$transaction`:
-
-```typescript
-// CURRENT:
-const existingCount = await prisma.watchedWallet.count({...});
-if (existingCount >= limit) { ... return; }
-const watched = await prisma.watchedWallet.upsert({...});
-
-// FIXED:
-const result = await prisma.$transaction(async (tx) => {
-    const existingCount = await tx.watchedWallet.count({
-        where: { userId: user.id, active: true },
-    });
-    if (existingCount >= limit) {
-        return { error: true as const, count: existingCount };
-    }
-    const watched = await tx.watchedWallet.upsert({
-        where: { userId_walletAddress: { userId: user.id, walletAddress } },
-        update: { active: true, label: label ?? undefined },
-        create: { userId: user.id, walletAddress, label: label ?? null, chain },
-    });
-    return { error: false as const, watched };
-});
-
-if (result.error) {
-    res.status(403).json({
-        error: limit === WALLET_LIMITS.free
-            ? `Free tier: max ${WALLET_LIMITS.free} watched wallets...`
-            : `Limit reached...`,
-        currentCount: result.count,
-        limit: limit === Infinity ? null : limit,
-    });
-    return;
-}
-// Use result.watched for the response
-```
-
-**Important:** Keep the `$transaction` short — no RPC calls inside it. The webhook registration (`addAddressToWebhook`) stays OUTSIDE the transaction (after the response).
-
-**Verify:** At limit=3 with 2 existing wallets, fire 2 concurrent watch requests. Only 1 should succeed (total = 3). The other should get 403.
+- **Category headers** in check results: "Authorities", "Liquidity", "Distribution", "Identity"
+- **"What We Checked" explainer section** at the bottom of every scan — a collapsible card
+  summarizing all checks and what they mean, so users learn to evaluate tokens themselves
+- **Risk breakdown bar** — horizontal stacked bar showing which categories contributed most
+  to the risk score (visual: red segments for unsafe checks, green for safe)
+- **Share scan result** — generate a shareable summary card image or text for Telegram
 
 ---
 
-## Bug 5: Whale Tracker False Alerts After Restart [HIGH]
+## Files Modified
 
-**File:** `src/tracker/monitor.ts`
-
-**Problem:** `lastSeenSignatures` is in-memory. On restart:
-1. First poll sets baseline (stores latest signature, no alerts) — correct
-2. But if the wallet had no activity during downtime, the baseline is stale
-3. When activity finally resumes (could be days later), all transactions since last baseline appear "new"
-4. More critically: if a transaction's `blockTime` is old (before the restart), it still triggers an alert
-
-**Fix:** Store timestamp alongside signature. Filter out transactions older than 5 minutes to prevent stale alerts.
-
-```typescript
-// CURRENT:
-const lastSeenSignatures = new Map<string, string>();
-
-// FIXED:
-interface WalletBaseline {
-    signature: string;
-    timestamp: number; // Date.now() when baseline was set
-}
-const lastSeenData = new Map<string, WalletBaseline>();
-
-// In processWallet:
-const lastSeen = lastSeenData.get(wallet.walletAddress);
-// ... fetch signatures ...
-lastSeenData.set(wallet.walletAddress, {
-    signature: signatures[0].signature,
-    timestamp: Date.now(),
-});
-if (!lastSeen) return; // First poll — baseline only
-
-// Filter: skip transactions older than 5 minutes
-const MAX_ALERT_AGE_S = 300; // 5 minutes
-const now = Math.floor(Date.now() / 1000);
-for (const sig of signatures) {
-    if (sig.blockTime && (now - sig.blockTime) > MAX_ALERT_AGE_S) {
-        continue; // Skip old transactions
-    }
-    await checkTransaction(wallet, sig.signature);
-}
-```
-
-**Also fix:** Add error logging in the catch block (line 90-92) — currently empty `catch (err) {}` silently swallows all errors including invalid wallet addresses and RPC rate limiting.
-
-```typescript
-// CURRENT (line 90-92):
-} catch (err) {
-    // Silently skip
-}
-
-// FIXED:
-} catch (err) {
-    console.warn(`Whale tracker: failed to process ${wallet.walletAddress}:`,
-        err instanceof Error ? err.message : err);
-}
-```
-
-**Verify:** Restart the process. Within 30s, no false alerts should fire. Then send a real 10+ SOL transaction to a watched wallet and confirm the alert fires within 60s.
-
----
-
-## Bug 6: SPL Token Amount Miscalculation in Whale Alerts [MEDIUM]
-
-**File:** `src/tracker/monitor.ts`, lines 141-163
-
-**Problem:** Line 148: `Number(info.lamports ?? info.amount ?? 0) / 1e9` divides ALL amounts by 1e9 (9 decimals). For SPL tokens:
-- USDC (6 decimals): 1,000,000 raw ÷ 1e9 = 0.001 (shows 1000x too small)
-- BONK (5 decimals): 100,000 raw ÷ 1e9 = 0.0001 (shows 10000x too small)
-
-**Research confirms:** `getParsedTransaction` includes `meta.postTokenBalances` with mint, decimals, and `uiTokenAmount` for each token account. For `transferChecked` instructions, decimals are inline. For plain `transfer`, we need `postTokenBalances`.
-
-**Fix approach — use `postTokenBalances` + price lookup for USD value:**
-
-Since the whale tracker's alert threshold is about VALUE (>= 10 SOL worth), the cleanest fix is:
-
-1. For native SOL balance changes (already handled at lines 119-138) — keep as-is (lamports / 1e9 is correct)
-2. For SPL token transfers (lines 141-163) — use `postTokenBalances` to get the mint + uiAmount, then look up USD price to check against threshold
-
-```typescript
-// Replace the inner instruction parsing (lines 141-163) with:
-// Check postTokenBalances for significant token movements
-if (tx.meta.postTokenBalances && tx.meta.preTokenBalances) {
-    const pre = tx.meta.preTokenBalances;
-    const post = tx.meta.postTokenBalances;
-
-    // Build map: accountIndex → { mint, preAmount, postAmount }
-    for (const postBal of post) {
-        const owner = postBal.owner;
-        if (owner !== wallet.walletAddress) continue;
-
-        const preBal = pre.find(p => p.accountIndex === postBal.accountIndex);
-        const preUiAmount = preBal?.uiTokenAmount?.uiAmount ?? 0;
-        const postUiAmount = postBal.uiTokenAmount?.uiAmount ?? 0;
-        const changeAmount = Math.abs(postUiAmount - preUiAmount);
-
-        if (changeAmount === 0) continue;
-
-        const mint = postBal.mint;
-        // Look up USD price
-        const prices = await getTokenPricesBatch([mint]);
-        const priceUsd = prices[mint]?.priceUsd ?? 0;
-        const valueUsd = changeAmount * priceUsd;
-
-        // Alert if value >= MIN_SOL_ALERT * SOL price (roughly $10+ SOL equivalent)
-        // Or simpler: alert if value >= $150 (approximate 10 SOL)
-        const MIN_USD_ALERT = 150;
-        if (valueUsd >= MIN_USD_ALERT) {
-            const direction = postUiAmount > preUiAmount ? "received" : "sent";
-            const symbol = postBal.uiTokenAmount?.uiAmountString
-                ? `${changeAmount.toFixed(2)} tokens`
-                : `${changeAmount}`;
-            const alert = formatAlert({
-                walletAddress: wallet.walletAddress,
-                label: wallet.label,
-                direction,
-                amount: changeAmount,
-                symbol: mint.slice(0, 6), // TODO: look up symbol from Jupiter cache
-                valueUsd,
-                signature,
-            });
-            await sendTelegramAlert(wallet.user.telegramId, alert);
-        }
-    }
-}
-```
-
-**Note:** `formatAlert` may need updating to accept `symbol` and `valueUsd` params. Also need to import `getTokenPricesBatch` from `jupiter/price.ts`.
-
-**Verify:** Watch a wallet, send 200 USDC to it. Alert should show correct amount (~$200 USD), not the current miscalculated value.
-
----
-
-## Post-Fix: Documentation Updates
-
-After all bugs are fixed, update:
-
-1. **CLAUDE.md — Known Issues table:** Mark all 6 bugs as FIXED with version tag
-2. **CLAUDE.md — Changelog:** Add new entry for this session
-3. **CLAUDE.md — Production Readiness:** Update score from 82 to ~90
-4. **PLAN.md:** Archive this plan, note completion
-
----
-
-## Files Modified Summary
-
+### Phase 1 (this session):
 | File | Changes |
 |------|---------|
-| `package.json` | Upgrade express-rate-limit to 8.3.1 |
-| `src/aggregator/lifiTokens.ts` | Cache retry storm fix (3 lines) |
-| `src/api/routes/swap.ts` | txSignature dedup check (8 lines) |
-| `src/api/routes/transfer.ts` | txSignature dedup check (7 lines) |
-| `src/api/routes/tracker.ts` | Wrap count+upsert in $transaction (~20 lines changed) |
-| `src/tracker/monitor.ts` | Baseline timestamps, blockTime filter, SPL decimals fix (~60 lines) |
-| `CLAUDE.md` | Known Issues, Changelog, Production Readiness |
+| `src/scanner/checks.ts` | Add 6 new check functions |
+| `src/scanner/analyze.ts` | Wire new checks, normalize scoring |
+| `webapp/src/components/ScanPanel.tsx` | Add CHECK_INFO entries, category grouping |
+| `webapp/src/lib/api.ts` | Update ScanResult type if needed |
+| `webapp/src/styles/index.css` | Category header styles |
+| `webapp/src/components/__tests__/AdminPanel.test.tsx` | Fix `tier` property (build fix) |
+
+### Phase 2 (future):
+| File | Changes |
+|------|---------|
+| `src/scanner/evmChecks.ts` | NEW — EVM check functions |
+| `src/scanner/evmAnalyze.ts` | NEW — EVM orchestrator |
+| `src/scanner/analyze.ts` | Add chain detection router |
+| `src/api/routes/scan.ts` | Accept EVM addresses |
+| `src/config.ts` | Add EVM RPC URLs |
+| `webapp/src/components/ScanPanel.tsx` | Chain badge, EVM address support |
+
+---
+
+## Risk Assessment
+
+- **No new API keys needed** for Phase 1 — all checks use existing Helius RPC
+- **No DB schema changes** — existing `TokenScan` model stores results as-is
+- **Scoring change is backwards-compatible** — old scans in DB keep their original scores;
+  new scans use normalized scoring
+- **Honeypot check adds ~1-2s** to scan time (Jupiter quote call) — acceptable
+- **Liquidity check may fail** for tokens not on Raydium/Orca — handled via `errored: true`
+- **EVM Phase 2** uses free public RPCs — rate limits are generous (10-50 req/s)

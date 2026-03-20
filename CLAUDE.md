@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-10 | Version: 1.0.1
+> Updated: 2026-03-19 | Version: 1.0.3
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -95,7 +95,8 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  POST /api/transfer/confirm   GET  /api/transactions                  │
 │  GET  /api/user/referrals    DELETE /api/user                         │
 │  POST /api/tracker/watch      POST /api/tracker/unwatch               │
-│  GET  /api/tracker/list                                               │
+│  GET  /api/tracker/list       GET  /api/tracker/portfolio/:addr       │
+│  GET  /api/admin/stats|users|referrals  POST /api/admin/set-tier      │
 ├───────────────────────────────────────────────────────────────────────┤
 │ SQLite via Prisma ORM  (6 models, see Database Schema)                │
 └───────────────────────────────────────────────────────────────────────┘
@@ -108,6 +109,7 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  • Jupiter Price             api.jup.ag/price/v3/price               │
 │  • LI.FI (cross-chain)       li.quest/v1  (works without key)        │
 │  • Helius (Solana RPC)       your-endpoint.helius-rpc.com            │
+│  • Moralis (EVM balances + Streams)  moralis.io                      │
 │  • Privy (embedded wallets)  privy.io SDK (frontend only)            │
 │  • Gemini (AI — Phase 4)     generativelanguage.googleapis.com       │
 └───────────────────────────────────────────────────────────────────────┘
@@ -174,7 +176,7 @@ solswapbot/
 │   │   ├── middleware/
 │   │   │   └── telegramAuth.ts   # HMAC-SHA256 verification of Telegram initData. Sets res.locals.telegramId
 │   │   └── routes/
-│   │       ├── admin.ts          # GET /api/admin/stats|referrals|users  (gated by ADMIN_TELEGRAM_ID) [v0.8.0]
+│   │       ├── admin.ts          # GET /api/admin/stats|referrals|users + POST /api/admin/set-tier  (gated by ADMIN_TELEGRAM_ID)
 │   │       ├── crossChain.ts     # GET /api/cross-chain/quote|chains|tokens  (LI.FI routing, dynamic token cache)
 │   │       ├── history.ts        # GET /api/history (last 20 swaps) + GET /api/activity (swaps+sends merged)
 │   │       ├── price.ts          # GET /api/price/:mint  (Jupiter Price V3, public)
@@ -183,10 +185,11 @@ solswapbot/
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
-│   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + GET /api/tracker/list  [v1.0.0: fully wired]
+│   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + GET /api/tracker/list + GET /api/tracker/portfolio/:addr  (multi-chain)
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
 │   │       ├── webhook.ts        # POST /api/webhook/helius  (Helius enhanced tx webhook receiver)
+│   │       ├── webhookMoralis.ts # POST /api/webhook/moralis  (Moralis Streams EVM whale alerts, HMAC-SHA256 auth)
 │   │       └── user.ts           # GET /api/user (includes referralEarningsUsd) + POST /api/user/wallet + balances + portfolio
 │   │
 │   ├── bot/
@@ -217,8 +220,13 @@ solswapbot/
 │   │   └── checks.ts             # Individual checks: mintAuthority, freezeAuthority, topHolders,
 │   │                             #   tokenAge, jupiterVerified, hasMetadata
 │   │
+│   ├── tracker/
+│   │   ├── monitor.ts            # Whale wallet monitor: polls watched wallets every 30s, fires Telegram alerts
+│   │   └── alerts.ts             # formatAlert() + sendTelegramAlert() — formats whale movement messages
+│   │
 │   ├── moralis/
-│   │   └── client.ts             # Moralis EVM token balance fetcher (5 EVM chains, spam filter)
+│   │   ├── client.ts             # Moralis EVM token balance fetcher (5 EVM chains, spam filter)
+│   │   └── stream.ts             # Moralis Streams: init/manage EVM wallet monitoring stream, add/remove addresses
 │   │
 │   ├── helius/
 │   │   ├── client.ts             # Helius webhook API client: init, create, addAddress
@@ -233,8 +241,8 @@ solswapbot/
 │   │   └── queries/
 │   │       ├── users.ts          # upsertUser, findUserByTelegramId, updateUserWallet, getUserWithReferralCount
 │   │       ├── transactions.ts   # getTransactions(): merge+sort+paginate Swap+Transfer for a user
-│   │       ├── fees.ts           # getTotalFeesEarned(), getUserFeesGenerated() — queries exist, no routes wired
-│   │       └── referrals.ts      # getReferralEarnings(), getReferralCount() — queries exist, no routes wired
+│   │       ├── fees.ts           # getTotalFeesEarned(), getFeesForPeriod(), getTopFeeGenerators() — wired via /api/admin/*
+│   │       └── referrals.ts      # getReferralEarnings(), getReferralCount(), getReferralList() — wired via /api/admin/* + /api/user/referrals
 │   │
 │   ├── utils/
 │   │   ├── retry.ts              # withRetry() — exponential backoff, checks err.status first
@@ -259,7 +267,8 @@ solswapbot/
 │       ├── TokenSelector.tsx     # Reusable token search modal (Jupiter-powered, used in SwapPanel)
 │       │
 │       ├── components/
-│       │   ├── TabBar.tsx            # Bottom nav: Wallet | Swap | Scan | Tracker only (4 tabs). History/Settings/Admin in header [v1.0.1]
+│       │   ├── AdminPanel.tsx        # Admin dashboard: KPIs, user list, tier management, referral stats (gated by ADMIN_TELEGRAM_ID)
+│       │   ├── TabBar.tsx            # Bottom nav: Wallet | Swap | Scan | Tracker (4 tabs). History/Settings/Admin in header icons
 │       │   ├── WalletTab.tsx         # Portfolio home: total USD, address, action buttons, token list, activity feed, pull-to-refresh
 │       │   ├── SwapPanel.tsx         # Full swap UI: quote, slippage, AbortController, history slide-up, cross-chain mode
 │       │   ├── ScanPanel.tsx         # Token scanner: address input, RiskGauge, check results, recent scans
@@ -273,6 +282,10 @@ solswapbot/
 │       │   ├── Toast.tsx             # Floating toast notifications (CustomEvent "solswap:toast")
 │       │   ├── TermsModal.tsx        # First-launch ToS gate (scroll-to-bottom to accept), re-viewable in Settings
 │       │   └── ReferralModal.tsx     # Referral dashboard modal: stats, share, referred users list with pagination
+│       │
+│       ├── components/__tests__/
+│       │   ├── AdminPanel.test.tsx   # Admin panel unit tests (Vitest)
+│       │   └── SwapPanel.test.tsx    # Swap panel unit tests (Vitest)
 │       │
 │       ├── lib/
 │       │   ├── api.ts                # All fetch functions + TypeScript interfaces for every API response
@@ -299,7 +312,7 @@ solswapbot/
 ├── ARCHITECTURE.md               # System architecture diagrams
 ├── SECURITY.md                   # Security model (updated v0.7.2 — fully current)
 ├── TESTING.md                    # Testing guide (note: partially outdated — CLAUDE.md is authoritative)
-└── PLAN.md                       # Project planning notes
+└── PLAN.md                       # Scanner V2 upgrade plan (multi-chain, 12 Solana + 8 EVM checks)
 ```
 
 ---
@@ -340,6 +353,7 @@ model Swap {
   feeAmountUsd  Decimal?            // Decimal type (not Float) for precision
   txSignature   String?
   status        SwapStatus  @default(PENDING)
+  isHidden      Boolean     @default(false)   // Soft-delete for admin/user cleanup
   createdAt     DateTime    @default(now())
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -359,6 +373,7 @@ model Transfer {
   direction        String   @default("SEND")  // "SEND" or "RECEIVE"
   txSignature      String?
   status           String   @default("CONFIRMED")  // string not enum
+  isHidden         Boolean  @default(false)   // Soft-delete for admin/user cleanup
   createdAt        DateTime @default(now())
   @@index([userId, createdAt])
   @@index([txSignature])
@@ -379,20 +394,27 @@ model TokenScan {
 }
 
 model WatchedWallet {
-  // Fully live as of v1.0.0. API routes: POST /tracker/watch|unwatch, GET /tracker/list
+  // Fully live. API routes: POST /tracker/watch|unwatch, GET /tracker/list, GET /tracker/portfolio/:addr
   // Limits: free=3, WHALE_TRACKER/ALL_ACCESS sub=20, admin=unlimited
+  id            String   @id @default(cuid())
   userId        String
   walletAddress String
   label         String?
+  chain         String   @default("solana")  // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
   active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
   @@unique([userId, walletAddress])
 }
 
 model Subscription {
   // Tier enforcement active for Scanner (10/day free) and Whale Tracker (3 free, 20 paid).
+  // Admin can set tiers via POST /api/admin/set-tier.
+  id        String    @id @default(cuid())
   userId    String    @unique
   tier      SubTier   @default(FREE)
   expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  @@index([tier])
 }
 
 enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
@@ -405,8 +427,10 @@ enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
 - `Transfer.senderAddress` is only set for receives (who sent the tokens to the user).
 - `Swap.status` uses the `SwapStatus` enum; `Transfer.status` uses a plain `String`.
 - `fees.ts` and `referrals.ts` in `db/queries/` are wired via `/api/admin/*` and `/api/user/referrals`.
-- `WatchedWallet`: fully live (v1.0.0). API: POST /tracker/watch|unwatch, GET /tracker/list.
-- `Subscription.tier`: enforced for scanner (10 free/day) and tracker (3 free / 20 paid).
+- `Swap.isHidden` / `Transfer.isHidden`: soft-delete flag for admin or user cleanup.
+- `WatchedWallet`: fully live. Multi-chain (Solana + 5 EVM chains). API: POST /tracker/watch|unwatch, GET /tracker/list, GET /tracker/portfolio/:addr.
+- `WatchedWallet.chain`: defaults to `"solana"`, supports all 6 chains. EVM addresses auto-lowercased.
+- `Subscription.tier`: enforced for scanner (10 free/day) and tracker (3 free / 20 paid). Admin can set via POST /api/admin/set-tier.
 
 ---
 
@@ -422,8 +446,8 @@ Solana swap (SOL → USDC):
 
 Cross-chain swap (SOL → ETH):
   User → Mini App → GET /api/cross-chain/quote → POST handled by LI.FI SDK
-    → LI.FI integrator fees configured on LI.FI partner portal (needs LIFI_API_KEY)
-    → Not yet live — requires LIFI_API_KEY with partner program
+    → LI.FI integrator fees configured on LI.FI partner portal
+    → LIVE — LIFI_API_KEY configured, `solswap` integrator tag recognized (v0.7.3)
 
 Future revenue streams (Phase 3+):
   - Subscription fees via Telegram Stars
@@ -461,6 +485,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/webhook/helius` | `Authorization: <HELIUS_WEBHOOK_SECRET>` | Receives Helius enhanced transaction events. Records incoming transfers as `Transfer` with `direction="RECEIVE"`. Deduplicates by txSignature+userId+mint. Skips user's own swaps. Returns 200 always (prevents Helius retry storms). |
+| POST | `/api/webhook/moralis` | `x-signature: <HMAC-SHA256>` | Receives Moralis Streams EVM transaction events. Fires whale alerts for watched EVM wallets when large native token transfers occur. Auth via HMAC-SHA256 of raw body using `MORALIS_WEBHOOK_SECRET`. |
 
 ### Protected Routes
 
@@ -491,6 +516,11 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | POST | `/api/send` | `{ tokenMint, recipientAddress, amount, senderAddress }` | `{ transaction: base64, lastValidBlockHeight }` |
 | POST | `/api/transfer/confirm` | `{ txSignature, tokenMint, tokenSymbol?, humanAmount, recipientAddress }` | `{ transferId, status }` |
 | DELETE | `/api/user` | — | `{ success: true, message }` — GDPR data deletion (cascade-deletes all user records) |
+| GET | `/api/tracker/portfolio/:walletAddress` | — | `{ walletAddress, chain, totalValueUsd, tokens: [top 10 by USD] }` — watched wallet portfolio with 24h price changes |
+| GET | `/api/admin/stats` | Admin only | `{ totalUsers, totalSwaps, totalFeesUsd, feesToday, fees7d, fees30d }` |
+| GET | `/api/admin/users?limit=` | Admin only | `{ users: [AdminUser], topFeeGenerators, totalUsers }` |
+| GET | `/api/admin/referrals` | Admin only | `{ topReferrers, totalReferrals, feeSharePercent }` |
+| POST | `/api/admin/set-tier` | Admin only | `{ telegramId\|telegramIds, tier }` → `{ success, tier, updated, notFound, results }` — set subscription tier for 1–100 users |
 
 #### `/api/transactions` query params in detail
 - `type`: `all` (default) | `swap` | `send` | `receive`
@@ -743,16 +773,28 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - "View Terms of Use" re-opens TermsModal
 - Log Out button (Privy logout)
 
-**Tab 4 — Tracker (Whale Tracker)** [v1.0.0 — NEW]
-- Add/remove Solana wallet addresses to watch for large movements
+**Admin Panel** (header 🛡️ icon, gated by `ADMIN_TELEGRAM_ID`) [v1.0.3]
+- **Overview section**: KPIs (total users, total swaps, total fees), revenue velocity (today/7d/30d)
+- **Top fee generators leaderboard** with golden badges
+- **Users section**: paginated user list with tier badge, swap/send/scan/referral counts
+- Quick-set tier dropdown on each user row
+- **Tiers section**: set tier for single user or bulk (up to 100 via comma/newline-separated IDs)
+- **Referrals section**: top referrers with earnings, total referral count
+- Live data refresh with timestamp
+
+**Tab 4 — Tracker (Whale Tracker)** [v1.0.0, multi-chain v1.0.3]
+- Add/remove **Solana and EVM** wallet addresses to watch for large movements
+- Multi-chain support: Solana, Ethereum, BSC, Polygon, Arbitrum, Base
 - Optional label per wallet (e.g. "Whale A", "DEV wallet")
+- **Wallet portfolio accordion**: tap a watched wallet to see top 10 tokens by USD value with 24h PnL
 - Slot counter badge: shows `X / Y wallets` (turns amber when full)
 - Tier limits: Free = 3 wallets, WHALE_TRACKER/ALL_ACCESS sub = 20 wallets, Admin = unlimited
 - "Upgrade" hint shown when free tier is at limit
 - Soft-delete (unwatch sets active=false, not DB delete)
 - Eye SVG icon in tab bar; active state shows filled pupil
-- Alerts fire via Telegram when tracked wallet moves ≥ 10 SOL (polling every 30s)
-- First poll sets baseline — no alerts on startup, only on NEW transactions
+- **Solana alerts**: fire via Telegram when tracked wallet moves ≥ `MIN_SOL_ALERT` SOL (polling every 30s)
+- **EVM alerts**: fire via Moralis Streams webhook when tracked wallet moves ≥ `MIN_ETH_ALERT` native tokens
+- First poll sets baseline — no alerts on startup, only on NEW transactions (5-min blockTime filter)
 
 **Tab 5 — History (Transactions)**
 - Type chips: All / Swaps / Sends / Receives (via Helius webhook)
@@ -828,7 +870,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.0.2 — PRODUCTION READY (final audit bug fixes applied)**
+### Current Status: **v1.0.3 — PRODUCTION READY (admin dashboard + multi-chain tracker)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -914,8 +956,13 @@ JUPITER_API_KEY=               # Required (Jupiter now enforces on Price V3 + To
 LIFI_API_KEY=                  # LI.FI partner key — configured, integrator `solswap` recognized
 HELIUS_API_KEY=                # Required for receive tracking. Extract from SOLANA_RPC_URL or set separately.
 HELIUS_WEBHOOK_SECRET=         # Random string to authenticate Helius webhook requests. Required for receive tracking.
-MORALIS_API_KEY=               # EVM token balances (Moralis free tier: 120K CUs/month). Get free key at moralis.io.
+MORALIS_API_KEY=               # EVM token balances + Streams (Moralis free tier: 120K CUs/month). Get free key at moralis.io.
+MORALIS_WEBHOOK_SECRET=        # Random string to authenticate Moralis Streams webhook calls. Required for EVM whale alerts.
 ADMIN_TELEGRAM_ID=             # Your Telegram numeric user ID — gates /api/admin/* routes. Optional.
+
+# ── WHALE TRACKER THRESHOLDS ───────────────────────────────────────────
+MIN_SOL_ALERT=10               # Minimum SOL moved to fire a whale alert (default: 10)
+MIN_ETH_ALERT=1                # Minimum native ETH/BNB/MATIC moved to fire a whale alert (default: 1)
 
 # ── PHASE 4 (not needed yet) ───────────────────────────────────────────────────
 GEMINI_API_KEY=                # Phase 4: AI market signals
@@ -1120,6 +1167,28 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-19 — Admin Dashboard + Multi-Chain Tracker + Documentation Sync (v1.0.3)
+- **Admin Dashboard (NEW):** Full admin panel accessible via header 🛡️ icon (gated by `ADMIN_TELEGRAM_ID`).
+  - `GET /api/admin/stats`: KPIs (total users, swaps, fees), revenue velocity (today/7d/30d).
+  - `GET /api/admin/users?limit=`: Paginated user list with tier, swap/send/scan/referral counts, top fee generators.
+  - `GET /api/admin/referrals`: Top referrers with earnings.
+  - `POST /api/admin/set-tier`: Set subscription tier for single or bulk users (up to 100). Valid tiers: FREE, SCANNER_PRO, WHALE_TRACKER, SIGNALS, ALL_ACCESS.
+  - Frontend `AdminPanel.tsx` (524 lines): 4 sections (Overview, Users, Tiers, Referrals), quick-set tier on user rows, bulk tier upload.
+- **Multi-Chain Whale Tracker:** Tracker now supports Solana + 5 EVM chains (Ethereum, BSC, Polygon, Arbitrum, Base).
+  - `WatchedWallet.chain` field added to schema (default: `"solana"`).
+  - EVM addresses auto-lowercased for consistent matching.
+  - Solana alerts: polling via `tracker/monitor.ts` (every 30s, threshold: `MIN_SOL_ALERT`).
+  - EVM alerts: Moralis Streams push via `POST /api/webhook/moralis` (threshold: `MIN_ETH_ALERT`).
+  - New `src/moralis/stream.ts`: init/manage Moralis Stream, add/remove EVM addresses.
+  - New `src/api/routes/webhookMoralis.ts`: HMAC-SHA256 authenticated webhook receiver.
+- **Tracker Portfolio (NEW):** `GET /api/tracker/portfolio/:walletAddress` — top 10 tokens by USD value for any watched wallet, with 24h price changes. Works for both Solana (via Helius RPC) and EVM (via Moralis). Frontend accordion view in TrackerPanel.
+- **Soft-delete fields:** Added `isHidden Boolean @default(false)` to Swap and Transfer models.
+- **New env vars:** `MORALIS_WEBHOOK_SECRET`, `MIN_SOL_ALERT` (default 10), `MIN_ETH_ALERT` (default 1).
+- **AdminPanel build fix:** Added missing `tier` property to AdminPanel test mock (fixes Vercel TS2741 build error).
+- **CLAUDE.md full sync:** Project structure, schema, API routes, env vars, feature inventory all updated to match codebase.
+- **PLAN.md replaced:** Old bug-fix plan (all bugs fixed) replaced with Scanner V2 upgrade plan (6 new Solana checks + EVM scanner).
+- **VPS redeployment required:** `npx prisma db push` (new schema fields) + `npm run build` + `pm2 restart`.
 
 ### 2026-03-16 — Final Audit Bug Fixes (v1.0.2)
 - **CVE-2026-30827 FIXED:** Upgraded `express-rate-limit` from 8.2.1 to 8.3.1. The default `keyGenerator` in 8.2.x applied a `/56` IPv6 subnet mask to IPv4-mapped addresses, collapsing all IPv4 clients into one rate-limit bucket (DoS vector). Fixed in 8.3.1 — no code changes needed.
@@ -1407,12 +1476,12 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 
 ---
 
-## 2026-03-10 — Production Audit + v1.0.0 Fixes (this session)
+## 2026-03-10 — Production Audit + v1.0.0 Fixes
 
 ### What Was Audited
 
 Full production-readiness audit run after pulling latest (29 files, 4991 insertions). Full report
-in `AUDIT_REPORT_2026-02-27.md`. Summary of findings and fixes from this session:
+in `AUDIT_REPORT_2026-02-27.md`. Summary of findings and fixes:
 
 ### Bugs Fixed
 
