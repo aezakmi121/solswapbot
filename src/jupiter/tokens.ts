@@ -4,6 +4,45 @@ import { connection } from "../solana/connection";
 import { PublicKey } from "@solana/web3.js";
 import { getMint } from "@solana/spl-token";
 
+const METAPLEX_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+
+/**
+ * Fetch token name and symbol from on-chain Metaplex metadata.
+ * Works for pump.fun and other Token-2022 tokens that have Metaplex metadata.
+ * Returns null if no metadata account exists.
+ */
+async function fetchMetaplexTokenInfo(mintAddress: string): Promise<{ name: string; symbol: string } | null> {
+    try {
+        const mint = new PublicKey(mintAddress);
+        const [pda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+            METAPLEX_PROGRAM_ID
+        );
+        const accountInfo = await connection.getAccountInfo(pda);
+        if (!accountInfo || accountInfo.data.length < 100) return null;
+
+        const data = accountInfo.data;
+        // Metaplex metadata layout: key(1) + updateAuth(32) + mint(32) = offset 65
+        let offset = 65;
+
+        // name: 4-byte LE length prefix + content
+        const nameLen = data.readUInt32LE(offset);
+        offset += 4;
+        const name = data.subarray(offset, offset + nameLen).toString("utf8").replace(/\0/g, "").trim();
+        offset += nameLen;
+
+        // symbol: 4-byte LE length prefix + content
+        const symbolLen = data.readUInt32LE(offset);
+        offset += 4;
+        const symbol = data.subarray(offset, offset + symbolLen).toString("utf8").replace(/\0/g, "").trim();
+
+        if (!name && !symbol) return null;
+        return { name: name || "Unknown Token", symbol: symbol || name || mintAddress.slice(0, 6) };
+    } catch {
+        return null;
+    }
+}
+
 /** Token info from Jupiter Token API */
 export interface JupiterToken {
   address: string;
@@ -162,14 +201,17 @@ export async function searchTokens(query: string, limit = 20): Promise<JupiterTo
     const jupiterToken = await lookupTokenFromJupiter(query.trim());
     if (jupiterToken) return [jupiterToken];
 
-    // On-chain fallback: resolve unverified token metadata from the mint account
+    // On-chain fallback: resolve unverified token metadata from mint account + Metaplex
     try {
       const mintPubkey = new PublicKey(query.trim());
-      const mintInfo = await getMint(connection, mintPubkey);
+      const [mintInfo, metaplex] = await Promise.all([
+        getMint(connection, mintPubkey),
+        fetchMetaplexTokenInfo(query.trim()),
+      ]);
       return [{
         address: mintPubkey.toBase58(),
-        symbol: mintPubkey.toBase58().slice(0, 6),
-        name: "Unknown Token",
+        symbol: metaplex?.symbol || mintPubkey.toBase58().slice(0, 6),
+        name: metaplex?.name || "Unknown Token",
         decimals: mintInfo.decimals,
         logoURI: null,
       }];
@@ -201,14 +243,34 @@ export async function searchTokens(query: string, limit = 20): Promise<JupiterTo
   return results.slice(0, limit).map((r) => r.token);
 }
 
-/** Look up a single token by mint address. Checks verified cache first, then Jupiter single-token API. */
+/** Look up a single token by mint address. Checks verified cache first, then Jupiter single-token API, then Metaplex on-chain. */
 export async function getTokenByMint(mint: string): Promise<JupiterToken | null> {
   const all = await loadTokenList();
   const cached = all.find((t) => t.address === mint);
   if (cached) return cached;
 
   // Jupiter single-token lookup for unverified/memecoin tokens
-  return lookupTokenFromJupiter(mint);
+  const jupiterToken = await lookupTokenFromJupiter(mint);
+  if (jupiterToken) return jupiterToken;
+
+  // Metaplex on-chain fallback for tokens Jupiter doesn't know about
+  const metaplex = await fetchMetaplexTokenInfo(mint);
+  if (metaplex) {
+    try {
+      const mintInfo = await getMint(connection, new PublicKey(mint));
+      return {
+        address: mint,
+        symbol: metaplex.symbol,
+        name: metaplex.name,
+        decimals: mintInfo.decimals,
+        logoURI: null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /** Look up decimals for a mint address. Tries Jupiter cache first, then on-chain RPC. Falls back to 9. */
@@ -226,11 +288,45 @@ export async function getTokenDecimals(mint: string): Promise<number> {
   }
 }
 
-/** Batch look up metadata for multiple mints. Returns a map of mint → token (undefined if not found). */
+/** Batch look up metadata for multiple mints. Returns a map of mint → token (undefined if not found).
+ *  Checks verified cache first, then resolves unknown mints via Jupiter single-token API + Metaplex fallback. */
 export async function getTokensMetadata(
   mints: string[]
 ): Promise<Record<string, JupiterToken | undefined>> {
   const all = await loadTokenList();
   const byMint = new Map(all.map((t) => [t.address, t]));
-  return Object.fromEntries(mints.map((m) => [m, byMint.get(m)]));
+  const result: Record<string, JupiterToken | undefined> = {};
+  const unknownMints: string[] = [];
+
+  for (const m of mints) {
+    const cached = byMint.get(m);
+    if (cached) {
+      result[m] = cached;
+    } else {
+      unknownMints.push(m);
+    }
+  }
+
+  // Resolve unknown mints in parallel (Jupiter + Metaplex fallback)
+  if (unknownMints.length > 0) {
+    const lookups = await Promise.all(
+      unknownMints.map(async (mint) => {
+        const token = await lookupTokenFromJupiter(mint);
+        if (token) return { mint, token };
+        const metaplex = await fetchMetaplexTokenInfo(mint);
+        if (metaplex) {
+          try {
+            const mintInfo = await getMint(connection, new PublicKey(mint));
+            return { mint, token: { address: mint, symbol: metaplex.symbol, name: metaplex.name, decimals: mintInfo.decimals, logoURI: null } as JupiterToken };
+          } catch { /* fall through */ }
+        }
+        return { mint, token: undefined };
+      })
+    );
+    for (const { mint, token } of lookups) {
+      result[mint] = token;
+    }
+  }
+
+  return result;
 }

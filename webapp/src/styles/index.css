@@ -6427,15 +6427,24 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   color: #ef4444; /* Red */
 }
 
+.tracker-portfolio-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
 .tracker-portfolio-table {
   width: 100%;
+  min-width: 340px;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .tracker-portfolio-table td {
-  padding: 6px 0;
+  padding: 8px 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
 }
 
 .tracker-portfolio-table tr:last-child td {
@@ -6445,9 +6454,10 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
 .tracker-token-col {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-weight: 500;
   color: var(--text-primary);
+  min-width: 60px;
 }
 
 .tracker-token-icon {
@@ -6455,6 +6465,7 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   height: 20px;
   border-radius: 50%;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 .tracker-token-icon-fallback {
@@ -6462,11 +6473,15 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   height: 20px;
   border-radius: 50%;
   background: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
 .tracker-bal-col {
   text-align: right;
   color: var(--text-secondary);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tracker-price-col {
@@ -6478,7 +6493,7 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
 }
 
 .tracker-token-pxchange {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .tracker-val-col {
