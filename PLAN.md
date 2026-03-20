@@ -8,76 +8,58 @@ in-house using existing RPC endpoints. No external APIs.
 
 ---
 
-## Phase 1: Fix Build Error + New Solana Checks (this session)
+## Phase 1: New Solana Checks — COMPLETE ✅ (2026-03-20)
 
-### Step 0: Fix Vercel Build Error
+All 6 new checks implemented, wired, scored, and documented.
+
+### Step 0: Fix Vercel Build Error — DONE
 - [x] Add missing `tier` property to AdminPanel test mock
 
-### Step 1: New Solana Scanner Checks (in `src/scanner/checks.ts`)
+### Step 1: New Solana Scanner Checks — DONE
+All 6 checks added to `src/scanner/checks.ts`:
 
-Add 6 new checks to the existing scanner. All use the existing Helius RPC — no new API keys.
+| # | Check | Weight | Status |
+|---|-------|--------|--------|
+| 1 | **Liquidity Pool** | 25 | ✅ Raydium V4 AMM Authority pool detection |
+| 2 | **Metadata Mutability** | 15 | ✅ Metaplex PDA borsh parsing, `isMutable` flag |
+| 3 | **Update Authority** | 10 | ✅ Checks if update authority revoked (system program) |
+| 4 | **Honeypot Detection** | 20 | ✅ Jupiter sell simulation (token → WSOL) |
+| 5 | **Creator Holdings** | 15 | ✅ Oldest signature → deployer → current balance vs supply |
+| 6 | **Transfer Fee** | 10 | ✅ Token-2022 TLV extension parsing |
 
-| # | Check | Weight | What it detects | How to implement |
-|---|-------|--------|----------------|-----------------|
-| 1 | **Liquidity Burned/Locked** | 25 | LP tokens not burned = dev can rug by removing liquidity | Find Raydium/Orca pool for the mint → get `lpMint` → check if LP tokens sent to burn address (`1111...1111`) or held by a known locker program. If no pool found, flag as "No liquidity pool detected". |
-| 2 | **Metadata Mutability** | 15 | Dev can change token name/symbol/image after launch to impersonate legit tokens | Derive Metaplex metadata PDA → fetch account → read `isMutable` byte (offset varies by version). Safe if `isMutable === false`. |
-| 3 | **Update Authority** | 10 | Dev can modify metadata at will | Same Metaplex metadata account → read `updateAuthority` field. Safe if set to `11111111111111111111111111111111` (system program = revoked). |
-| 4 | **Honeypot Detection** | 20 | Token can be bought but not sold | Call Jupiter quote API for a SELL direction (token → SOL). If no route found or error, it's likely a honeypot. Use existing `getQuote()` from `jupiter/quote.ts`. |
-| 5 | **Creator Token Holdings** | 15 | Deployer still holds large % = dump risk | Walk mint's signature history to find deployer (first signer). Check their current token balance vs total supply. Unsafe if >10%. |
-| 6 | **Token-2022 Transfer Fee** | 10 | Hidden tax on every transfer | If token is Token-2022 program, parse extension data for `TransferFee` extension. Report fee % if present. |
+### Step 2: Update `analyze.ts` — DONE
+- [x] Fetch Metaplex metadata PDA in initial `Promise.all()` (shared by mutability + update authority)
+- [x] 7 async checks in Phase 2 parallel batch
+- [x] 5 sync checks in Phase 3 inline
+- [x] Normalized scoring: `score = unsafeWeight / totalPossibleWeight * 100`
+- [x] Errored checks excluded from both numerator and denominator
 
-**Updated weight table after Phase 1:**
+### Step 3: Update Frontend — DONE
+- [x] All 6 new check info entries added to `CHECK_INFO` in `ScanPanel.tsx`
+
+### Step 4: Category Grouping — DEFERRED to Phase 3
+Category headers and `category` field on `CheckResult` moved to Phase 3 (UI Polish).
+Current implementation works without categories — checks display in weight-descending order.
+
+**Final weight table (12 checks, 200 total):**
 
 ```
-Existing:                    New:
-Mint Authority        30     Liquidity Burned/Locked  25
+Mint Authority        30     Liquidity Pool           25
 Freeze Authority      20     Honeypot Detection       20
 Top Holders           20     Metadata Mutability      15
 Token Metadata        15     Creator Holdings         15
 Jupiter Verified      10     Update Authority         10
-Token Age             10     Token-2022 Transfer Fee  10
+Token Age             10     Transfer Fee             10
                     ────                             ────
 Subtotal:            105     Subtotal:               95
-
-Combined max:        200 → clamped to 100
+                Combined: 200 → normalized to 0-100
 ```
 
-**Scoring adjustment:** With 12 checks totaling 200 max weight, we normalize:
-`riskScore = Math.round((rawScore / totalPossibleWeight) * 100)` — this way adding
-checks doesn't inflate the score. Only count weights from non-errored checks in the
-denominator.
-
-### Step 2: Update `analyze.ts`
-
-- Fetch Metaplex metadata PDA in initial `Promise.all()` (shared by mutability + update authority checks)
-- Add honeypot check (Jupiter sell quote)
-- Add liquidity check (Raydium pool lookup)
-- Add creator holdings check
-- Add Token-2022 extension check
-- Update scoring to use normalized percentage instead of raw sum
-
-### Step 3: Update Frontend — Check Explanations
-
-Add entries to `CHECK_INFO` in `ScanPanel.tsx` for all 6 new checks:
-
-```typescript
-"Liquidity Burned": "Liquidity pool tokens (LP) should be burned or locked. If the creator still holds LP tokens, they can withdraw all liquidity at any time, making the token unsellable.",
-"Metadata Mutability": "If metadata is mutable, the creator can change the token's name, symbol, and image after launch — potentially impersonating legitimate tokens.",
-"Update Authority": "The update authority controls who can modify the token's on-chain metadata. It should be revoked (set to the system program) for maximum safety.",
-"Honeypot Detection": "We simulate selling this token back to SOL. If no sell route exists, the token may be a honeypot — you can buy but never sell.",
-"Creator Holdings": "Shows what percentage of the supply the token creator still holds. Large creator holdings (>10%) mean they could dump at any time.",
-"Transfer Fee": "Some Token-2022 tokens have a built-in transfer fee that takes a percentage on every transfer. This is a hidden tax most buyers don't expect.",
-```
-
-### Step 4: Update `ScanResult` Response
-
-Add a `category` field to `CheckResult` for grouping in the UI:
-- `"authority"` — Mint Authority, Freeze Authority, Update Authority, Metadata Mutability
-- `"liquidity"` — Liquidity Burned, Honeypot Detection
-- `"distribution"` — Top Holders, Creator Holdings
-- `"identity"` — Token Metadata, Jupiter Verified, Token Age, Transfer Fee
-
-Frontend groups checks by category with section headers.
+**RPC optimizations implemented:**
+- `accountInfo` fetched once → shared by mintAuthority + freezeAuthority + transferFee
+- `supplyInfo` fetched once → shared by topHolders + creatorHoldings
+- `metaplexData` fetched once → shared by metadataMutability + updateAuthority
+- `tokenMeta` (Jupiter cache) → shared by jupiterVerified + hasMetadata
 
 ---
 
@@ -130,15 +112,12 @@ Backend needs one free RPC per chain (no API key required):
 
 ## Files Modified
 
-### Phase 1 (this session):
+### Phase 1 (COMPLETE — 2026-03-20):
 | File | Changes |
 |------|---------|
-| `src/scanner/checks.ts` | Add 6 new check functions |
-| `src/scanner/analyze.ts` | Wire new checks, normalize scoring |
-| `webapp/src/components/ScanPanel.tsx` | Add CHECK_INFO entries, category grouping |
-| `webapp/src/lib/api.ts` | Update ScanResult type if needed |
-| `webapp/src/styles/index.css` | Category header styles |
-| `webapp/src/components/__tests__/AdminPanel.test.tsx` | Fix `tier` property (build fix) |
+| `src/scanner/checks.ts` | Added 6 new check functions + `fetchMetaplexMetadata()` + `getMetadataPda()` helper |
+| `src/scanner/analyze.ts` | Wired 12 checks, 3-phase execution, normalized scoring |
+| `webapp/src/components/ScanPanel.tsx` | Added 6 CHECK_INFO entries for new checks |
 
 ### Phase 2 (future):
 | File | Changes |

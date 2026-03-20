@@ -58,6 +58,12 @@ const CHECK_INFO: Record<string, string> = {
     "Token Metadata": "Legitimate tokens have a registered name and symbol. Missing metadata is common with hastily-created scam tokens.",
     "Jupiter Verified": "Jupiter maintains a curated list of vetted tokens. Unverified tokens haven't passed their review process.",
     "Token Age": "Very new tokens (under 24 hours) are higher risk. Most rug pulls happen within the first few hours of launch.",
+    "Liquidity Pool": "Liquidity pools let you buy and sell a token. If no pool exists or liquidity was drained, the token may be unsellable. Burned LP tokens mean the creator can never pull the liquidity.",
+    "Honeypot Detection": "We simulate selling this token back to SOL. If no sell route exists, the token may be a honeypot — you can buy but can never sell.",
+    "Metadata Mutability": "If metadata is mutable, the creator can change the token's name, symbol, and image after launch — potentially impersonating legitimate tokens to trick buyers.",
+    "Creator Holdings": "Shows what percentage of the total supply the token deployer still holds. Large creator holdings (>10%) mean they could dump their tokens and crash the price at any time.",
+    "Update Authority": "The update authority controls who can modify the token's on-chain metadata. It should be revoked for maximum safety. If active, the creator can rename or rebrand the token.",
+    "Transfer Fee": "Some Token-2022 tokens have a built-in transfer fee that takes a percentage on every transfer. This is a hidden tax most buyers don't expect and reduces your holdings with each transaction.",
 };
 
 export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
