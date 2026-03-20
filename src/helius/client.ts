@@ -115,17 +115,25 @@ export async function addAddressToWebhook(address: string): Promise<void> {
             return;
         }
 
-        const webhook = await getRes.json() as { accountAddresses: string[] };
+        const webhook = await getRes.json() as {
+            accountAddresses: string[];
+            webhookURL: string;
+            transactionTypes: string[];
+            webhookType: string;
+        };
         const existing = webhook.accountAddresses ?? [];
 
         // Skip if address is already watched
         if (existing.includes(address)) return;
 
-        // Update with the new address appended
+        // Update with the new address appended — Helius PUT requires all fields
         const updateRes = await fetch(`${HELIUS_API_BASE}/webhooks/${webhookId}?api-key=${apiKey}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                webhookURL: webhook.webhookURL,
+                transactionTypes: webhook.transactionTypes,
+                webhookType: webhook.webhookType,
                 accountAddresses: [...existing, address],
             }),
         });

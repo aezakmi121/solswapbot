@@ -151,35 +151,37 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
                     )}
                 </div>
 
-                <table className="tracker-portfolio-table">
-                    <tbody>
-                        {data.tokens.map((t, idx) => {
-                            const tPos = (t.priceChange24h ?? 0) >= 0;
-                            return (
-                                <tr key={`${t.mint}-${idx}`}>
-                                    <td className="tracker-token-col">
-                                        {t.icon ? <img src={t.icon} alt="" className="tracker-token-icon" /> : <div className="tracker-token-icon-fallback" />}
-                                        <span>{t.symbol}</span>
-                                    </td>
-                                    <td className="tracker-bal-col">
-                                        {t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                    </td>
-                                    <td className="tracker-price-col">
-                                        <div className="tracker-token-price">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</div>
-                                        {t.priceChange24h !== null && (
-                                            <div className={`tracker-token-pxchange ${tPos ? 'positive' : 'negative'}`}>
-                                                {tPos ? '+' : ''}{t.priceChange24h.toFixed(2)}%
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="tracker-val-col">
-                                        {t.valueUsd ? formatUsd(t.valueUsd) : "—"}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                <div className="tracker-portfolio-scroll">
+                    <table className="tracker-portfolio-table">
+                        <tbody>
+                            {data.tokens.map((t, idx) => {
+                                const tPos = (t.priceChange24h ?? 0) >= 0;
+                                return (
+                                    <tr key={`${t.mint}-${idx}`}>
+                                        <td className="tracker-token-col">
+                                            {t.icon ? <img src={t.icon} alt="" className="tracker-token-icon" /> : <div className="tracker-token-icon-fallback" />}
+                                            <span>{t.symbol}</span>
+                                        </td>
+                                        <td className="tracker-bal-col">
+                                            {t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                        </td>
+                                        <td className="tracker-price-col">
+                                            <div className="tracker-token-price">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</div>
+                                            {t.priceChange24h !== null && (
+                                                <div className={`tracker-token-pxchange ${tPos ? 'positive' : 'negative'}`}>
+                                                    {tPos ? '+' : ''}{t.priceChange24h.toFixed(2)}%
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="tracker-val-col">
+                                            {t.valueUsd ? formatUsd(t.valueUsd) : "—"}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         );
     };
@@ -193,7 +195,7 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
                     </span>
                     <button className="tx-detail-close" onClick={onClose}><X size={20} /></button>
                 </div>
-                <div className="tx-detail-body">
+                <div className="tx-detail-body" style={{ overflow: "visible", border: "none" }}>
                     {renderContent()}
                 </div>
             </div>
