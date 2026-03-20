@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-19 | Version: 1.0.3
+> Updated: 2026-03-20 | Version: 1.1.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -216,9 +216,10 @@ solswapbot/
 │   │   └── bridgePoller.ts       # Background poller: resolves SUBMITTED cross-chain swaps via LI.FI status [v0.8.0]
 │   │
 │   ├── scanner/
-│   │   ├── analyze.ts            # analyzeToken(): orchestrates all checks, computes risk score 0-100
-│   │   └── checks.ts             # Individual checks: mintAuthority, freezeAuthority, topHolders,
-│   │                             #   tokenAge, jupiterVerified, hasMetadata
+│   │   ├── analyze.ts            # analyzeToken(): orchestrates 12 checks in 3 phases, normalized risk score 0-100
+│   │   └── checks.ts             # 12 checks: mintAuthority, freezeAuthority, topHolders, tokenAge,
+│   │                             #   jupiterVerified, hasMetadata, metadataMutability, updateAuthority,
+│   │                             #   honeypot, creatorHoldings, liquidity, transferFee + fetchMetaplexMetadata()
 │   │
 │   ├── tracker/
 │   │   ├── monitor.ts            # Whale wallet monitor: polls watched wallets every 30s, fires Telegram alerts
@@ -561,33 +562,42 @@ Solana tokens sourced from Jupiter. EVM tokens sourced from Moralis (requires `M
 The scanner is the most complex backend subsystem. Understanding it is important before
 modifying `src/scanner/analyze.ts` or `src/scanner/checks.ts`.
 
-### Risk Score Algorithm
+### Risk Score Algorithm (V2 — Normalized Scoring)
 
 ```
-Score = sum of weights for all UNSAFE checks that did NOT error out.
+Score = (sum of unsafe weights) / (sum of all non-errored weights) × 100
+Errored checks excluded from BOTH numerator AND denominator.
 Clamped to 0-100.
 
 0-20:  LOW risk    (green)
 21-50: MEDIUM risk (yellow)
 51+:   HIGH risk   (red)
 
-Check           Weight  Description
+Check               Weight  Description
 ─────────────────────────────────────────────────────────────────────
-Mint Authority    30    Creator can mint infinite tokens → dump risk
-Freeze Authority  20    Creator can freeze your balance
-Top Holders       20    Top 10 own >50% → whale dump risk
-Token Metadata    15    No name/symbol → anonymous token
-Jupiter Verified  10    Not on Jupiter verified list → unvetted
-Token Age         10    Brand-new tokens higher risk
+Mint Authority        30    Creator can mint infinite tokens → dump risk
+Liquidity Pool        25    No pool or LP not burned = rug vector
+Freeze Authority      20    Creator can freeze your balance
+Top Holders           20    Top 10 own >50% → whale dump risk
+Honeypot Detection    20    Token can be bought but not sold
+Metadata Mutability   15    Creator can change name/symbol/image
+Token Metadata        15    No name/symbol → anonymous token
+Creator Holdings      15    Deployer still holds >10% of supply
+Update Authority      10    Metadata authority not revoked
+Jupiter Verified      10    Not on Jupiter verified list → unvetted
+Token Age             10    Brand-new tokens higher risk
+Transfer Fee          10    Token-2022 hidden tax on transfers
 ─────────────────────────────────────────────────────────────────────
-Max possible:    105    Clamped to 100
+Total:              200    Normalized to 0-100
 ```
 
 ### RPC Optimizations (all in `analyze.ts`)
-- `accountInfo` fetched once → shared by `checkMintAuthority` + `checkFreezeAuthority`
-- `getTokenSupply` fetched once → shared with `checkTopHolders`
+- `accountInfo` fetched once → shared by `checkMintAuthority` + `checkFreezeAuthority` + `checkTransferFee`
+- `getTokenSupply` fetched once → shared with `checkTopHolders` + `checkCreatorHoldings`
 - `tokenMeta` fetched from Jupiter cache → shared by `checkJupiterVerified` + `checkHasMetadata`
-- Four async checks run in `Promise.all()`; two synchronous checks run inline
+- `metaplexData` fetched once → shared by `checkMetadataMutability` + `checkUpdateAuthority`
+- Phase 2: seven async checks in `Promise.all()` (mint/freeze auth, top holders, token age, honeypot, creator holdings, liquidity)
+- Phase 3: five synchronous checks run inline (jupiter verified, metadata, mutability, update authority, transfer fee)
 
 ### errored Flag (Important)
 If a check throws due to a network/RPC error, it returns `{ errored: true, safe: true }`.
@@ -755,7 +765,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Paste or type token mint address
 - Animated SVG speedometer gauge (RiskGauge) with color gradient
 - Token icon + name + symbol displayed above gauge
-- Per-check results: Mint Authority, Freeze Authority, Top Holders, Token Metadata, Jupiter Verified, Token Age
+- Per-check results: Mint Authority, Liquidity Pool, Freeze Authority, Top Holders, Honeypot Detection, Metadata Mutability, Token Metadata, Creator Holdings, Update Authority, Jupiter Verified, Token Age, Transfer Fee
 - Info icon (ℹ️) on each check — tap to expand inline explanation of what the check means
 - Token info: supply, price, decimals
 - "Swap This Token" → switches to Swap tab with that token pre-selected
@@ -870,7 +880,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.0.3 — PRODUCTION READY (admin dashboard + multi-chain tracker)**
+### Current Status: **v1.1.0 — PRODUCTION READY (Scanner V2: 12-check normalized scoring)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -1167,6 +1177,26 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-20 — Scanner V2: 12-Check Normalized Scoring (v1.1.0)
+- **6 new scanner checks added** to `src/scanner/checks.ts`, doubling coverage from 6 to 12 checks:
+  - **Liquidity Pool** (weight 25): Detects Raydium V4 AMM pools via the AMM Authority (`5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1`). Flags tokens with no pool or drained liquidity.
+  - **Honeypot Detection** (weight 20): Simulates a sell (token → WSOL) via Jupiter quote API. No sell route = possible honeypot. Skips known liquid tokens (SOL, USDC, USDT).
+  - **Metadata Mutability** (weight 15): Derives Metaplex metadata PDA, borsh-parses the account data, reads `isMutable` flag. Mutable metadata = creator can change name/symbol/image.
+  - **Creator Holdings** (weight 15): Walks mint signature history to find deployer (oldest tx signer), checks their current token balance vs total supply. Flags >10%.
+  - **Update Authority** (weight 10): Reads `updateAuthority` from Metaplex metadata. Safe if revoked (set to system program `1111...1111`) or metadata is already immutable.
+  - **Transfer Fee** (weight 10): Parses Token-2022 TLV extensions for `TransferFeeConfig` (type=1). Reports fee % if present. Standard SPL tokens always pass.
+- **New helper functions:** `fetchMetaplexMetadata(mintAddress)` fetches and borsh-parses Metaplex metadata PDA. `getMetadataPda(mint)` derives the PDA address.
+- **Normalized scoring algorithm:** Changed from `rawScore clamped to 100` to `(unsafeWeight / totalPossibleWeight) × 100`. Errored checks excluded from both numerator and denominator, preventing network flakiness from skewing scores.
+- **3-phase execution in `analyze.ts`:**
+  - Phase 1: Parallel fetch of shared data (accountInfo, supplyInfo, price, tokenMeta, metaplexData)
+  - Phase 2: 7 async checks in parallel (mint/freeze auth, top holders, token age, honeypot, creator holdings, liquidity)
+  - Phase 3: 5 sync checks inline (jupiter verified, has metadata, metadata mutability, update authority, transfer fee)
+- **RPC optimizations:** accountInfo shared by 3 checks, supplyInfo by 2, metaplexData by 2, tokenMeta by 2 — total 12 checks with only 5 RPC calls.
+- **Frontend:** Added 6 new entries to `CHECK_INFO` in `ScanPanel.tsx` with user-friendly explanations.
+- **No DB schema changes.** Existing `TokenScan` model stores results as-is. Old scans keep their original scores.
+- **No new API keys needed.** All checks use existing Helius RPC + Jupiter quote API.
+- **VPS redeployment required:** `npm run build` + `pm2 restart`. No Prisma changes needed.
 
 ### 2026-03-19 — Admin Dashboard + Multi-Chain Tracker + Documentation Sync (v1.0.3)
 - **Admin Dashboard (NEW):** Full admin panel accessible via header 🛡️ icon (gated by `ADMIN_TELEGRAM_ID`).
