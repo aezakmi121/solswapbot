@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
-import { analyzeToken } from "../../scanner/analyze";
-import { isValidPublicKey } from "../../utils/validation";
+import { analyzeToken, ScanResult } from "../../scanner/analyze";
+import { analyzeEvmToken, resolveEvmChain } from "../../scanner/evmAnalyze";
+import { isValidPublicKey, isValidEvmAddress } from "../../utils/validation";
 import { prisma } from "../../db/client";
 import { findUserByTelegramId } from "../../db/queries/users";
 import { config } from "../../config";
@@ -8,21 +9,29 @@ import { config } from "../../config";
 export const scanRouter = Router();
 
 /**
- * GET /api/scan?mint=<ADDRESS>
- * Returns a full safety analysis of the given Solana token.
+ * GET /api/scan?mint=<ADDRESS>&chain=<CHAIN>
+ * Returns a full safety analysis of the given token.
+ * Auto-detects chain from address format:
+ *   - 0x... → EVM (chain param: ethereum|bsc|polygon|arbitrum|base, default: ethereum)
+ *   - Base58 → Solana
  * Also saves the result to the DB for scan history.
  */
 scanRouter.get("/scan", async (req: Request, res: Response) => {
     try {
-        const mint = req.query.mint as string;
+        const mint = (req.query.mint as string)?.trim();
+        const chainHint = req.query.chain as string | undefined;
 
         if (!mint) {
             res.status(400).json({ error: "Missing 'mint' query parameter" });
             return;
         }
 
-        if (!isValidPublicKey(mint)) {
-            res.status(400).json({ error: "Invalid Solana address" });
+        // Detect chain from address format
+        const isEvm = isValidEvmAddress(mint);
+        const isSolana = !isEvm && isValidPublicKey(mint);
+
+        if (!isEvm && !isSolana) {
+            res.status(400).json({ error: "Invalid token address. Provide a Solana mint or EVM contract address (0x...)" });
             return;
         }
 
@@ -30,9 +39,8 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
         const telegramId = res.locals.telegramId as string;
         const user = await findUserByTelegramId(telegramId);
 
-        // Admin account bypasses all limits
         const isAdmin = !!(config.ADMIN_TELEGRAM_ID && telegramId === config.ADMIN_TELEGRAM_ID);
-        console.log(`[scan] telegramId=${telegramId}, ADMIN_TELEGRAM_ID=${config.ADMIN_TELEGRAM_ID ?? "(not set)"}, isAdmin=${isAdmin}`);
+        console.log(`[scan] telegramId=${telegramId}, chain=${isEvm ? "evm" : "solana"}, isAdmin=${isAdmin}`);
 
         const FREE_SCANS_PER_DAY = 10;
         if (user && !isAdmin) {
@@ -44,7 +52,6 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
             });
 
             if (todayScans >= FREE_SCANS_PER_DAY) {
-                // Check subscription tier — paid users bypass the limit
                 const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
                 const isExpired = sub?.expiresAt && sub.expiresAt < new Date();
                 if (!sub || sub.tier === "FREE" || isExpired) {
@@ -59,9 +66,16 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
             }
         }
 
-        const result = await analyzeToken(mint);
+        // Route to the correct scanner
+        let result: ScanResult;
+        if (isEvm) {
+            const chain = resolveEvmChain(chainHint);
+            result = await analyzeEvmToken(mint.toLowerCase(), chain);
+        } else {
+            result = await analyzeToken(mint);
+        }
 
-        // Save scan to DB for history (best effort — don't fail the response if DB write fails)
+        // Save scan to DB for history (best effort)
         try {
             if (user) {
                 await prisma.tokenScan.create({
@@ -81,7 +95,6 @@ scanRouter.get("/scan", async (req: Request, res: Response) => {
                 });
             }
         } catch (dbErr) {
-            // Non-fatal — log but continue returning the scan result
             console.error("Failed to save scan to DB:", dbErr);
         }
 

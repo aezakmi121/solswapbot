@@ -33,10 +33,11 @@ export interface ScanResult {
         supply: string | null;
         decimals: number | null;
         price: number | null;
-        name: string | null;      // from Jupiter token list
-        symbol: string | null;    // from Jupiter token list
-        icon: string | null;      // from Jupiter token list
+        name: string | null;      // from Jupiter token list (Solana) or ERC-20 name() (EVM)
+        symbol: string | null;    // from Jupiter token list (Solana) or ERC-20 symbol() (EVM)
+        icon: string | null;      // from Jupiter token list (Solana only)
     };
+    chain?: string;           // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
     scannedAt: string;
 }
 
@@ -157,6 +158,7 @@ export async function analyzeToken(mintAddress: string): Promise<ScanResult> {
             symbol: tokenMeta?.symbol ?? null,
             icon: tokenMeta?.logoURI ?? null,
         },
+        chain: "solana",
         scannedAt: new Date().toISOString(),
     };
 }

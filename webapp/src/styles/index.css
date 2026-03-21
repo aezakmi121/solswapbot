@@ -1899,6 +1899,49 @@ body {
   gap: 8px;
 }
 
+.scan-chain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.scan-chain-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.scan-chain-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.scan-chain-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.scan-chain-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.scan-chain-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 .btn-spinner {
   width: 14px;
   height: 14px;
@@ -2073,6 +2116,24 @@ body {
   letter-spacing: 0.3px;
   margin-top: -4px;
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.scan-chain-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-family: -apple-system, system-ui, sans-serif;
+  color: var(--text-secondary);
+  letter-spacing: 0;
 }
 
 /* Disclaimer block */
