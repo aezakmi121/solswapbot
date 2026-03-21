@@ -63,43 +63,63 @@ Subtotal:            105     Subtotal:               95
 
 ---
 
-## Phase 2: EVM Token Scanner (future session)
+## Phase 2: EVM Token Scanner — COMPLETE ✅ (2026-03-21)
 
-### Architecture
+Full EVM token scanner supporting 5 chains: Ethereum, BSC, Polygon, Arbitrum, Base.
 
-The scan route detects chain by address format:
-- Solana address (base58, 32-44 chars) → existing Solana scanner
-- EVM address (`0x` + 40 hex chars) → new EVM scanner
+### Architecture — DONE
+- [x] Scan route auto-detects chain from address format (0x... → EVM, base58 → Solana)
+- [x] Optional `?chain=` query param for EVM (default: ethereum)
+- [x] Free public RPCs configured in `config.ts` with defaults (no API keys needed)
+- [x] `isValidEvmAddress()` added to `validation.ts`
 
-Backend needs one free RPC per chain (no API key required):
-- Ethereum: `https://eth.llamarpc.com` or Infura free tier
-- BSC: `https://bsc-dataseed.binance.org`
-- Polygon: `https://polygon-rpc.com`
-- Arbitrum: `https://arb1.arbitrum.io/rpc`
-- Base: `https://mainnet.base.org`
+### EVM Checks (8 checks, total weight 130, normalized to 0-100) — DONE
 
-### EVM Checks (8 checks, all via `eth_call` / `eth_getStorageAt`)
+| # | Check | Weight | Implementation |
+|---|-------|--------|---------------|
+| 1 | **Owner Renounced** | 25 | ✅ `owner()` selector → check if `address(0)`. No owner() = non-Ownable (safe). |
+| 2 | **Proxy Contract** | 20 | ✅ EIP-1967 implementation slot. Non-zero = upgradeable proxy. |
+| 3 | **Honeypot Simulation** | 20 | ✅ LI.FI sell quote (token → wrapped native). No route = honeypot. Known tokens skipped. |
+| 4 | **Contract Code** | 15 | ✅ `eth_getCode` — no code = EOA, <100 bytes = suspicious. |
+| 5 | **Top Holders** | 15 | ✅ `totalSupply()` + contract self-balance check + dead address burn check. |
+| 6 | **Mint Function** | 15 | ✅ Bytecode scan for `mint(address,uint256)` + `mint(uint256)` selectors. Cross-refs owner renounced. |
+| 7 | **Transfer Tax** | 10 | ✅ Bytecode scan for fee-on-transfer selectors (setTaxFeePercent, excludeFromFee, etc.). |
+| 8 | **Liquidity** | 10 | ✅ Checks DEX factory pairs (Uniswap/PancakeSwap/QuickSwap/Camelot/Aerodrome) + USDC pair fallback. |
 
-| # | Check | Weight | How |
-|---|-------|--------|-----|
-| 1 | **Owner Renounced** | 25 | Call `owner()` selector `0x8da5cb5b` → check if `address(0)` |
-| 2 | **Proxy Contract** | 20 | Read EIP-1967 implementation slot. If proxy, flag as upgradeable (dev can change logic) |
-| 3 | **Honeypot Simulation** | 20 | Use LI.FI quote API to simulate a sell. No route = honeypot. |
-| 4 | **Contract Verified** | 15 | Check if contract has code (`eth_getCode`). Can't verify source without explorer API, but can flag if code is suspiciously small/large. |
-| 5 | **Total Supply / Top Holders** | 15 | Call `totalSupply()` + check if any single holder has >20% |
-| 6 | **Mint Function** | 15 | Call `totalSupply()` at two points or check if contract has `mint` selector in bytecode |
-| 7 | **Transfer Tax** | 10 | Simulate transfer and compare input/output amounts |
-| 8 | **Liquidity** | 10 | Check if main DEX pair has reasonable TVL |
+### EVM Token Info Fetcher — DONE
+- [x] `fetchEvmTokenInfo()`: parallel `name()`, `symbol()`, `decimals()`, `totalSupply()` calls
+- [x] ABI string decoding for dynamic return types
 
-### Frontend Changes for EVM
-- Input field accepts both Solana and EVM addresses
-- Chain auto-detected from address format
-- Chain badge shown on results (🟣 Solana / 🔷 Ethereum / etc.)
-- Check names may differ per chain but categories stay the same
+### Frontend Changes — DONE
+- [x] Input accepts both Solana and EVM addresses
+- [x] Chain auto-detected from address format (0x → EVM chain chips appear)
+- [x] EVM chain selector chips: Ethereum, BSC, Polygon, Arbitrum, Base
+- [x] Chain badge on results (🟣 Solana / 🔷 Ethereum / 🟡 BNB / 🟪 Polygon / 🔵 Arbitrum/Base)
+- [x] 6 new CHECK_INFO entries for EVM checks
+- [x] "Swap This Token" hidden for EVM scans (Solana-only feature)
+- [x] `fetchTokenScan()` API function accepts optional `chain` param
+
+### Files Modified (Phase 2):
+| File | Changes |
+|------|---------|
+| `src/scanner/evmChecks.ts` | NEW — 8 EVM check functions + `fetchEvmTokenInfo()` + RPC helpers |
+| `src/scanner/evmAnalyze.ts` | NEW — EVM orchestrator (3-phase: fetch → 8 parallel checks → scoring) |
+| `src/scanner/analyze.ts` | Added `chain` field to `ScanResult` interface |
+| `src/api/routes/scan.ts` | Auto-detects EVM/Solana, routes to correct scanner, accepts `?chain=` param |
+| `src/config.ts` | Added 5 EVM RPC URL config vars with defaults |
+| `src/utils/validation.ts` | Added `isValidEvmAddress()` |
+| `webapp/src/lib/api.ts` | `ScanResult.chain` field + `fetchTokenScan(mint, chain?)` |
+| `webapp/src/components/ScanPanel.tsx` | EVM chain selector, chain badge, EVM check explanations |
+| `webapp/src/styles/index.css` | `.scan-chain-*` classes for chain selector UI |
+
+### RPC Optimizations:
+- `eth_getCode` fetched once → shared by contractCode + mintFunction + transferTax
+- `totalSupply` fetched once → shared by evmAnalyze + topHolders
+- All 8 checks run in parallel (single `Promise.all`)
 
 ---
 
-## Phase 3: Scanner UI Polish (can be done alongside Phase 1 or 2)
+## Phase 3: Scanner UI Polish (future)
 
 - **Category headers** in check results: "Authorities", "Liquidity", "Distribution", "Identity"
 - **"What We Checked" explainer section** at the bottom of every scan — a collapsible card
@@ -107,36 +127,16 @@ Backend needs one free RPC per chain (no API key required):
 - **Risk breakdown bar** — horizontal stacked bar showing which categories contributed most
   to the risk score (visual: red segments for unsafe checks, green for safe)
 - **Share scan result** — generate a shareable summary card image or text for Telegram
-
----
-
-## Files Modified
-
-### Phase 1 (COMPLETE — 2026-03-20):
-| File | Changes |
-|------|---------|
-| `src/scanner/checks.ts` | Added 6 new check functions + `fetchMetaplexMetadata()` + `getMetadataPda()` helper |
-| `src/scanner/analyze.ts` | Wired 12 checks, 3-phase execution, normalized scoring |
-| `webapp/src/components/ScanPanel.tsx` | Added 6 CHECK_INFO entries for new checks |
-
-### Phase 2 (future):
-| File | Changes |
-|------|---------|
-| `src/scanner/evmChecks.ts` | NEW — EVM check functions |
-| `src/scanner/evmAnalyze.ts` | NEW — EVM orchestrator |
-| `src/scanner/analyze.ts` | Add chain detection router |
-| `src/api/routes/scan.ts` | Accept EVM addresses |
-| `src/config.ts` | Add EVM RPC URLs |
-| `webapp/src/components/ScanPanel.tsx` | Chain badge, EVM address support |
+- **EVM price lookup** — integrate CoinGecko or Moralis for EVM token USD prices in scan results
 
 ---
 
 ## Risk Assessment
 
-- **No new API keys needed** for Phase 1 — all checks use existing Helius RPC
-- **No DB schema changes** — existing `TokenScan` model stores results as-is
-- **Scoring change is backwards-compatible** — old scans in DB keep their original scores;
-  new scans use normalized scoring
-- **Honeypot check adds ~1-2s** to scan time (Jupiter quote call) — acceptable
-- **Liquidity check may fail** for tokens not on Raydium/Orca — handled via `errored: true`
-- **EVM Phase 2** uses free public RPCs — rate limits are generous (10-50 req/s)
+- **No new API keys needed** — Solana checks use Helius RPC, EVM checks use free public RPCs
+- **No DB schema changes** — existing `TokenScan` model stores results as-is (chain agnostic)
+- **Scoring is backwards-compatible** — old scans in DB keep their original scores
+- **Honeypot check adds ~1-2s** to scan time (LI.FI/Jupiter quote call) — acceptable
+- **Liquidity check may fail** for tokens not on major DEXs — handled via `errored: true`
+- **EVM public RPCs** have generous rate limits (10-50 req/s) — sufficient for scanner use
+- **EVM bytecode analysis is heuristic** — checks for known function selectors, not source verification

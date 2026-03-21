@@ -216,10 +216,13 @@ solswapbot/
 │   │   └── bridgePoller.ts       # Background poller: resolves SUBMITTED cross-chain swaps via LI.FI status [v0.8.0]
 │   │
 │   ├── scanner/
-│   │   ├── analyze.ts            # analyzeToken(): orchestrates 12 checks in 3 phases, normalized risk score 0-100
-│   │   └── checks.ts             # 12 checks: mintAuthority, freezeAuthority, topHolders, tokenAge,
-│   │                             #   jupiterVerified, hasMetadata, metadataMutability, updateAuthority,
-│   │                             #   honeypot, creatorHoldings, liquidity, transferFee + fetchMetaplexMetadata()
+│   │   ├── analyze.ts            # analyzeToken(): orchestrates 12 Solana checks in 3 phases, normalized risk score 0-100
+│   │   ├── checks.ts             # 12 Solana checks: mintAuthority, freezeAuthority, topHolders, tokenAge,
+│   │   │                         #   jupiterVerified, hasMetadata, metadataMutability, updateAuthority,
+│   │   │                         #   honeypot, creatorHoldings, liquidity, transferFee + fetchMetaplexMetadata()
+│   │   ├── evmAnalyze.ts         # analyzeEvmToken(): orchestrates 8 EVM checks, same normalized scoring [v1.2.0]
+│   │   └── evmChecks.ts          # 8 EVM checks: ownerRenounced, proxyContract, honeypot, contractCode,
+│   │                             #   topHolders, mintFunction, transferTax, liquidity + fetchEvmTokenInfo()
 │   │
 │   ├── tracker/
 │   │   ├── monitor.ts            # Whale wallet monitor: polls watched wallets every 30s, fires Telegram alerts
@@ -503,7 +506,7 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | POST | `/api/swap/confirm` | `{ txSignature, inputMint, outputMint, inputAmount, outputAmount, feeAmountUsd? }` | `{ swapId, status: "SUBMITTED" }` |
 | GET | `/api/swap/status?swapId=` | — | `{ swapId, status, txSignature }` |
 | POST | `/api/swap/recheck` | `{ swapId }` | `{ swapId, status, txSignature, message }` — re-checks on-chain status for stuck swaps |
-| GET | `/api/scan?mint=` | — | `ScanResult` (see Scanner section) |
+| GET | `/api/scan?mint=&chain=` | — | `ScanResult` (see Scanner section). Chain auto-detected from address format; `chain` param optional for EVM (ethereum/bsc/polygon/arbitrum/base) |
 | GET | `/api/scan/history` | — | `{ scans: [{ id, mintAddress, tokenName, tokenSymbol, riskScore, riskLevel, createdAt }] }` |
 | GET | `/api/cross-chain/quote?inputToken=&outputToken=&inputChain=&outputChain=&amount=&slippageBps=` | — | `CrossChainQuoteResult` |
 | GET | `/api/cross-chain/chains` | — | LI.FI supported chain list |
@@ -559,8 +562,12 @@ Solana tokens sourced from Jupiter. EVM tokens sourced from Moralis (requires `M
 
 ## Token Scanner (Detailed)
 
-The scanner is the most complex backend subsystem. Understanding it is important before
-modifying `src/scanner/analyze.ts` or `src/scanner/checks.ts`.
+The scanner is the most complex backend subsystem. It supports **multi-chain scanning**:
+- **Solana tokens** (12 checks) — `src/scanner/analyze.ts` + `src/scanner/checks.ts`
+- **EVM tokens** (8 checks, 5 chains) — `src/scanner/evmAnalyze.ts` + `src/scanner/evmChecks.ts`
+
+Chain is auto-detected from address format: `0x...` → EVM, base58 → Solana.
+For EVM, the `?chain=` query param selects the chain (default: ethereum).
 
 ### Risk Score Algorithm (V2 — Normalized Scoring)
 
@@ -591,7 +598,27 @@ Transfer Fee          10    Token-2022 hidden tax on transfers
 Total:              200    Normalized to 0-100
 ```
 
-### RPC Optimizations (all in `analyze.ts`)
+### EVM Check Weights (8 checks, 130 total — `evmChecks.ts`)
+
+```
+Check               Weight  Description
+─────────────────────────────────────────────────────────────────────
+Owner Renounced       25    owner() != address(0) → can change contract
+Proxy Contract        20    EIP-1967 upgradeable → logic can change
+Honeypot Detection    20    LI.FI sell simulation → no route = honeypot
+Contract Code         15    No code or tiny bytecode → suspicious
+Top Holders           15    Contract self-balance + burn check
+Mint Function         15    Bytecode has mint(address,uint256) selector
+Transfer Tax          10    Fee-on-transfer selectors in bytecode
+Liquidity             10    DEX factory pair check (Uniswap/PancakeSwap/etc.)
+─────────────────────────────────────────────────────────────────────
+Total:              130    Normalized to 0-100
+```
+
+Supported EVM chains: Ethereum, BSC, Polygon, Arbitrum, Base.
+Free public RPCs configured in `config.ts` (no API keys needed).
+
+### RPC Optimizations (all in `analyze.ts` / `evmAnalyze.ts`)
 - `accountInfo` fetched once → shared by `checkMintAuthority` + `checkFreezeAuthority` + `checkTransferFee`
 - `getTokenSupply` fetched once → shared with `checkTopHolders` + `checkCreatorHoldings`
 - `tokenMeta` fetched from Jupiter cache → shared by `checkJupiterVerified` + `checkHasMetadata`
@@ -761,14 +788,17 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - AbortController on quote fetch (cancels in-flight requests when inputs change)
 - Quote auto-expires after 30s with auto-refresh
 
-**Tab 3 — Scan**
-- Paste or type token mint address
+**Tab 3 — Scan (Multi-Chain)** [v1.2.0]
+- Paste Solana mint OR EVM contract address (0x...) — chain auto-detected
+- **EVM chain selector**: when 0x address detected, chain chips appear (Ethereum, BSC, Polygon, Arbitrum, Base)
+- **Chain badge** on results: 🟣 Solana / 🔷 Ethereum / 🟡 BNB / 🟪 Polygon / 🔵 Arbitrum/Base
 - Animated SVG speedometer gauge (RiskGauge) with color gradient
 - Token icon + name + symbol displayed above gauge
-- Per-check results: Mint Authority, Liquidity Pool, Freeze Authority, Top Holders, Honeypot Detection, Metadata Mutability, Token Metadata, Creator Holdings, Update Authority, Jupiter Verified, Token Age, Transfer Fee
+- **Solana checks (12):** Mint Authority, Liquidity Pool, Freeze Authority, Top Holders, Honeypot Detection, Metadata Mutability, Token Metadata, Creator Holdings, Update Authority, Jupiter Verified, Token Age, Transfer Fee
+- **EVM checks (8):** Owner Renounced, Proxy Contract, Honeypot Detection, Contract Code, Top Holders, Mint Function, Transfer Tax, Liquidity
 - Info icon (ℹ️) on each check — tap to expand inline explanation of what the check means
 - Token info: supply, price, decimals
-- "Swap This Token" → switches to Swap tab with that token pre-selected
+- "Swap This Token" → switches to Swap tab with that token pre-selected (Solana only)
 - Recent scans list (last 5, localStorage `solswap_recent_scans`) showing token symbol + risk level
 - Legal disclaimer shown below every scan result
 - Scan saved to DB for `/api/scan/history`
@@ -976,6 +1006,13 @@ ADMIN_TELEGRAM_ID=             # Your Telegram numeric user ID — gates /api/ad
 MIN_SOL_ALERT=10               # Minimum SOL moved to fire a whale alert (default: 10)
 MIN_ETH_ALERT=1                # Minimum native ETH/BNB/MATIC moved to fire a whale alert (default: 1)
 
+# ── EVM RPCs (free public endpoints — used by EVM token scanner) ────────────────
+EVM_RPC_ETHEREUM=https://eth.llamarpc.com
+EVM_RPC_BSC=https://bsc-dataseed.binance.org
+EVM_RPC_POLYGON=https://polygon-rpc.com
+EVM_RPC_ARBITRUM=https://arb1.arbitrum.io/rpc
+EVM_RPC_BASE=https://mainnet.base.org
+
 # ── PHASE 4 (not needed yet) ───────────────────────────────────────────────────
 GEMINI_API_KEY=                # Phase 4: AI market signals
 ```
@@ -1179,6 +1216,25 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-21 — EVM Token Scanner + Token Name Resolution (v1.2.0)
+- **EVM Token Scanner (Phase 2 COMPLETE):** Full multi-chain token scanner supporting Ethereum, BSC, Polygon, Arbitrum, and Base. Address format auto-detected (0x → EVM, base58 → Solana).
+- **8 EVM checks implemented** in `src/scanner/evmChecks.ts` (total weight 130, normalized to 0-100):
+  - **Owner Renounced** (25): calls `owner()`, checks if renounced to `address(0)`
+  - **Proxy Contract** (20): reads EIP-1967 implementation storage slot
+  - **Honeypot Detection** (20): simulates sell via LI.FI quote API
+  - **Contract Code** (15): verifies bytecode exists and isn't suspiciously small
+  - **Top Holders** (15): checks contract self-balance + dead address burn percentage
+  - **Mint Function** (15): scans bytecode for `mint(address,uint256)` selectors, cross-refs ownership
+  - **Transfer Tax** (10): detects fee-on-transfer patterns (setTaxFeePercent, excludeFromFee, etc.)
+  - **Liquidity** (10): checks DEX factory pairs (Uniswap V2/V3, PancakeSwap, QuickSwap, Camelot, Aerodrome)
+- **New `src/scanner/evmAnalyze.ts`:** EVM orchestrator — fetches code+token info in parallel, runs 8 checks in `Promise.all`, same normalized scoring as Solana.
+- **Scan route updated:** `GET /api/scan?mint=&chain=` auto-detects address format, routes to Solana or EVM scanner. `chain` param optional for EVM (default: ethereum).
+- **EVM RPC config:** 5 free public RPC URLs added to `config.ts` with defaults (no API keys needed).
+- **Frontend:** ScanPanel shows EVM chain selector chips when 0x address detected. Chain badge on results. 6 new CHECK_INFO entries for EVM checks. "Swap This Token" hidden for EVM scans.
+- **Token name resolution improved:** `searchTokens()`, `getTokenByMint()`, and `getTokensMetadata()` now fall back to Metaplex on-chain metadata when Jupiter returns null. Pump.fun tokens show actual names instead of "Unknown Token".
+- **Tracker portfolio UI fixed:** Table wrapped in scrollable container for small screens, balance column truncated with ellipsis.
+- **No new API keys needed.** No DB schema changes. VPS redeployment: `npm run build` + `pm2 restart`.
 
 ### 2026-03-20 — Token-2022 Portfolio Fix (v1.1.1)
 - **T22-1 FIXED:** Token-2022 tokens (including pump.fun tokens) were completely invisible in all portfolio views. `getParsedTokenAccountsByOwner` only queried `TOKEN_PROGRAM_ID`, missing all tokens on the Token-2022 program (`TOKEN_2022_PROGRAM_ID`). Fixed in 3 places:
