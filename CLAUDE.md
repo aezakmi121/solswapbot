@@ -277,7 +277,7 @@ solswapbot/
 │       │   ├── SwapPanel.tsx         # Full swap UI: quote, slippage, AbortController, history slide-up, cross-chain mode
 │       │   ├── ScanPanel.tsx         # Token scanner: address input, RiskGauge, check results, recent scans
 │       │   ├── TrackerPanel.tsx      # Whale Tracker tab: list/add/remove watched wallets, slot badge, tier limit, upgrade hint [v1.0.0]
-│       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, referral code, about, logout (opened via header ⚙️ icon)
+│       │   ├── SettingsPanel.tsx     # Wallet address+QR, slippage selector, account security (recovery email + key export), referral code, about, logout (opened via header ⚙️ icon)
 │       │   ├── TransactionsTab.tsx   # 5th tab: paginated history, type chips, date chips, load more, detail modal
 │       │   ├── ReceiveModal.tsx      # Bottom sheet: QR code, full address, copy, share
 │       │   ├── SendFlow.tsx          # Multi-step send: select token → recipient+amount → confirm → executing → done
@@ -806,12 +806,16 @@ All 7 CRITICAL security issues have been fixed. Summary:
 **Settings (formerly Tab) —** moved to header ⚙️ icon [v1.0.1]
 - Full wallet address + copy button + QR code (opens ReceiveModal)
 - Slippage tolerance: 0.1% / 0.5% / 1.0% / Custom chips (localStorage `solswap_slippage_bps`)
+- **Account Security section** [v1.3.0]:
+  - **Recovery Email**: Link/update email via Privy `useLinkAccount` hook. Shows linked email with green badge when set. OTP verification via Privy modal.
+  - **Export Private Key**: Opens Privy's secure export modal via `useExportWallet` hook. Shows full private key/seed phrase for backup to Phantom, MetaMask, etc.
+  - Footer: "Your keys are secured by Privy MPC" disclaimer
 - Referral dashboard card: earnings + count stats, code display + copy, "Invite Friends" share button
 - "View Details" button opens ReferralModal: full stats, how-it-works, paginated referred users list
 - Bot notification: referrer gets a Telegram message when someone joins via their link (v0.9.0)
 - About section: version, fee disclosure, non-custodial disclaimer
 - "View Terms of Use" re-opens TermsModal
-- Log Out button (Privy logout)
+- Log Out button with confirmation dialog + `tg.close()` to properly exit Mini App [v1.3.0]
 
 **Admin Panel** (header 🛡️ icon, gated by `ADMIN_TELEGRAM_ID`) [v1.0.3]
 - **Overview section**: KPIs (total users, total swaps, total fees), revenue velocity (today/7d/30d)
@@ -911,7 +915,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.1.1 — PRODUCTION READY (Token-2022 portfolio fix)**
+### Current Status: **v1.3.0 — PRODUCTION READY (Account security: recovery email + key export)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -1216,6 +1220,16 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-21 — Account Security: Recovery Email, Key Export, Logout Fix (v1.3.0)
+- **Recovery Email Linking (NEW):** Settings → Account Security → "Link Recovery Email". Uses Privy `useLinkAccount` hook with `linkEmail()`. Opens Privy modal for OTP-verified email linking. Shows linked email with green badge when set. "Update Email" option when already linked. Enables wallet recovery if user loses Telegram access.
+- **Private Key Export (NEW):** Settings → Account Security → "Export Wallet Key". Uses Privy `useExportWallet` hook. Opens Privy's secure modal showing full private key/seed phrase. Key displayed on Privy's iframe (separate domain) — app cannot access it. Users can copy to Phantom, MetaMask, or any wallet.
+- **Logout UX Fix:** Logout now shows confirmation dialog warning users to link email or export key first. After `logout()`, calls `tg.close()` to properly close the Mini App (prevents "bot domain invalid" error from Privy trying to show login UI inside Telegram webview).
+- **New CSS classes:** `.settings-security-header`, `.settings-security-hint`, `.settings-security-status`, `.settings-security-btn`, `.settings-security-footer`
+- **New Privy imports:** `useLinkAccount`, `useExportWallet` from `@privy-io/react-auth`
+- **New Lucide icons:** `Mail`, `Key`, `Shield`
+- **Version bumped to v1.3.0.**
+- **Frontend-only changes** — no VPS redeployment needed (Vercel auto-deploys).
 
 ### 2026-03-21 — EVM Token Scanner + Token Name Resolution (v1.2.0)
 - **EVM Token Scanner (Phase 2 COMPLETE):** Full multi-chain token scanner supporting Ethereum, BSC, Polygon, Arbitrum, and Base. Address format auto-detected (0x → EVM, base58 → Solana).

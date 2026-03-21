@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { usePrivy } from "@privy-io/react-auth";
-import { Copy, Check, QrCode, LogOut } from "lucide-react";
+import { usePrivy, useLinkAccount, useExportWallet } from "@privy-io/react-auth";
+import { Copy, Check, QrCode, LogOut, Mail, Key, Shield } from "lucide-react";
 import { fetchUser, UserData } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { TermsModal } from "./TermsModal";
@@ -23,7 +23,12 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, onSlippageChange }: SettingsPanelProps) {
-    const { logout } = usePrivy();
+    const { logout, user } = usePrivy();
+    const { linkEmail } = useLinkAccount({
+        onSuccess: () => { toast("Recovery email linked!", "success"); },
+        onError: (error) => { console.warn("Link email error:", error); toast("Failed to link email", "error"); },
+    });
+    const { exportWallet } = useExportWallet();
     const [userData, setUserData] = useState<UserData | null>(null);
     const [addrCopied, setAddrCopied] = useState(false);
     const [evmAddrCopied, setEvmAddrCopied] = useState(false);
@@ -33,6 +38,9 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
     const [showQr, setShowQr] = useState(false);
     const [showTerms, setShowTerms] = useState(false);
     const [showReferralModal, setShowReferralModal] = useState(false);
+
+    const tg = (window as any).Telegram?.WebApp;
+    const linkedEmail = user?.email?.address || null;
 
     useEffect(() => {
         fetchUser().then(setUserData).catch(() => {});
@@ -99,6 +107,34 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             setCustomSlippage("");
             setShowCustom(false);
         }
+    };
+
+    const handleLogout = async () => {
+        const confirmed = window.confirm(
+            "Logging out will close the app. You can log back in anytime with Telegram.\n\nMake sure you have a recovery email linked or your private key exported before logging out."
+        );
+        if (!confirmed) return;
+        try {
+            await logout();
+            tg?.close();
+        } catch {
+            toast("Logout failed", "error");
+        }
+    };
+
+    const handleExportWallet = async () => {
+        tg?.HapticFeedback?.impactOccurred("medium");
+        try {
+            await exportWallet();
+        } catch (err: any) {
+            if (err?.message?.includes("user closed")) return;
+            toast("Failed to export wallet", "error");
+        }
+    };
+
+    const handleLinkEmail = () => {
+        tg?.HapticFeedback?.impactOccurred("medium");
+        linkEmail();
     };
 
     const isPreset = SLIPPAGE_OPTIONS.some((o) => o.value === slippageBps);
@@ -189,6 +225,53 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                 </div>
             </div>
 
+            {/* ── Account Security ── */}
+            <div className="settings-section">
+                <div className="settings-section-title">Account Security</div>
+                <div className="settings-card">
+                    {/* Recovery Email */}
+                    <div className="settings-row settings-row--col">
+                        <div className="settings-security-header">
+                            <Mail size={16} />
+                            <span className="settings-label">Recovery Email</span>
+                        </div>
+                        {linkedEmail ? (
+                            <div className="settings-security-status settings-security-status--linked">
+                                <Check size={14} />
+                                <span>{linkedEmail}</span>
+                            </div>
+                        ) : (
+                            <p className="settings-security-hint">
+                                Link an email to recover your wallet if you lose Telegram access.
+                            </p>
+                        )}
+                        <button
+                            className={`settings-security-btn${linkedEmail ? " settings-security-btn--secondary" : ""}`}
+                            onClick={handleLinkEmail}
+                        >
+                            {linkedEmail ? "Update Email" : "Link Recovery Email"}
+                        </button>
+                    </div>
+
+                    {/* Export Private Key */}
+                    <div className="settings-row settings-row--col" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12, marginTop: 4 }}>
+                        <div className="settings-security-header">
+                            <Key size={16} />
+                            <span className="settings-label">Export Private Key</span>
+                        </div>
+                        <p className="settings-security-hint">
+                            Back up your private key to use with any wallet app (Phantom, MetaMask, etc).
+                        </p>
+                        <button className="settings-security-btn settings-security-btn--secondary" onClick={handleExportWallet}>
+                            Export Wallet Key
+                        </button>
+                    </div>
+                </div>
+                <p className="settings-security-footer">
+                    <Shield size={12} /> Your keys are secured by Privy MPC. We never see or store your private key.
+                </p>
+            </div>
+
             {/* ── Referral Dashboard ── */}
             {userData?.referralCode && (
                 <div className="settings-section">
@@ -237,7 +320,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             <div className="settings-section">
                 <div className="settings-section-title">About</div>
                 <div className="settings-card settings-about">
-                    <p className="settings-about-name">SolSwap v0.9.1</p>
+                    <p className="settings-about-name">SolSwap v1.3.0</p>
                     <p className="settings-about-sub">Non-custodial · Privy MPC wallet</p>
                     <p className="settings-about-sub">Platform fee: 0.5% per swap</p>
                     <p className="settings-about-sub">Powered by Jupiter &amp; LI.FI</p>
@@ -251,7 +334,7 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
             </div>
 
             <div className="settings-section">
-                <button className="logout-btn logout-btn--settings" onClick={logout} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                <button className="logout-btn logout-btn--settings" onClick={handleLogout} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                     <LogOut size={16} /> Log Out
                 </button>
             </div>
