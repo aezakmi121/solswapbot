@@ -47,6 +47,13 @@ const envSchema = z.object({
   MIN_SOL_ALERT: z.coerce.number().positive().default(10),   // Minimum SOL moved to fire alert
   MIN_ETH_ALERT: z.coerce.number().positive().default(1),    // Minimum native ETH/BNB/MATIC moved to fire alert
 
+  // EVM RPCs (free public endpoints — used by EVM token scanner)
+  EVM_RPC_ETHEREUM: z.string().url().default("https://eth.llamarpc.com"),
+  EVM_RPC_BSC: z.string().url().default("https://bsc-dataseed.binance.org"),
+  EVM_RPC_POLYGON: z.string().url().default("https://polygon-rpc.com"),
+  EVM_RPC_ARBITRUM: z.string().url().default("https://arb1.arbitrum.io/rpc"),
+  EVM_RPC_BASE: z.string().url().default("https://mainnet.base.org"),
+
   // AI Signals
   GEMINI_API_KEY: z.string().optional(),
 

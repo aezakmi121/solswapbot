@@ -27,6 +27,13 @@ export function isValidPublicKey(address: string): boolean {
 }
 
 /**
+ * Validates that a string is a valid EVM address (0x + 40 hex chars).
+ */
+export function isValidEvmAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+/**
  * Validates swap amount: must be a positive finite number.
  */
 export function isValidSwapAmount(amount: number): boolean {

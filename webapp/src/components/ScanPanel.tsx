@@ -51,28 +51,63 @@ function timeAgo(ts: number): string {
     return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+const CHAIN_LABELS: Record<string, string> = {
+    solana: "Solana",
+    ethereum: "Ethereum",
+    bsc: "BNB Chain",
+    polygon: "Polygon",
+    arbitrum: "Arbitrum",
+    base: "Base",
+};
+
+const CHAIN_EMOJI: Record<string, string> = {
+    solana: "🟣",
+    ethereum: "🔷",
+    bsc: "🟡",
+    polygon: "🟪",
+    arbitrum: "🔵",
+    base: "🔵",
+};
+
+const EVM_CHAINS = ["ethereum", "bsc", "polygon", "arbitrum", "base"];
+
+function isEvmAddress(addr: string): boolean {
+    return /^0x[a-fA-F0-9]{40}$/.test(addr);
+}
+
 const CHECK_INFO: Record<string, string> = {
+    // Solana checks
     "Mint Authority": "If enabled, the token creator can mint unlimited new tokens at any time, diluting your holdings and crashing the price.",
     "Freeze Authority": "If enabled, the token creator can freeze your token balance, preventing you from selling or transferring.",
-    "Top Holders": "Shows how much of the supply the top 10 wallets control. High concentration (>50%) means whales can dump and crash the price.",
+    "Top Holders": "Shows how concentrated token ownership is. High concentration means a few wallets can dump and crash the price.",
     "Token Metadata": "Legitimate tokens have a registered name and symbol. Missing metadata is common with hastily-created scam tokens.",
     "Jupiter Verified": "Jupiter maintains a curated list of vetted tokens. Unverified tokens haven't passed their review process.",
     "Token Age": "Very new tokens (under 24 hours) are higher risk. Most rug pulls happen within the first few hours of launch.",
-    "Liquidity Pool": "Liquidity pools let you buy and sell a token. If no pool exists or liquidity was drained, the token may be unsellable. Burned LP tokens mean the creator can never pull the liquidity.",
-    "Honeypot Detection": "We simulate selling this token back to SOL. If no sell route exists, the token may be a honeypot — you can buy but can never sell.",
+    "Liquidity Pool": "Liquidity pools let you buy and sell a token. If no pool exists or liquidity was drained, the token may be unsellable.",
+    "Honeypot Detection": "We simulate selling this token. If no sell route exists, the token may be a honeypot — you can buy but can never sell.",
     "Metadata Mutability": "If metadata is mutable, the creator can change the token's name, symbol, and image after launch — potentially impersonating legitimate tokens to trick buyers.",
     "Creator Holdings": "Shows what percentage of the total supply the token deployer still holds. Large creator holdings (>10%) mean they could dump their tokens and crash the price at any time.",
     "Update Authority": "The update authority controls who can modify the token's on-chain metadata. It should be revoked for maximum safety. If active, the creator can rename or rebrand the token.",
-    "Transfer Fee": "Some Token-2022 tokens have a built-in transfer fee that takes a percentage on every transfer. This is a hidden tax most buyers don't expect and reduces your holdings with each transaction.",
+    "Transfer Fee": "Some tokens have a built-in transfer fee that takes a percentage on every transfer. This is a hidden tax most buyers don't expect.",
+    // EVM checks
+    "Owner Renounced": "If the contract owner hasn't renounced ownership, they can change contract settings, pause trading, or mint new tokens. Renounced ownership means no single entity controls the contract.",
+    "Proxy Contract": "Upgradeable proxy contracts let the developer change the token's logic after deployment. The code you see today could be replaced with malicious code tomorrow.",
+    "Contract Code": "We check if the address has smart contract code and if it's a reasonable size. No code or suspiciously small contracts are red flags.",
+    "Mint Function": "If the contract has a public mint function and the owner hasn't renounced, new tokens can be created at any time — diluting your holdings.",
+    "Transfer Tax": "Some contracts have built-in fees on every transfer (buy/sell tax). This hidden tax reduces your actual received amount on every trade.",
+    "Liquidity": "We check if the token has a trading pair on major DEXs (Uniswap, PancakeSwap, etc.). No liquidity pair means you may not be able to sell.",
 };
 
 export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
     const [mint, setMint] = useState("");
+    const [evmChain, setEvmChain] = useState("ethereum");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<ScanResult | null>(null);
     const [error, setError] = useState("");
     const [recentScans, setRecentScans] = useState<RecentScan[]>(loadRecent);
     const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
+
+    const inputIsEvm = isEvmAddress(mint.trim());
 
     const handleScan = async (addr?: string) => {
         const target = (addr ?? mint).trim();
@@ -83,7 +118,8 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
         setResult(null);
         setExpandedCheck(null);
         try {
-            const data = await fetchTokenScan(target);
+            const chain = isEvmAddress(target) ? evmChain : undefined;
+            const data = await fetchTokenScan(target, chain);
             setResult(data);
             saveRecent({
                 mint: data.mintAddress,
@@ -111,7 +147,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                     <input
                         className="scan-input"
                         type="text"
-                        placeholder="Paste token mint address..."
+                        placeholder="Paste Solana or EVM (0x...) token address"
                         value={mint}
                         onChange={(e) => setMint(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleScan()}
@@ -130,6 +166,25 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                         <Copy size={16} />
                     </button>
                 </div>
+
+                {/* EVM chain selector — shown when input looks like an EVM address */}
+                {inputIsEvm && (
+                    <div className="scan-chain-row">
+                        <span className="scan-chain-label">Chain:</span>
+                        <div className="scan-chain-chips">
+                            {EVM_CHAINS.map((c) => (
+                                <button
+                                    key={c}
+                                    className={`scan-chain-chip ${evmChain === c ? "active" : ""}`}
+                                    onClick={() => setEvmChain(c)}
+                                >
+                                    {CHAIN_EMOJI[c]} {CHAIN_LABELS[c]}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <button
                     className="swap-btn scan-submit-btn"
                     onClick={() => handleScan()}
@@ -157,8 +212,13 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                         tokenIcon={result.tokenInfo.icon}
                     />
 
-                    {/* Mint address (always shown below gauge) */}
+                    {/* Chain badge + mint address */}
                     <div className="scan-mint-addr">
+                        {result.chain && (
+                            <span className="scan-chain-badge">
+                                {CHAIN_EMOJI[result.chain] ?? ""} {CHAIN_LABELS[result.chain] ?? result.chain}
+                            </span>
+                        )}
                         {result.mintAddress.slice(0, 8)}...{result.mintAddress.slice(-6)}
                     </div>
 
@@ -217,8 +277,8 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                         </div>
                     )}
 
-                    {/* Swap action */}
-                    {onNavigateToSwap && (
+                    {/* Swap action (Solana only — EVM tokens can't be swapped inline yet) */}
+                    {onNavigateToSwap && (!result.chain || result.chain === "solana") && (
                         <button
                             className="scan-swap-btn swap-btn"
                             onClick={() => onNavigateToSwap({

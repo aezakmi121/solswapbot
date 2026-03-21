@@ -305,13 +305,16 @@ export interface ScanResult {
         symbol: string | null;
         icon: string | null;
     };
+    chain?: string;  // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
     scannedAt: string;
 }
 
-/** Scan a token for safety risks */
-export async function fetchTokenScan(mint: string): Promise<ScanResult> {
+/** Scan a token for safety risks. Pass chain for EVM tokens. */
+export async function fetchTokenScan(mint: string, chain?: string): Promise<ScanResult> {
+    const params = new URLSearchParams({ mint });
+    if (chain) params.set("chain", chain);
     const res = await fetch(
-        `${API_BASE}/api/scan?mint=${encodeURIComponent(mint)}`,
+        `${API_BASE}/api/scan?${params.toString()}`,
         { headers: getAuthHeaders() }
     );
     if (!res.ok) {

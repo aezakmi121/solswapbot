@@ -70,7 +70,7 @@ describe('GET /api/scan', () => {
             .get('/api/scan?mint=not_a_valid_solana_address_because_length')
             .set('Authorization', 'tma 12345');
         expect(res.status).toBe(400);
-        expect(res.body.error).toContain('Invalid Solana address');
+        expect(res.body.error).toContain('Invalid token address');
     });
 
     it('should allow successful scan if under limit', async () => {
