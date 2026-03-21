@@ -1560,6 +1560,67 @@ body {
   padding: 0 2px;
 }
 
+/* ── Account Security section ── */
+.settings-security-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.settings-security-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.settings-security-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.settings-security-status--linked {
+  background: rgba(46, 204, 113, 0.1);
+  color: #2ecc71;
+}
+
+.settings-security-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings-security-btn:active {
+  opacity: 0.8;
+}
+
+.settings-security-btn--secondary {
+  background: rgba(124, 92, 252, 0.15);
+  color: var(--accent);
+}
+
+.settings-security-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding: 0 2px;
+}
+
 .settings-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
