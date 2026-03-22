@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-20 | Version: 1.1.0
+> Updated: 2026-03-22 | Version: 1.3.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -32,10 +32,12 @@ npm run dev                # Vite dev server at localhost:5173
 | `npm run build` | Compile TypeScript → `dist/` |
 | `npm start` | Run compiled `dist/app.js` (production) |
 | `npm run lint` | Type-check without emit |
-| `npm test` | Run unit smoke tests (Node built-in runner, no server needed) |
+| `npm test` | Run backend Vitest suite (route + query tests, no server needed) |
+| `npm run test:smoke` | Run unit smoke tests (Node built-in runner, 23 auth/fee/address tests) |
 | `npm run test:live` | Run integration smoke tests against `http://localhost:3001` |
 | `npm run test:live:prod` | Run integration smoke tests against production VPS |
 | `npm run validate-keys` | Validate all API keys & config against live services (run on VPS) |
+| `cd webapp && npm test` | Run frontend Vitest suite (AdminPanel, SwapPanel component tests) |
 | `cd webapp && npm run dev` | Start Mini App Vite dev server |
 | `cd webapp && npm run build` | Build Mini App for Vercel deploy |
 | `npx prisma db push` | Apply schema changes to SQLite (no migration file needed) |
@@ -250,18 +252,30 @@ solswapbot/
 │   │
 │   ├── utils/
 │   │   ├── retry.ts              # withRetry() — exponential backoff, checks err.status first
-│   │   ├── validation.ts         # isValidSolanaAddress() (ed25519 curve), isValidPublicKey() (any PDA)
+│   │   ├── validation.ts         # isValidSolanaAddress() (ed25519 curve), isValidPublicKey() (any PDA), isValidEvmAddress() (0x hex)
 │   │   ├── formatting.ts         # formatTokenAmount(), shortenAddress()
 │   │   └── constants.ts          # Token registry (6 hardcoded tokens: SOL, USDC, USDT, BONK, JUP, WIF)
 │   │
-│   └── __tests__/
-│       └── smoke.test.ts         # Unit tests (Node built-in runner, no server). Covers: Telegram HMAC
-│                                 #   auth algorithm correctness, auth expiry/replay prevention,
-│                                 #   platform fee bypass detection, Solana address validation (23 tests)
+│   ├── __tests__/
+│   │   └── smoke.test.ts         # Unit tests (Node built-in runner via `npm run test:smoke`). Covers: Telegram HMAC
+│   │                             #   auth algorithm correctness, auth expiry/replay prevention,
+│   │                             #   platform fee bypass detection, Solana address validation (23 tests)
+│   │
+│   ├── api/routes/__tests__/     # Vitest route-level tests (run via `npm test`)
+│   │   ├── price.test.ts         # Price endpoint mint validation tests
+│   │   ├── quote.test.ts         # Quote endpoint parameter tests
+│   │   ├── scan.test.ts          # Scan rate limiting + EVM detection tests
+│   │   └── transactions.test.ts  # Transaction filtering + pagination tests
+│   │
+│   └── db/queries/__tests__/     # Vitest query-level tests (run via `npm test`)
+│       ├── fees.test.ts          # Fee calculation + aggregation tests
+│       └── referrals.test.ts     # Referral earnings + count tests
 │
 ├── webapp/                       # Telegram Mini App — deployed to Vercel
 │   ├── index.html
 │   ├── vite.config.ts
+│   ├── vitest.config.ts          # Frontend Vitest config (environment: jsdom, React plugin)
+│   ├── vitest.setup.ts           # Test setup: jest-dom matchers, matchMedia/ResizeObserver mocks
 │   ├── vercel.json               # Rewrites /api/* → https://srv1418768.hstgr.cloud/api/:path*
 │   ├── package.json              # Deps: @privy-io/react-auth, @solana/kit, qrcode.react, React
 │   └── src/
@@ -301,22 +315,29 @@ solswapbot/
 │
 ├── scripts/
 │   ├── smoke-test.sh             # Integration smoke tests (curl-based, tests against live server)
-│   └── validate-keys.ts          # API key & config validator (tests Telegram, Helius, Jupiter, LI.FI, Moralis)
+│   ├── validate-keys.ts          # API key & config validator (tests Telegram, Helius, Jupiter, LI.FI, Moralis)
+│   ├── test-webhook.ts           # Helius webhook test helper (manual testing utility)
+│   ├── test-evm-webhook.ts       # EVM/Moralis webhook test helper (manual testing utility)
+│   └── test-cross-chain.ts       # Cross-chain bridge test helper (manual testing utility)
 │
 ├── prisma/
 │   └── schema.prisma             # 6 models: User, Swap, Transfer, TokenScan, WatchedWallet, Subscription
 │
+├── vitest.config.ts              # Backend Vitest config (environment: node, excludes smoke.test.ts)
 ├── ecosystem.config.js           # PM2 config: single instance (SQLite safe), 256MB limit, logs in ./logs/
 ├── package.json                  # Node >=20, backend deps
 ├── tsconfig.json
 ├── .env.example
+├── .env.devnet                   # Devnet environment variables (for Solana devnet testing)
 ├── CLAUDE.md                     # This file — master context for AI assistants
 ├── README.md                     # Public-facing project overview
-├── API.md                        # API endpoint reference (supplementary)
-├── ARCHITECTURE.md               # System architecture diagrams
-├── SECURITY.md                   # Security model (updated v0.7.2 — fully current)
-├── TESTING.md                    # Testing guide (note: partially outdated — CLAUDE.md is authoritative)
-└── PLAN.md                       # Scanner V2 upgrade plan (multi-chain, 12 Solana + 8 EVM checks)
+├── API.md                        # API endpoint reference (supplementary — may lag behind CLAUDE.md)
+├── ARCHITECTURE.md               # System architecture diagrams (supplementary — may lag behind CLAUDE.md)
+├── SECURITY.md                   # Security model (updated v0.7.2)
+├── TESTING.md                    # Testing guide (supplementary — may lag behind CLAUDE.md)
+├── PLAN.md                       # Scanner V2 upgrade plan (Phase 1+2 COMPLETE, Phase 3 pending)
+├── MARKETING_PLAN.md             # CMO-level launch strategy + channel-first marketing plan
+└── V1_AUDIT.md                   # Full v1.0 pre-launch audit prompt template
 ```
 
 ---

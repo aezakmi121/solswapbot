@@ -28,7 +28,7 @@ User → Telegram Bot (/start) → Mini App (Vercel)
 
 ### 2. Mini App (Vite + React)
 - **Purpose**: ALL user interaction happens here
-- **Tabs**: Wallet | Swap | Scan | History | Settings (+ Admin for admin user)
+- **Bottom tabs**: Wallet | Swap | Scan | Tracker (4 tabs). History/Settings/Admin via header icons
 - **Wallet**: Privy MPC embedded wallets (Solana + EVM, auto-created on login)
 - **Signing**: `useSignAndSendTransaction` — private key never leaves browser
 - **Deployed**: Vercel (`webapp/`)
@@ -52,7 +52,9 @@ User → Telegram Bot (/start) → Mini App (Vercel)
 ### 5. Background Services
 - **Bridge Poller**: `bridgePoller.ts` — polls every 60s for SUBMITTED cross-chain swaps, updates status via LI.FI
 - **Swap Poller**: `transaction.ts` — polls on-chain status (100x3s) for each submitted swap
+- **Whale Wallet Monitor**: `tracker/monitor.ts` — polls watched wallets every 30s for large transactions, fires Telegram alerts
 - **Helius Webhook**: Auto-creates webhook on startup, registers wallets on connect, records incoming transfers
+- **Moralis Streams**: EVM whale tracking via push webhooks (large native token transfers)
 - **LI.FI Token Cache**: 30-min TTL cache of cross-chain token lists
 
 ## Swap Flow (Same-Chain: SOL → USDC)

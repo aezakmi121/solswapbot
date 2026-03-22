@@ -51,17 +51,28 @@ Build an unsigned swap transaction.
 ## Token Scanner
 
 ### `GET /api/scan`
-Analyze a token for safety risks.
+Analyze a token for safety risks. Multi-chain: auto-detects Solana (base58) or EVM (0x) addresses.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `mint` | string | Yes | Solana token mint address |
+| `mint` | string | Yes | Solana mint address (base58) or EVM contract address (0x...) |
+| `chain` | string | No | EVM chain hint: `ethereum` (default), `bsc`, `polygon`, `arbitrum`, `base`. Ignored for Solana. |
+
+**Solana scans** run 12 checks (200 total weight, normalized to 0-100):
+Mint Authority, Liquidity Pool, Freeze Authority, Top Holders, Honeypot Detection,
+Metadata Mutability, Token Metadata, Creator Holdings, Update Authority, Jupiter Verified,
+Token Age, Transfer Fee.
+
+**EVM scans** run 8 checks (130 total weight, normalized to 0-100):
+Owner Renounced, Proxy Contract, Honeypot Detection, Contract Code, Top Holders,
+Mint Function, Transfer Tax, Liquidity.
 
 **Response:**
 ```json
 {
   "riskScore": 12,
   "riskLevel": "LOW",
+  "chain": "solana",
   "checks": {
     "mintAuthority": { "safe": true, "detail": "Disabled" },
     "freezeAuthority": { "safe": true, "detail": "Disabled" },
@@ -78,7 +89,7 @@ Analyze a token for safety risks.
 }
 ```
 
-Risk scoring: 0-20 = LOW, 21-50 = MEDIUM, 51+ = HIGH
+Risk scoring: 0-20 = LOW, 21-50 = MEDIUM, 51+ = HIGH. Free tier: 10 scans/day.
 
 ---
 
@@ -157,7 +168,7 @@ List tokens available on a specific chain.
 ---
 
 ### `POST /api/cross-chain/execute`
-Build a signable LI.FI bridge transaction using the user's real wallet addresses. Only Solana-originated swaps are supported (`inputChain` must be `"solana"`). Returns a base64-encoded Solana VersionedTransaction ready to be signed with Privy.
+Build a signable LI.FI bridge transaction using the user's real wallet addresses. Supports all directions: Solana→EVM, EVM→Solana, EVM→EVM. Returns base64 Solana tx for Solana-origin, or `evmTransaction` object for EVM-origin.
 
 **Body:**
 | Field | Type | Required | Description |
@@ -295,6 +306,50 @@ Get combined Solana + EVM token portfolio with USD values.
 Token `chain` values: `"solana"` | `"ethereum"` | `"bsc"` | `"polygon"` | `"arbitrum"` | `"base"`
 
 EVM tokens only appear if `MORALIS_API_KEY` is set and the user has an EVM wallet with non-zero balances.
+
+---
+
+## Tracker (Whale Tracker)
+
+### `POST /api/tracker/watch`
+Add a wallet to watch for large movements.
+
+**Body:** `{ "walletAddress": "...", "label": "Whale A", "chain": "solana" }`
+Chain: `"solana"` | `"ethereum"` | `"bsc"` | `"polygon"` | `"arbitrum"` | `"base"`
+
+### `POST /api/tracker/unwatch`
+Remove a watched wallet. **Body:** `{ "walletAddress": "..." }`
+
+### `GET /api/tracker/list`
+List all watched wallets for the authenticated user.
+
+### `GET /api/tracker/portfolio/:walletAddress`
+Get top 10 tokens by USD value for a watched wallet, with 24h price changes.
+
+## Admin (gated by ADMIN_TELEGRAM_ID)
+
+### `GET /api/admin/stats`
+KPIs: total users, total swaps, total fees, revenue velocity (today/7d/30d).
+
+### `GET /api/admin/users?limit=`
+Paginated user list with tier, swap/send/scan/referral counts, top fee generators.
+
+### `GET /api/admin/referrals`
+Top referrers with earnings, total referral count.
+
+### `POST /api/admin/set-tier`
+Set subscription tier. **Body:** `{ "telegramId": "123", "tier": "WHALE_TRACKER" }` or `{ "telegramIds": ["123","456"], "tier": "ALL_ACCESS" }`
+
+## Additional Protected Endpoints
+
+### `POST /api/swap/recheck`
+Re-check on-chain status for stuck swaps. **Body:** `{ "swapId": "..." }`
+
+### `GET /api/user/referrals?offset=&limit=`
+Paginated list of referred users with username, join date, swap count, fees generated.
+
+### `DELETE /api/user`
+GDPR data deletion — cascade-deletes all user records (transactional).
 
 ---
 

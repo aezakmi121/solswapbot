@@ -56,7 +56,8 @@ Platform fees are collected **on-chain, trustlessly** via Jupiter's referral pro
 | **Swap Ownership** | `/api/swap/status` enforces user ownership check | DONE |
 | **BigInt Validation** | `inputAmount`/`outputAmount` validated as integer strings before `BigInt()` | DONE |
 | **GDPR Deletion** | `DELETE /api/user` cascade-deletes all user records (transactional) | DONE |
-| **Webhook Auth** | `POST /api/webhook/helius` validates `Authorization` header against secret | DONE |
+| **Webhook Auth (Helius)** | `POST /api/webhook/helius` validates `Authorization` header against secret | DONE |
+| **Webhook Auth (Moralis)** | `POST /api/webhook/moralis` validates `x-signature` HMAC-SHA256 against `MORALIS_WEBHOOK_SECRET` | DONE |
 
 ## Auth Middleware Behavior
 

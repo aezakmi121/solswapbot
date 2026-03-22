@@ -3,7 +3,7 @@
 ## Quick Commands
 
 ```bash
-npm test              # Backend vitest suite (22 tests)
+npm test              # Backend Vitest suite (route + query tests)
 npm run test:smoke    # Backend smoke tests via Node built-in runner (23 tests)
 npm run test:live     # Integration smoke tests against localhost:3001 (curl-based)
 npm run test:live:prod # Integration smoke tests against production VPS
@@ -11,7 +11,7 @@ npm run validate-keys # Validate all API keys & config against live services
 npm run lint          # Type-check without emit
 npm run build         # Compile TypeScript (must pass with zero errors)
 
-cd webapp && npm test       # Frontend vitest suite (5 tests)
+cd webapp && npm test       # Frontend Vitest suite (AdminPanel, SwapPanel tests)
 cd webapp && npm run build  # Frontend build (tsc + vite)
 ```
 
@@ -24,7 +24,7 @@ cd webapp && npm run build  # Frontend build (tsc + vite)
 
 ### Backend Vitest Suite (`npm test`)
 - **Files**: `src/api/routes/__tests__/*.test.ts`, `src/db/queries/__tests__/*.test.ts`
-- **Tests**: 22 — price validation, quote endpoints, scan rate limiting, transaction filtering, fee queries, referral calculations
+- **Tests**: price validation, quote endpoints, scan rate limiting, transaction filtering, fee queries, referral calculations
 
 ### Frontend Vitest Suite (`cd webapp && npm test`)
 - **Files**: `webapp/src/components/__tests__/*.test.tsx`
@@ -38,7 +38,7 @@ cd webapp && npm run build  # Frontend build (tsc + vite)
 1. Start bot in dev mode: `npm run dev`
 2. Open Telegram → Send `/start` to your bot
 3. Verify: Welcome message appears with "Open SolSwap" button
-4. Tap button → Mini App should open (5-tab UI: Wallet | Swap | Scan | History | Settings)
+4. Tap button → Mini App should open (4-tab bottom nav: Wallet | Swap | Scan | Tracker; header icons: History | Settings)
 5. Send any random text → bot should reply with Mini App redirect
 
 ## API Testing
@@ -69,13 +69,13 @@ curl http://localhost:3001/api/cross-chain/chains
 |---------|--------|-------|
 | Privy wallet flow | Testable | Privy SDK fully integrated. Manual test in Mini App. |
 | End-to-end swap signing | Testable | Privy signs in-browser. Requires real SOL for live test. |
-| Tab navigation (5 tabs) | Testable | Wallet, Swap, Scan, History, Settings |
+| Tab navigation (4 tabs + header icons) | Testable | Bottom: Wallet, Swap, Scan, Tracker. Header: History, Settings, Admin |
 | Admin dashboard | Testable | Set ADMIN_TELEGRAM_ID to see Admin tab |
-| Token scanner | Testable | 5/day free limit for FREE tier |
+| Token scanner (multi-chain) | Testable | 10/day free limit. Solana (12 checks) + EVM (8 checks, 5 chains) |
 | Send/receive flow | Testable | Send requires SOL. Receive tracked via Helius webhooks. |
-| Cross-chain bridge | Testable | Solana-originated only. LI.FI bridge execution live. |
+| Cross-chain bridge | Testable | All directions live: Solana→EVM, EVM→Solana, EVM→EVM (v0.9.1). |
 | Helius webhooks | Testable | Requires HELIUS_API_KEY + HELIUS_WEBHOOK_SECRET |
-| Whale tracker | Not mounted | Code exists but router not wired in server.ts |
+| Whale tracker | Testable | Multi-chain (Solana + 5 EVM). Router mounted since v1.0.0. Polling + Moralis Streams. |
 | Subscription payments | Not implemented | Schema only, no Telegram Stars flow |
 | AI signals | Not implemented | Phase 4 |
 
