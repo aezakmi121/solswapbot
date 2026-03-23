@@ -62,15 +62,22 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         );
     }
 
+    const isReceive = item.type === "receive";
+
     return (
         <div className="activity-row">
-            <span className="activity-type-icon"><ArrowUpRight size={16} /></span>
+            <span className="activity-type-icon">{isReceive ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}</span>
             <div className="activity-info">
                 <span className="activity-desc">
-                    Sent {item.humanAmount} {item.tokenSymbol}
+                    {isReceive ? "Received" : "Sent"} {item.humanAmount} {item.tokenSymbol}
                 </span>
                 <span className="activity-time">
-                    {item.recipientAddress.slice(0, 4)}...{item.recipientAddress.slice(-4)} · {timeAgo(item.createdAt)}
+                    {isReceive && item.senderAddress
+                        ? `from ${item.senderAddress.slice(0, 4)}...${item.senderAddress.slice(-4)} · `
+                        : !isReceive
+                        ? `${item.recipientAddress.slice(0, 4)}...${item.recipientAddress.slice(-4)} · `
+                        : ""
+                    }{timeAgo(item.createdAt)}
                 </span>
             </div>
             <div className="activity-right">

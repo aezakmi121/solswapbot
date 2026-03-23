@@ -343,6 +343,17 @@ export type ActivityItem =
           txSignature: string | null;
           status: string;
           createdAt: string;
+      }
+    | {
+          id: string;
+          type: "receive";
+          tokenSymbol: string;
+          humanAmount: string;
+          recipientAddress: string;
+          senderAddress?: string;
+          txSignature: string | null;
+          status: string;
+          createdAt: string;
       };
 
 /** Record a completed outbound send in the database */

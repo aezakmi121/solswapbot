@@ -16,10 +16,11 @@ export type ActivityItem =
       }
     | {
           id: string;
-          type: "send";
+          type: "send" | "receive";
           tokenSymbol: string;
           humanAmount: string;
           recipientAddress: string;
+          senderAddress?: string;
           txSignature: string | null;
           status: string;
           createdAt: string;
@@ -125,10 +126,11 @@ historyRouter.get("/activity", async (_req: Request, res: Response) => {
 
         const sendItems: ActivityItem[] = transfers.map((t) => ({
             id: t.id,
-            type: "send",
+            type: t.direction === "RECEIVE" ? "receive" as const : "send" as const,
             tokenSymbol: t.tokenSymbol ?? t.tokenMint.slice(0, 6) + "...",
             humanAmount: t.humanAmount,
             recipientAddress: t.recipientAddress,
+            senderAddress: t.senderAddress ?? undefined,
             txSignature: t.txSignature,
             status: t.status,
             createdAt: t.createdAt.toISOString(),
