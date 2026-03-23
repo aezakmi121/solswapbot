@@ -379,11 +379,13 @@ export async function fetchActivity(): Promise<ActivityItem[]> {
 }
 
 /** Soft-delete a transaction from the user's history */
-export async function hideTransaction(id: string, type: "swap" | "send"): Promise<void> {
+export async function hideTransaction(id: string, type: "swap" | "send" | "receive"): Promise<void> {
+    // Backend uses "send" for all Transfer records (both sends and receives)
+    const backendType = type === "receive" ? "send" : type;
     const res = await fetch(`${API_BASE}/api/history/hide`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ id, type }),
+        body: JSON.stringify({ id, type: backendType }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
@@ -471,8 +473,8 @@ export async function fetchReferrals(params?: {
 // ─── Transactions (unified history) ────────────────────────────────────────────
 
 export interface UnifiedTransaction {
-    id: string;             // "swap_<cuid>" or "send_<cuid>"
-    type: "swap" | "send";
+    id: string;             // "swap_<cuid>" or "send_<cuid>" or "receive_<cuid>"
+    type: "swap" | "send" | "receive";
     status: string;         // PENDING | SUBMITTED | CONFIRMED | FAILED | TIMEOUT
     // swap fields
     inputSymbol?: string;
@@ -482,10 +484,11 @@ export interface UnifiedTransaction {
     inputChain?: string;
     outputChain?: string;
     feeAmountUsd?: number | null;
-    // send fields
+    // send/receive fields
     tokenSymbol?: string;
     humanAmount?: string;
     recipientAddress?: string;
+    senderAddress?: string;
     // shared
     txSignature: string | null;
     createdAt: string;
