@@ -471,8 +471,8 @@ export async function fetchReferrals(params?: {
 // ─── Transactions (unified history) ────────────────────────────────────────────
 
 export interface UnifiedTransaction {
-    id: string;             // "swap_<cuid>" or "send_<cuid>"
-    type: "swap" | "send";
+    id: string;             // "swap_<cuid>" or "send_<cuid>" or "receive_<cuid>"
+    type: "swap" | "send" | "receive";
     status: string;         // PENDING | SUBMITTED | CONFIRMED | FAILED | TIMEOUT
     // swap fields
     inputSymbol?: string;
@@ -482,10 +482,11 @@ export interface UnifiedTransaction {
     inputChain?: string;
     outputChain?: string;
     feeAmountUsd?: number | null;
-    // send fields
+    // send/receive fields
     tokenSymbol?: string;
     humanAmount?: string;
     recipientAddress?: string;
+    senderAddress?: string;
     // shared
     txSignature: string | null;
     createdAt: string;

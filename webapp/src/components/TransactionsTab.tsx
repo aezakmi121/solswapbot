@@ -74,7 +74,11 @@ function shortAddr(addr: string): string {
 function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () => void; onHide: (e: React.MouseEvent) => void }) {
     return (
         <button className="tx-row" onClick={onClick}>
-            <span className="tx-row-icon">{tx.type === "swap" ? <ArrowRightLeft size={20} color="var(--accent)" /> : <ArrowUpRight size={20} color="var(--accent)" />}</span>
+            <span className="tx-row-icon">
+                {tx.type === "swap" ? <ArrowRightLeft size={20} color="var(--accent)" />
+                    : tx.type === "receive" ? <ArrowDownLeft size={20} color="var(--accent)" />
+                    : <ArrowUpRight size={20} color="var(--accent)" />}
+            </span>
             <div className="tx-row-body">
                 {tx.type === "swap" ? (
                     <>
@@ -85,6 +89,16 @@ function TxRow({ tx, onClick, onHide }: { tx: UnifiedTransaction; onClick: () =>
                             {tx.inputAmount} {tx.inputSymbol} → {tx.outputAmount} {tx.outputSymbol}
                             {tx.feeAmountUsd != null && tx.feeAmountUsd > 0 && (
                                 <span className="tx-row-fee"> · ${tx.feeAmountUsd.toFixed(2)} fee</span>
+                            )}
+                        </div>
+                    </>
+                ) : tx.type === "receive" ? (
+                    <>
+                        <div className="tx-row-title">Received {tx.tokenSymbol}</div>
+                        <div className="tx-row-sub">
+                            {tx.humanAmount} {tx.tokenSymbol}
+                            {tx.senderAddress && (
+                                <span> from {shortAddr(tx.senderAddress)}</span>
                             )}
                         </div>
                     </>
@@ -163,7 +177,9 @@ function TxDetailModal({ tx, onClose, onStatusUpdate }: { tx: UnifiedTransaction
                 {/* Header */}
                 <div className="tx-detail-header">
                     <span className="tx-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        {tx.type === "swap" ? <><ArrowRightLeft size={18} /> Swap Details</> : <><ArrowUpRight size={18} /> Send Details</>}
+                        {tx.type === "swap" ? <><ArrowRightLeft size={18} /> Swap Details</>
+                            : tx.type === "receive" ? <><ArrowDownLeft size={18} /> Receive Details</>
+                            : <><ArrowUpRight size={18} /> Send Details</>}
                     </span>
                     <button className="tx-detail-close" onClick={onClose}>✕</button>
                 </div>
@@ -218,7 +234,18 @@ function TxDetailModal({ tx, onClose, onStatusUpdate }: { tx: UnifiedTransaction
                                     {tx.humanAmount} {tx.tokenSymbol}
                                 </span>
                             </div>
-                            {tx.recipientAddress && (
+                            {tx.type === "receive" && tx.senderAddress && (
+                                <div className="tx-detail-row">
+                                    <span>From</span>
+                                    <span
+                                        className="tx-detail-val tx-detail-addr"
+                                        title={tx.senderAddress}
+                                    >
+                                        {shortAddr(tx.senderAddress)}
+                                    </span>
+                                </div>
+                            )}
+                            {tx.type === "send" && tx.recipientAddress && (
                                 <div className="tx-detail-row">
                                     <span>Recipient</span>
                                     <span
