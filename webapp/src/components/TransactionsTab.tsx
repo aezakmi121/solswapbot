@@ -517,7 +517,7 @@ export function TransactionsTab({ walletAddress }: TransactionsTabProps) {
                                             onClick={() => setSelectedTx(tx)}
                                             onHide={async (e) => {
                                                 e.stopPropagation();
-                                                const rawId = tx.id.startsWith("swap_") ? tx.id.slice(5) : tx.id.startsWith("send_") ? tx.id.slice(5) : tx.id;
+                                                const rawId = tx.id.startsWith("swap_") ? tx.id.slice(5) : tx.id.startsWith("send_") ? tx.id.slice(5) : tx.id.startsWith("receive_") ? tx.id.slice(8) : tx.id;
                                                 
                                                 // Optimistic UI update
                                                 setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
