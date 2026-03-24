@@ -6489,6 +6489,80 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   pointer-events: none;
 }
 
+/* ── Tracker tag pills ── */
+.tracker-tag-pill {
+  background: rgba(124, 92, 252, 0.15);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ── Tracker tag filter chips ── */
+.tracker-tag-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.tracker-tag-chip {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tracker-tag-chip:hover {
+  border-color: var(--accent);
+}
+
+.tracker-tag-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ── Tracker inline edit ── */
+.tracker-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.tracker-edit-input {
+  padding: 6px 10px !important;
+  font-size: 0.8rem !important;
+  height: auto !important;
+}
+
+.tracker-edit-save,
+.tracker-edit-cancel {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+}
+
+.tracker-edit-save {
+  background: var(--accent);
+  color: white;
+}
+
+.tracker-edit-cancel {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
 /* ── Tracker Portfolio Button & Accordion ── */
 .tracker-portfolio-btn {
   background: rgba(19, 19, 21, 0.6);

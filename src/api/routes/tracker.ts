@@ -53,6 +53,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
             return;
         }
 
+        const tag = req.body.tag ?? null;
         chain = chain || "solana";
 
         // Validate address format based on chain
@@ -99,6 +100,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                     userId: user.id,
                     walletAddress,
                     label: label ?? null,
+                    tag,
                     chain,
                 },
             });
@@ -134,6 +136,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                 id: watched.id,
                 walletAddress: watched.walletAddress,
                 label: watched.label,
+                tag: watched.tag,
                 chain: watched.chain,
                 active: watched.active,
             },
@@ -226,6 +229,7 @@ trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
                 id: w.id,
                 walletAddress: w.walletAddress,
                 label: w.label,
+                tag: w.tag,
                 chain: w.chain,
                 createdAt: w.createdAt,
             })),
@@ -236,6 +240,70 @@ trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error("List wallets error:", message);
         res.status(500).json({ error: "Failed to list wallets" });
+    }
+});
+
+/**
+ * PATCH /api/tracker/update
+ * Update label and/or tag for a watched wallet.
+ * Auth: Telegram initData via telegramAuthMiddleware.
+ *
+ * Body: { walletAddress, label?, tag? }
+ */
+trackerRouter.patch("/tracker/update", async (req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        let { walletAddress, label, tag } = req.body;
+
+        if (!walletAddress) {
+            res.status(400).json({ error: "Missing walletAddress" });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({ where: { telegramId } });
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        // Lowercase EVM addresses for consistent matching
+        if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            walletAddress = walletAddress.toLowerCase();
+        }
+
+        const existing = await prisma.watchedWallet.findFirst({
+            where: { userId: user.id, walletAddress, active: true },
+        });
+
+        if (!existing) {
+            res.status(404).json({ error: "Wallet not found in your watchlist" });
+            return;
+        }
+
+        // Build update data — only update fields that were provided
+        const updateData: { label?: string | null; tag?: string | null } = {};
+        if (label !== undefined) updateData.label = label || null;
+        if (tag !== undefined) updateData.tag = tag || null;
+
+        const updated = await prisma.watchedWallet.update({
+            where: { id: existing.id },
+            data: updateData,
+        });
+
+        res.json({
+            success: true,
+            wallet: {
+                id: updated.id,
+                walletAddress: updated.walletAddress,
+                label: updated.label,
+                tag: updated.tag,
+                chain: updated.chain,
+            },
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error("Update wallet error:", message);
+        res.status(500).json({ error: "Failed to update wallet" });
     }
 });
 

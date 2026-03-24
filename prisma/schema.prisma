@@ -105,6 +105,7 @@ model WatchedWallet {
   user          User     @relation(fields: [userId], references: [id])
   walletAddress String
   label         String?
+  tag           String?  // Free-form group tag (e.g. "VCs", "DEX Whales", "Dev Wallets")
   chain         String   @default("solana") // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
