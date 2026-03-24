@@ -131,6 +131,20 @@ Full EVM token scanner supporting 5 chains: Ethereum, BSC, Polygon, Arbitrum, Ba
 
 ---
 
+## Subscription Tier Enforcement — COMPLETE (v1.4.0)
+
+Scanner daily limit (10 free scans/day) is enforced in `scan.ts` with upgrade prompts.
+Self-serve Telegram Stars payment flow implemented:
+- `/subscribe` bot command with inline keyboard
+- `POST /api/subscribe/invoice` creates Stars invoice
+- `UpgradeModal` in Mini App (Settings + limit-hit prompts)
+- Background expiry poller sends 24h warnings + expired notices
+
+Tiers: Scanner Pro (250 Stars/mo, unlimited scans), Whale Tracker (250 Stars/mo, 20 wallets),
+All Access (400 Stars/mo, everything). Annual plans with 20% discount. See CLAUDE.md for full details.
+
+---
+
 ## Risk Assessment
 
 - **No new API keys needed** — Solana checks use Helius RPC, EVM checks use free public RPCs
