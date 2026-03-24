@@ -1,7 +1,7 @@
 # Whale Tracker Enhancement Plan
 
-> **Status:** PLANNING
-> **Target version:** v1.5.0
+> **Status:** COMPLETE ✅
+> **Version:** v1.5.0
 
 ---
 
