@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Activity, PieChart, X, ExternalLink, Copy } from "lucide-react";
 import { UpgradeModal } from "./UpgradeModal";
 import { EXPLORER_ADDRESS_URL } from "../lib/chains";
@@ -122,6 +122,7 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
     const [activityData, setActivityData] = useState<ActivityTx[] | null>(null);
     const [activityLoading, setActivityLoading] = useState(false);
     const [activityError, setActivityError] = useState<string | null>(null);
+    const activityFetchedRef = useRef(false);
 
     useEffect(() => {
         let mounted = true;
@@ -142,23 +143,26 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
     }, [address]);
 
     // Lazy-load activity on first tab switch (with 35s timeout)
+    // IMPORTANT: deps must NOT include activityLoading/activityData — doing so
+    // causes cleanup to abort the in-flight fetch on every state change.
     useEffect(() => {
-        if (modalTab !== "activity" || activityData !== null || activityLoading) return;
-        let mounted = true;
+        if (modalTab !== "activity" || activityFetchedRef.current) return;
+        activityFetchedRef.current = true;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 35000);
         setActivityLoading(true);
         apiRequest<{ transactions: ActivityTx[] }>(`/tracker/activity/${address}`, { signal: controller.signal })
-            .then(res => { if (mounted) setActivityData(res.transactions); })
+            .then(res => { setActivityData(res.transactions); })
             .catch(err => {
-                if (mounted) {
+                if (err.name !== "AbortError") {
                     const msg = controller.signal.aborted ? "Request timed out" : (err instanceof Error ? err.message : "Failed to load");
                     setActivityError(msg);
                 }
+                activityFetchedRef.current = false; // allow retry on error
             })
-            .finally(() => { clearTimeout(timeoutId); if (mounted) setActivityLoading(false); });
-        return () => { mounted = false; controller.abort(); };
-    }, [modalTab, address, activityData, activityLoading]);
+            .finally(() => { clearTimeout(timeoutId); setActivityLoading(false); });
+        return () => { controller.abort(); clearTimeout(timeoutId); };
+    }, [modalTab, address]);
 
     const renderHoldings = () => {
         if (loading) {
