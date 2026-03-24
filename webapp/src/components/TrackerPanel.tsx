@@ -83,7 +83,7 @@ function formatUsd(val: number) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Portfolio Component (Accordion Content)
+// Portfolio + Activity Modal
 // ─────────────────────────────────────────────────────────────────────────────
 interface PortfolioToken {
     chain: string;
@@ -103,10 +103,25 @@ interface PortfolioData {
     tokens: PortfolioToken[];
 }
 
+interface ActivityTx {
+    signature: string;
+    type: "send" | "receive" | "unknown";
+    amount: number | null;
+    symbol: string | null;
+    counterparty: string | null;
+    timestamp: number;
+    explorerUrl: string;
+}
+
 function WalletPortfolio({ address, onClose }: { address: string; onClose: () => void }) {
+    const [modalTab, setModalTab] = useState<"holdings" | "activity">("holdings");
     const [data, setData] = useState<PortfolioData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const [activityData, setActivityData] = useState<ActivityTx[] | null>(null);
+    const [activityLoading, setActivityLoading] = useState(false);
+    const [activityError, setActivityError] = useState<string | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -126,7 +141,19 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
         return () => { mounted = false; };
     }, [address]);
 
-    const renderContent = () => {
+    // Lazy-load activity on first tab switch
+    useEffect(() => {
+        if (modalTab !== "activity" || activityData !== null || activityLoading) return;
+        let mounted = true;
+        setActivityLoading(true);
+        apiRequest<{ transactions: ActivityTx[] }>(`/tracker/activity/${address}`)
+            .then(res => { if (mounted) setActivityData(res.transactions); })
+            .catch(err => { if (mounted) setActivityError(err instanceof Error ? err.message : "Failed to load"); })
+            .finally(() => { if (mounted) setActivityLoading(false); });
+        return () => { mounted = false; };
+    }, [modalTab, address, activityData, activityLoading]);
+
+    const renderHoldings = () => {
         if (loading) {
             return (
                 <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
@@ -216,17 +243,100 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
         );
     };
 
+    const renderActivity = () => {
+        if (activityLoading) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <div className="spinner" style={{ width: 16, height: 16, margin: "auto" }} />
+                </div>
+            );
+        }
+
+        if (activityError) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p className="tracker-error" style={{ fontSize: "0.8rem", margin: 0 }}>{activityError}</p>
+                </div>
+            );
+        }
+
+        if (!activityData || activityData.length === 0) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
+                        No recent activity found.
+                    </p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="tracker-activity-list">
+                {activityData.map((tx, idx) => {
+                    const dirEmoji = tx.type === "receive" ? "📥" : tx.type === "send" ? "📤" : "🔄";
+                    const timeStr = tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                    }) : "—";
+                    return (
+                        <div key={`${tx.signature}-${idx}`} className="tracker-activity-item">
+                            <div className="tracker-activity-left">
+                                <span className="tracker-activity-emoji">{dirEmoji}</span>
+                                <div>
+                                    <div className="tracker-activity-amount">
+                                        {tx.amount !== null ? tx.amount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}
+                                        {tx.symbol && ` ${tx.symbol}`}
+                                    </div>
+                                    {tx.counterparty && (
+                                        <div className="tracker-activity-counterparty">
+                                            {tx.type === "receive" ? "From" : "To"} {shortAddr(tx.counterparty)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="tracker-activity-right">
+                                <div className="tracker-activity-time">{timeStr}</div>
+                                <a
+                                    className="tracker-activity-link"
+                                    href={tx.explorerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        if (tg?.openLink) tg.openLink(tx.explorerUrl);
+                                        else window.open(tx.explorerUrl, "_blank");
+                                    }}
+                                >
+                                    <ExternalLink size={12} />
+                                </a>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
     return (
         <div className="tx-detail-overlay" onClick={onClose} style={{ zIndex: 100 }}>
             <div className="tx-detail-sheet" onClick={(e) => e.stopPropagation()}>
                 <div className="tx-detail-header">
                     <span className="tx-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <PieChart size={18} /> Portfolio Holdings
+                        <PieChart size={18} /> Wallet Details
                     </span>
                     <button className="tx-detail-close" onClick={onClose}><X size={20} /></button>
                 </div>
+                <div className="tracker-modal-tabs">
+                    <button
+                        className={`tracker-modal-tab ${modalTab === "holdings" ? "active" : ""}`}
+                        onClick={() => setModalTab("holdings")}
+                    >Holdings</button>
+                    <button
+                        className={`tracker-modal-tab ${modalTab === "activity" ? "active" : ""}`}
+                        onClick={() => setModalTab("activity")}
+                    >Activity</button>
+                </div>
                 <div className="tx-detail-body" style={{ overflow: "visible", border: "none" }}>
-                    {renderContent()}
+                    {modalTab === "holdings" ? renderHoldings() : renderActivity()}
                 </div>
             </div>
         </div>
