@@ -141,16 +141,23 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
         return () => { mounted = false; };
     }, [address]);
 
-    // Lazy-load activity on first tab switch
+    // Lazy-load activity on first tab switch (with 35s timeout)
     useEffect(() => {
         if (modalTab !== "activity" || activityData !== null || activityLoading) return;
         let mounted = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
         setActivityLoading(true);
-        apiRequest<{ transactions: ActivityTx[] }>(`/tracker/activity/${address}`)
+        apiRequest<{ transactions: ActivityTx[] }>(`/tracker/activity/${address}`, { signal: controller.signal })
             .then(res => { if (mounted) setActivityData(res.transactions); })
-            .catch(err => { if (mounted) setActivityError(err instanceof Error ? err.message : "Failed to load"); })
-            .finally(() => { if (mounted) setActivityLoading(false); });
-        return () => { mounted = false; };
+            .catch(err => {
+                if (mounted) {
+                    const msg = controller.signal.aborted ? "Request timed out" : (err instanceof Error ? err.message : "Failed to load");
+                    setActivityError(msg);
+                }
+            })
+            .finally(() => { clearTimeout(timeoutId); if (mounted) setActivityLoading(false); });
+        return () => { mounted = false; controller.abort(); };
     }, [modalTab, address, activityData, activityLoading]);
 
     const renderHoldings = () => {
