@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Activity, PieChart, X } from "lucide-react";
+import { Activity, PieChart, X, ExternalLink, Copy } from "lucide-react";
 import { UpgradeModal } from "./UpgradeModal";
+import { EXPLORER_ADDRESS_URL } from "../lib/chains";
+import { toast } from "../lib/toast";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const tg = (window as any).Telegram?.WebApp;
@@ -9,6 +11,7 @@ interface WatchedWallet {
     id: string;
     walletAddress: string;
     label: string | null;
+    tag: string | null;
     chain: string;
     createdAt: string;
 }
@@ -49,12 +52,38 @@ function shortAddr(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+/** Auto-detect chain from address format */
+function detectChainFromAddress(addr: string): string | null {
+    const trimmed = addr.trim();
+    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) return "ethereum"; // EVM — default to Ethereum, user can switch
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) return "solana";
+    return null; // ambiguous or partial
+}
+
+function copyAddress(addr: string) {
+    navigator.clipboard.writeText(addr).then(() => {
+        toast("Address copied!", "success");
+        tg?.HapticFeedback?.selectionChanged();
+    });
+}
+
+function openExplorer(chain: string, addr: string) {
+    const baseUrl = EXPLORER_ADDRESS_URL[chain as keyof typeof EXPLORER_ADDRESS_URL];
+    if (!baseUrl) return;
+    const url = baseUrl + addr;
+    if (tg?.openLink) {
+        tg.openLink(url);
+    } else {
+        window.open(url, "_blank");
+    }
+}
+
 function formatUsd(val: number) {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Portfolio Component (Accordion Content)
+// Portfolio + Activity Modal
 // ─────────────────────────────────────────────────────────────────────────────
 interface PortfolioToken {
     chain: string;
@@ -74,10 +103,25 @@ interface PortfolioData {
     tokens: PortfolioToken[];
 }
 
+interface ActivityTx {
+    signature: string;
+    type: "send" | "receive" | "unknown";
+    amount: number | null;
+    symbol: string | null;
+    counterparty: string | null;
+    timestamp: number;
+    explorerUrl: string;
+}
+
 function WalletPortfolio({ address, onClose }: { address: string; onClose: () => void }) {
+    const [modalTab, setModalTab] = useState<"holdings" | "activity">("holdings");
     const [data, setData] = useState<PortfolioData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const [activityData, setActivityData] = useState<ActivityTx[] | null>(null);
+    const [activityLoading, setActivityLoading] = useState(false);
+    const [activityError, setActivityError] = useState<string | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -97,7 +141,19 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
         return () => { mounted = false; };
     }, [address]);
 
-    const renderContent = () => {
+    // Lazy-load activity on first tab switch
+    useEffect(() => {
+        if (modalTab !== "activity" || activityData !== null || activityLoading) return;
+        let mounted = true;
+        setActivityLoading(true);
+        apiRequest<{ transactions: ActivityTx[] }>(`/tracker/activity/${address}`)
+            .then(res => { if (mounted) setActivityData(res.transactions); })
+            .catch(err => { if (mounted) setActivityError(err instanceof Error ? err.message : "Failed to load"); })
+            .finally(() => { if (mounted) setActivityLoading(false); });
+        return () => { mounted = false; };
+    }, [modalTab, address, activityData, activityLoading]);
+
+    const renderHoldings = () => {
         if (loading) {
             return (
                 <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
@@ -187,17 +243,100 @@ function WalletPortfolio({ address, onClose }: { address: string; onClose: () =>
         );
     };
 
+    const renderActivity = () => {
+        if (activityLoading) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <div className="spinner" style={{ width: 16, height: 16, margin: "auto" }} />
+                </div>
+            );
+        }
+
+        if (activityError) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p className="tracker-error" style={{ fontSize: "0.8rem", margin: 0 }}>{activityError}</p>
+                </div>
+            );
+        }
+
+        if (!activityData || activityData.length === 0) {
+            return (
+                <div className="tracker-portfolio-drawer" style={{ border: 'none', background: 'transparent' }}>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
+                        No recent activity found.
+                    </p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="tracker-activity-list">
+                {activityData.map((tx, idx) => {
+                    const dirEmoji = tx.type === "receive" ? "📥" : tx.type === "send" ? "📤" : "🔄";
+                    const timeStr = tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                    }) : "—";
+                    return (
+                        <div key={`${tx.signature}-${idx}`} className="tracker-activity-item">
+                            <div className="tracker-activity-left">
+                                <span className="tracker-activity-emoji">{dirEmoji}</span>
+                                <div>
+                                    <div className="tracker-activity-amount">
+                                        {tx.amount !== null ? tx.amount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}
+                                        {tx.symbol && ` ${tx.symbol}`}
+                                    </div>
+                                    {tx.counterparty && (
+                                        <div className="tracker-activity-counterparty">
+                                            {tx.type === "receive" ? "From" : "To"} {shortAddr(tx.counterparty)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="tracker-activity-right">
+                                <div className="tracker-activity-time">{timeStr}</div>
+                                <a
+                                    className="tracker-activity-link"
+                                    href={tx.explorerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        if (tg?.openLink) tg.openLink(tx.explorerUrl);
+                                        else window.open(tx.explorerUrl, "_blank");
+                                    }}
+                                >
+                                    <ExternalLink size={12} />
+                                </a>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
     return (
         <div className="tx-detail-overlay" onClick={onClose} style={{ zIndex: 100 }}>
             <div className="tx-detail-sheet" onClick={(e) => e.stopPropagation()}>
                 <div className="tx-detail-header">
                     <span className="tx-detail-title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <PieChart size={18} /> Portfolio Holdings
+                        <PieChart size={18} /> Wallet Details
                     </span>
                     <button className="tx-detail-close" onClick={onClose}><X size={20} /></button>
                 </div>
+                <div className="tracker-modal-tabs">
+                    <button
+                        className={`tracker-modal-tab ${modalTab === "holdings" ? "active" : ""}`}
+                        onClick={() => setModalTab("holdings")}
+                    >Holdings</button>
+                    <button
+                        className={`tracker-modal-tab ${modalTab === "activity" ? "active" : ""}`}
+                        onClick={() => setModalTab("activity")}
+                    >Activity</button>
+                </div>
                 <div className="tx-detail-body" style={{ overflow: "visible", border: "none" }}>
-                    {renderContent()}
+                    {modalTab === "holdings" ? renderHoldings() : renderActivity()}
                 </div>
             </div>
         </div>
@@ -221,9 +360,18 @@ export function TrackerPanel() {
     // Add wallet form state
     const [addAddress, setAddAddress] = useState("");
     const [addLabel, setAddLabel] = useState("");
+    const [addTag, setAddTag] = useState("");
     const [addChain, setAddChain] = useState("solana");
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+
+    // Tag filter state
+    const [filterTag, setFilterTag] = useState<string | null>(null);
+
+    // Inline edit state
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editLabel, setEditLabel] = useState("");
+    const [editTag, setEditTag] = useState("");
 
     // Accordion state (which wallet has its portfolio open)
     const [openPortfolioId, setOpenPortfolioId] = useState<string | null>(null);
@@ -252,14 +400,16 @@ export function TrackerPanel() {
         try {
             await apiRequest("/tracker/watch", {
                 method: "POST",
-                body: JSON.stringify({ 
-                    walletAddress: addAddress.trim(), 
+                body: JSON.stringify({
+                    walletAddress: addAddress.trim(),
                     label: addLabel.trim() || undefined,
-                    chain: addChain 
+                    tag: addTag.trim() || undefined,
+                    chain: addChain
                 }),
             });
             setAddAddress("");
             setAddLabel("");
+            setAddTag("");
             await loadWallets();
             setActiveTab("watchlist"); // switch back to list
         } catch (err) {
@@ -288,6 +438,43 @@ export function TrackerPanel() {
     const togglePortfolio = (address: string) => {
         setOpenPortfolioId(prev => prev === address ? null : address);
     };
+
+    const startEditing = (w: WatchedWallet) => {
+        setEditingId(w.id);
+        setEditLabel(w.label ?? "");
+        setEditTag(w.tag ?? "");
+    };
+
+    const cancelEditing = () => {
+        setEditingId(null);
+        setEditLabel("");
+        setEditTag("");
+    };
+
+    const saveEdit = async (walletAddress: string) => {
+        try {
+            await apiRequest("/tracker/update", {
+                method: "PATCH",
+                body: JSON.stringify({
+                    walletAddress,
+                    label: editLabel.trim(),
+                    tag: editTag.trim(),
+                }),
+            });
+            toast("Wallet updated", "success");
+            tg?.HapticFeedback?.notificationOccurred("success");
+            setEditingId(null);
+            await loadWallets();
+        } catch (err) {
+            toast(err instanceof Error ? err.message : "Update failed", "error");
+        }
+    };
+
+    // Collect unique tags for filter chips + autocomplete
+    const allTags = [...new Set(wallets.map(w => w.tag).filter((t): t is string => !!t))].sort();
+
+    // Filter wallets by selected tag
+    const filteredWallets = filterTag ? wallets.filter(w => w.tag === filterTag) : wallets;
 
     const slotsUsed = wallets.length;
     const slotsTotal = limit ?? "∞";
@@ -340,24 +527,36 @@ export function TrackerPanel() {
                 <div className="tracker-tab-content">
                     <form className="tracker-add-form" onSubmit={handleAdd}>
                         <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                            <select
-                                className="tracker-input"
-                                style={{ width: "35%", cursor: "pointer" }}
-                                value={addChain}
-                                onChange={(e) => setAddChain(e.target.value)}
-                                disabled={adding || atLimit}
-                            >
-                                {Object.entries(CHAIN_LABELS).map(([key, label]) => (
-                                    <option key={key} value={key}>{label}</option>
-                                ))}
-                            </select>
+                            {addChain !== "solana" && (
+                                <select
+                                    className="tracker-input"
+                                    style={{ width: "35%", cursor: "pointer" }}
+                                    value={addChain}
+                                    onChange={(e) => setAddChain(e.target.value)}
+                                    disabled={adding || atLimit}
+                                >
+                                    {Object.entries(CHAIN_LABELS).filter(([key]) => key !== "solana").map(([key, label]) => (
+                                        <option key={key} value={key}>{label}</option>
+                                    ))}
+                                </select>
+                            )}
+                            {addChain === "solana" && (
+                                <div className="tracker-input tracker-chain-badge" style={{ width: "35%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    🟣 Solana
+                                </div>
+                            )}
                             <input
                                 className="tracker-input"
                                 style={{ width: "65%" }}
                                 type="text"
                                 placeholder="Wallet address"
                                 value={addAddress}
-                                onChange={(e) => setAddAddress(e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAddAddress(val);
+                                    const detected = detectChainFromAddress(val);
+                                    if (detected) setAddChain(detected);
+                                }}
                                 disabled={adding || atLimit}
                                 maxLength={44}
                                 autoComplete="off"
@@ -373,6 +572,21 @@ export function TrackerPanel() {
                             disabled={adding || atLimit}
                             maxLength={40}
                         />
+                        <input
+                            className="tracker-input tracker-input--label"
+                            type="text"
+                            placeholder="Tag (optional, e.g. VCs, DEX Whales)"
+                            value={addTag}
+                            onChange={(e) => setAddTag(e.target.value)}
+                            disabled={adding || atLimit}
+                            maxLength={30}
+                            list="tracker-tags-datalist"
+                        />
+                        {allTags.length > 0 && (
+                            <datalist id="tracker-tags-datalist">
+                                {allTags.map(t => <option key={t} value={t} />)}
+                            </datalist>
+                        )}
                         <button
                             className="tracker-add-btn swap-btn"
                             type="submit"
@@ -388,6 +602,22 @@ export function TrackerPanel() {
             {/* ── Watchlist Tab ── */}
             {activeTab === "watchlist" && (
                 <div className="tracker-tab-content">
+                    {/* Tag filter chips */}
+                    {allTags.length > 0 && (
+                        <div className="tracker-tag-filters">
+                            <button
+                                className={`tracker-tag-chip ${filterTag === null ? "active" : ""}`}
+                                onClick={() => setFilterTag(null)}
+                            >All</button>
+                            {allTags.map(tag => (
+                                <button
+                                    key={tag}
+                                    className={`tracker-tag-chip ${filterTag === tag ? "active" : ""}`}
+                                    onClick={() => setFilterTag(prev => prev === tag ? null : tag)}
+                                >{tag}</button>
+                            ))}
+                        </div>
+                    )}
                     {loading ? (
                         <div className="tracker-loading">
                             <div className="spinner" />
@@ -403,30 +633,91 @@ export function TrackerPanel() {
                         </div>
                     ) : (
                         <ul className="tracker-wallet-list">
-                            {wallets.map((w) => {
-                                const isOpen = openPortfolioId === w.walletAddress;
+                            {filteredWallets.map((w) => {
+                                const isEditing = editingId === w.id;
                                 return (
                                     <li key={w.id} className="tracker-wallet-item-container">
                                         <div className="tracker-wallet-item">
                                             <div className="tracker-wallet-info">
-                                                {w.label && (
-                                                    <span className="tracker-wallet-label">{w.label}</span>
+                                                {isEditing ? (
+                                                    <div className="tracker-edit-row">
+                                                        <input
+                                                            className="tracker-input tracker-edit-input"
+                                                            type="text"
+                                                            placeholder="Label"
+                                                            value={editLabel}
+                                                            onChange={(e) => setEditLabel(e.target.value)}
+                                                            maxLength={40}
+                                                            autoFocus
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === "Enter") saveEdit(w.walletAddress);
+                                                                if (e.key === "Escape") cancelEditing();
+                                                            }}
+                                                        />
+                                                        <input
+                                                            className="tracker-input tracker-edit-input"
+                                                            type="text"
+                                                            placeholder="Tag"
+                                                            value={editTag}
+                                                            onChange={(e) => setEditTag(e.target.value)}
+                                                            maxLength={30}
+                                                            list="tracker-tags-datalist"
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === "Enter") saveEdit(w.walletAddress);
+                                                                if (e.key === "Escape") cancelEditing();
+                                                            }}
+                                                        />
+                                                        <div style={{ display: "flex", gap: "4px" }}>
+                                                            <button className="tracker-edit-save" onClick={() => saveEdit(w.walletAddress)}>Save</button>
+                                                            <button className="tracker-edit-cancel" onClick={cancelEditing}>Cancel</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                            <span
+                                                                className="tracker-wallet-label"
+                                                                onClick={() => startEditing(w)}
+                                                                title="Click to edit"
+                                                                style={{ cursor: "pointer" }}
+                                                            >
+                                                                {w.label || <span style={{ opacity: 0.4, fontStyle: "italic" }}>Add label</span>}
+                                                            </span>
+                                                            {w.tag && <span className="tracker-tag-pill">{w.tag}</span>}
+                                                        </div>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                            <span className="tracker-wallet-addr" title={w.walletAddress}>
+                                                                <span style={{ fontSize: "0.7rem", opacity: 0.6, marginRight: "4px" }}>
+                                                                    {CHAIN_LABELS[w.chain] ?? w.chain}
+                                                                </span>
+                                                                {shortAddr(w.walletAddress)}
+                                                            </span>
+                                                            <button
+                                                                className="tracker-icon-btn"
+                                                                onClick={() => copyAddress(w.walletAddress)}
+                                                                title="Copy address"
+                                                            >
+                                                                <Copy size={12} />
+                                                            </button>
+                                                            <button
+                                                                className="tracker-icon-btn"
+                                                                onClick={() => openExplorer(w.chain, w.walletAddress)}
+                                                                title="View on explorer"
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                            </button>
+                                                        </div>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                                                            <button
+                                                                className="tracker-portfolio-btn"
+                                                                onClick={() => togglePortfolio(w.walletAddress)}
+                                                                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                                                            >
+                                                                <PieChart size={14} /> Holdings
+                                                            </button>
+                                                        </div>
+                                                    </>
                                                 )}
-                                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                    <span className="tracker-wallet-addr" title={w.walletAddress}>
-                                                        <span style={{ fontSize: "0.7rem", opacity: 0.6, marginRight: "4px" }}>
-                                                            {CHAIN_LABELS[w.chain] ?? w.chain}
-                                                        </span>
-                                                        {shortAddr(w.walletAddress)}
-                                                    </span>
-                                                    <button 
-                                                        className="tracker-portfolio-btn"
-                                                        onClick={() => togglePortfolio(w.walletAddress)}
-                                                        style={{ display: "flex", alignItems: "center", gap: "6px" }}
-                                                    >
-                                                        <PieChart size={14} /> Holdings
-                                                    </button>
-                                                </div>
                                             </div>
                                             <button
                                                 className="tracker-remove-btn"

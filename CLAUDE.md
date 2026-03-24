@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-24 | Version: 1.4.0
+> Updated: 2026-03-24 | Version: 1.5.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -97,7 +97,8 @@ private keys. All signing happens inside the Mini App via the Privy SDK.
 │  POST /api/transfer/confirm   GET  /api/transactions                  │
 │  GET  /api/user/referrals    DELETE /api/user                         │
 │  POST /api/tracker/watch      POST /api/tracker/unwatch               │
-│  GET  /api/tracker/list       GET  /api/tracker/portfolio/:addr       │
+│  PATCH /api/tracker/update    GET  /api/tracker/list                  │
+│  GET  /api/tracker/portfolio/:addr  GET /api/tracker/activity/:addr   │
 │  GET  /api/admin/stats|users|referrals  POST /api/admin/set-tier      │
 ├───────────────────────────────────────────────────────────────────────┤
 │ SQLite via Prisma ORM  (6 models, see Database Schema)                │
@@ -188,7 +189,7 @@ solswapbot/
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
 │   │       ├── subscribe.ts      # GET /api/user/subscription + POST /api/subscribe/invoice  (Telegram Stars payment) [v1.4.0]
-│   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + GET /api/tracker/list + GET /api/tracker/portfolio/:addr  (multi-chain)
+│   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + PATCH /api/tracker/update + GET /api/tracker/list|portfolio/:addr|activity/:addr  (multi-chain)
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
 │   │       ├── webhook.ts        # POST /api/webhook/helius  (Helius enhanced tx webhook receiver)
@@ -426,12 +427,13 @@ model TokenScan {
 }
 
 model WatchedWallet {
-  // Fully live. API routes: POST /tracker/watch|unwatch, GET /tracker/list, GET /tracker/portfolio/:addr
+  // Fully live. API routes: POST /tracker/watch|unwatch, PATCH /tracker/update, GET /tracker/list|portfolio/:addr|activity/:addr
   // Limits: free=3, WHALE_TRACKER/ALL_ACCESS sub=20, admin=unlimited
   id            String   @id @default(cuid())
   userId        String
   walletAddress String
   label         String?
+  tag           String?           // Free-form group tag (e.g. "VCs", "DEX Whales")
   chain         String   @default("solana")  // "solana" | "ethereum" | "bsc" | "polygon" | "arbitrum" | "base"
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
@@ -460,7 +462,7 @@ enum SubTier { FREE | SCANNER_PRO | WHALE_TRACKER | SIGNALS | ALL_ACCESS }
 - `Swap.status` uses the `SwapStatus` enum; `Transfer.status` uses a plain `String`.
 - `fees.ts` and `referrals.ts` in `db/queries/` are wired via `/api/admin/*` and `/api/user/referrals`.
 - `Swap.isHidden` / `Transfer.isHidden`: soft-delete flag for admin or user cleanup.
-- `WatchedWallet`: fully live. Multi-chain (Solana + 5 EVM chains). API: POST /tracker/watch|unwatch, GET /tracker/list, GET /tracker/portfolio/:addr.
+- `WatchedWallet`: fully live. Multi-chain (Solana + 5 EVM chains). API: POST /tracker/watch|unwatch, PATCH /tracker/update, GET /tracker/list|portfolio/:addr|activity/:addr.
 - `WatchedWallet.chain`: defaults to `"solana"`, supports all 6 chains. EVM addresses auto-lowercased.
 - `Subscription.tier`: enforced for scanner (10 free/day) and tracker (3 free / 20 paid). Admin can set via POST /api/admin/set-tier.
 
@@ -550,7 +552,9 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | DELETE | `/api/user` | — | `{ success: true, message }` — GDPR data deletion (cascade-deletes all user records) |
 | GET | `/api/user/subscription` | — | `{ tier, expiresAt, isActive, rawTier? }` — current subscription status |
 | POST | `/api/subscribe/invoice` | `{ tier, period }` | `{ invoiceLink }` — creates Telegram Stars invoice link. tier: SCANNER_PRO\|WHALE_TRACKER\|ALL_ACCESS, period: monthly\|annual |
+| PATCH | `/api/tracker/update` | `{ walletAddress, label?, tag? }` | `{ success, wallet }` — update label and/or tag for a watched wallet |
 | GET | `/api/tracker/portfolio/:walletAddress` | — | `{ walletAddress, chain, totalValueUsd, tokens: [top 10 by USD] }` — watched wallet portfolio with 24h price changes |
+| GET | `/api/tracker/activity/:walletAddress` | — | `{ walletAddress, chain, transactions: [ActivityItem] }` — last 10 transactions (live fetch, Solana via RPC, EVM via Moralis) |
 | GET | `/api/admin/stats` | Admin only | `{ totalUsers, totalSwaps, totalFeesUsd, feesToday, fees7d, fees30d }` |
 | GET | `/api/admin/users?limit=` | Admin only | `{ users: [AdminUser], topFeeGenerators, totalUsers }` |
 | GET | `/api/admin/referrals` | Admin only | `{ topReferrers, totalReferrals, feeSharePercent }` |
@@ -856,11 +860,15 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - **Referrals section**: top referrers with earnings, total referral count
 - Live data refresh with timestamp
 
-**Tab 4 — Tracker (Whale Tracker)** [v1.0.0, multi-chain v1.0.3]
+**Tab 4 — Tracker (Whale Tracker)** [v1.0.0, multi-chain v1.0.3, enhanced v1.5.0]
 - Add/remove **Solana and EVM** wallet addresses to watch for large movements
 - Multi-chain support: Solana, Ethereum, BSC, Polygon, Arbitrum, Base
-- Optional label per wallet (e.g. "Whale A", "DEV wallet")
-- **Wallet portfolio accordion**: tap a watched wallet to see top 10 tokens by USD value with 24h PnL
+- **Auto-detect chain** from pasted address format (0x→EVM default Ethereum, base58→Solana) [v1.5.0]
+- Optional label per wallet (e.g. "Whale A", "DEV wallet") — **inline editable** (tap to edit) [v1.5.0]
+- **Wallet tags/groups**: free-form tags (e.g. "VCs", "DEX Whales") with filter chips at top of list [v1.5.0]
+- Tag autocomplete from existing tags when adding new wallets
+- **Wallet portfolio modal**: Holdings tab (top 10 tokens by USD with 24h PnL) + Activity tab (last 10 txs, live fetch) [v1.5.0]
+- **Copy address** button + **Explorer link** on each wallet row (opens correct block explorer per chain) [v1.5.0]
 - Slot counter badge: shows `X / Y wallets` (turns amber when full)
 - Tier limits: Free = 3 wallets, WHALE_TRACKER/ALL_ACCESS sub = 20 wallets, Admin = unlimited
 - "Upgrade" hint shown when free tier is at limit
@@ -868,6 +876,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 - Eye SVG icon in tab bar; active state shows filled pupil
 - **Solana alerts**: fire via Telegram when tracked wallet moves ≥ `MIN_SOL_ALERT` SOL (polling every 30s)
 - **EVM alerts**: fire via Moralis Streams webhook when tracked wallet moves ≥ `MIN_ETH_ALERT` native tokens
+- **Chain-aware alert links**: alerts link to correct block explorer per chain (Solscan, Etherscan, etc.) [v1.5.0]
 - First poll sets baseline — no alerts on startup, only on NEW transactions (5-min blockTime filter)
 
 **Tab 5 — History (Transactions)**
@@ -945,7 +954,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.4.0 — PRODUCTION READY (Telegram Stars subscription payment)**
+### Current Status: **v1.5.0 — PRODUCTION READY (Whale Tracker enhanced)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -1251,6 +1260,20 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-24 — Whale Tracker Enhancement (v1.5.0)
+- **Auto-detect chain from address (NEW):** Pasting a `0x...` address auto-selects EVM (default Ethereum, dropdown editable). Base58 auto-selects Solana (dropdown hidden). No more manual chain selection for obvious cases.
+- **Explorer links (NEW):** Each watched wallet row has an external-link icon that opens the wallet on the correct block explorer (Solscan, Etherscan, BscScan, PolygonScan, Arbiscan, BaseScan).
+- **Copy address (NEW):** Copy icon on each wallet row. Copies full address + toast feedback + haptic.
+- **Chain-aware alert links (FIX):** `alerts.ts` now accepts a `chain` parameter and links to the correct block explorer instead of hardcoding Solscan for all alerts.
+- **Inline label editing (NEW):** Tap a wallet's label to edit it inline. Enter saves, Escape cancels. New `PATCH /api/tracker/update` endpoint.
+- **Wallet tags/groups (NEW):** Free-form tags (e.g. "VCs", "DEX Whales") on each wallet. Tag input in add form with autocomplete from existing tags. Filter chips at top of watchlist. Tag pill displayed on each wallet row.
+- **Recent activity feed (NEW):** Portfolio modal now has Holdings/Activity tabs. Activity tab lazy-loads last 10 transactions on-demand (no DB storage). Solana: `getSignaturesForAddress` + `getParsedTransaction`. EVM: Moralis wallet transactions API. Shows direction, amount, counterparty, timestamp, explorer link.
+- **New `EXPLORER_ADDRESS_URL` map** in `webapp/src/lib/chains.ts` for wallet/account explorer URLs.
+- **DB schema change:** Added `tag String?` to `WatchedWallet`. Requires `npx prisma db push`.
+- **New CSS classes:** `.tracker-icon-btn`, `.tracker-chain-badge`, `.tracker-tag-pill`, `.tracker-tag-filters`, `.tracker-tag-chip`, `.tracker-edit-*`, `.tracker-modal-tabs`, `.tracker-modal-tab`, `.tracker-activity-*`.
+- **VPS redeployment required:** `npx prisma db push` + `npm run build` + `pm2 restart`.
+- **Version bumped to v1.5.0.**
 
 ### 2026-03-24 — Telegram Stars Subscription Payment (v1.4.0)
 - **Self-serve subscription purchasing (NEW):** Users can now upgrade to paid tiers via Telegram Stars — no admin intervention needed.

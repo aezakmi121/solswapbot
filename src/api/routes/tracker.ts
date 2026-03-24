@@ -53,6 +53,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
             return;
         }
 
+        const tag = req.body.tag ?? null;
         chain = chain || "solana";
 
         // Validate address format based on chain
@@ -99,6 +100,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                     userId: user.id,
                     walletAddress,
                     label: label ?? null,
+                    tag,
                     chain,
                 },
             });
@@ -134,6 +136,7 @@ trackerRouter.post("/tracker/watch", async (req: Request, res: Response) => {
                 id: watched.id,
                 walletAddress: watched.walletAddress,
                 label: watched.label,
+                tag: watched.tag,
                 chain: watched.chain,
                 active: watched.active,
             },
@@ -226,6 +229,7 @@ trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
                 id: w.id,
                 walletAddress: w.walletAddress,
                 label: w.label,
+                tag: w.tag,
                 chain: w.chain,
                 createdAt: w.createdAt,
             })),
@@ -236,6 +240,70 @@ trackerRouter.get("/tracker/list", async (_req: Request, res: Response) => {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error("List wallets error:", message);
         res.status(500).json({ error: "Failed to list wallets" });
+    }
+});
+
+/**
+ * PATCH /api/tracker/update
+ * Update label and/or tag for a watched wallet.
+ * Auth: Telegram initData via telegramAuthMiddleware.
+ *
+ * Body: { walletAddress, label?, tag? }
+ */
+trackerRouter.patch("/tracker/update", async (req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        let { walletAddress, label, tag } = req.body;
+
+        if (!walletAddress) {
+            res.status(400).json({ error: "Missing walletAddress" });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({ where: { telegramId } });
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        // Lowercase EVM addresses for consistent matching
+        if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            walletAddress = walletAddress.toLowerCase();
+        }
+
+        const existing = await prisma.watchedWallet.findFirst({
+            where: { userId: user.id, walletAddress, active: true },
+        });
+
+        if (!existing) {
+            res.status(404).json({ error: "Wallet not found in your watchlist" });
+            return;
+        }
+
+        // Build update data — only update fields that were provided
+        const updateData: { label?: string | null; tag?: string | null } = {};
+        if (label !== undefined) updateData.label = label || null;
+        if (tag !== undefined) updateData.tag = tag || null;
+
+        const updated = await prisma.watchedWallet.update({
+            where: { id: existing.id },
+            data: updateData,
+        });
+
+        res.json({
+            success: true,
+            wallet: {
+                id: updated.id,
+                walletAddress: updated.walletAddress,
+                label: updated.label,
+                tag: updated.tag,
+                chain: updated.chain,
+            },
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error("Update wallet error:", message);
+        res.status(500).json({ error: "Failed to update wallet" });
     }
 });
 
@@ -365,3 +433,188 @@ trackerRouter.get("/tracker/portfolio/:walletAddress", async (req: Request, res:
         res.status(500).json({ error: "Failed to fetch portfolio" });
     }
 });
+
+// ─── Chain explorer URL maps (for activity response) ─────────────────────────
+const EXPLORER_TX: Record<string, string> = {
+    solana:   "https://solscan.io/tx/",
+    ethereum: "https://etherscan.io/tx/",
+    bsc:      "https://bscscan.com/tx/",
+    polygon:  "https://polygonscan.com/tx/",
+    arbitrum: "https://arbiscan.io/tx/",
+    base:     "https://basescan.org/tx/",
+};
+
+const MORALIS_CHAIN_MAP: Record<string, string> = {
+    ethereum: "eth",
+    bsc: "bsc",
+    polygon: "polygon",
+    arbitrum: "arbitrum",
+    base: "base",
+};
+
+interface ActivityItem {
+    signature: string;
+    type: "send" | "receive" | "unknown";
+    amount: number | null;
+    symbol: string | null;
+    counterparty: string | null;
+    timestamp: number; // unix seconds
+    explorerUrl: string;
+}
+
+/**
+ * GET /api/tracker/activity/:walletAddress
+ * Fetches last 10 transactions for a watched wallet (live, no DB).
+ */
+trackerRouter.get("/tracker/activity/:walletAddress", async (req: Request, res: Response) => {
+    try {
+        const telegramId = res.locals.telegramId as string;
+        let walletAddress = req.params.walletAddress as string;
+
+        const user = await prisma.user.findUnique({ where: { telegramId } });
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            walletAddress = walletAddress.toLowerCase();
+        }
+
+        const watchedWallet = await prisma.watchedWallet.findFirst({
+            where: { userId: user.id, walletAddress, active: true },
+        });
+
+        if (!watchedWallet) {
+            res.status(403).json({ error: "You are not watching this wallet." });
+            return;
+        }
+
+        const chain = watchedWallet.chain;
+        let transactions: ActivityItem[] = [];
+
+        if (chain === "solana") {
+            transactions = await fetchSolanaActivity(walletAddress);
+        } else {
+            transactions = await fetchEvmActivity(walletAddress, chain);
+        }
+
+        res.json({ walletAddress, chain, transactions });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error("Fetch activity error:", message);
+        res.status(500).json({ error: "Failed to fetch activity" });
+    }
+});
+
+/**
+ * Fetch last 10 Solana transactions with parsed transfer info.
+ */
+async function fetchSolanaActivity(walletAddress: string): Promise<ActivityItem[]> {
+    const pubkey = new PublicKey(walletAddress);
+    const signatures = await connection.getSignaturesForAddress(pubkey, { limit: 10 });
+
+    if (signatures.length === 0) return [];
+
+    const activities: ActivityItem[] = [];
+
+    for (const sig of signatures) {
+        const item: ActivityItem = {
+            signature: sig.signature,
+            type: "unknown",
+            amount: null,
+            symbol: null,
+            counterparty: null,
+            timestamp: sig.blockTime ?? 0,
+            explorerUrl: EXPLORER_TX.solana + sig.signature,
+        };
+
+        try {
+            const tx = await connection.getParsedTransaction(sig.signature, {
+                maxSupportedTransactionVersion: 0,
+            });
+
+            if (tx?.meta) {
+                // Check native SOL balance change
+                const accountKeys = tx.transaction.message.accountKeys;
+                const walletIndex = accountKeys.findIndex(k => k.pubkey.toBase58() === walletAddress);
+
+                if (walletIndex >= 0) {
+                    const pre = tx.meta.preBalances[walletIndex];
+                    const post = tx.meta.postBalances[walletIndex];
+                    const changeLamports = post - pre;
+                    const changeSOL = Math.abs(changeLamports) / 1e9;
+
+                    if (changeSOL > 0.001) {
+                        item.type = changeLamports > 0 ? "receive" : "send";
+                        item.amount = changeSOL;
+                        item.symbol = "SOL";
+
+                        // Find counterparty (largest opposite change)
+                        let bestIdx = -1;
+                        let bestChange = 0;
+                        for (let i = 0; i < accountKeys.length; i++) {
+                            if (i === walletIndex) continue;
+                            const otherChange = tx.meta.postBalances[i] - tx.meta.preBalances[i];
+                            if (Math.sign(otherChange) !== Math.sign(changeLamports) && Math.abs(otherChange) > bestChange) {
+                                bestChange = Math.abs(otherChange);
+                                bestIdx = i;
+                            }
+                        }
+                        if (bestIdx >= 0) {
+                            item.counterparty = accountKeys[bestIdx].pubkey.toBase58();
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Keep the basic signature info even if parsing fails
+        }
+
+        activities.push(item);
+    }
+
+    return activities;
+}
+
+/**
+ * Fetch last 10 EVM transactions via Moralis API.
+ */
+async function fetchEvmActivity(walletAddress: string, chain: string): Promise<ActivityItem[]> {
+    const apiKey = config.MORALIS_API_KEY;
+    if (!apiKey) return [];
+
+    const moralisChain = MORALIS_CHAIN_MAP[chain] ?? "eth";
+    const explorerBase = EXPLORER_TX[chain] ?? EXPLORER_TX.ethereum;
+
+    try {
+        const resp = await fetch(
+            `https://deep-index.moralis.io/api/v2.2/${walletAddress}?chain=${moralisChain}&limit=10`,
+            { headers: { "X-API-Key": apiKey, Accept: "application/json" } }
+        );
+
+        if (!resp.ok) return [];
+
+        const data = await resp.json() as { result?: any[] };
+        const txs = data.result ?? [];
+
+        return txs.map((tx: any) => {
+            const isReceive = tx.to_address?.toLowerCase() === walletAddress.toLowerCase();
+            const valueWei = BigInt(tx.value ?? "0");
+            const amount = Number(valueWei) / 1e18;
+
+            return {
+                signature: tx.hash ?? "",
+                type: amount > 0 ? (isReceive ? "receive" : "send") : "unknown",
+                amount: amount > 0 ? amount : null,
+                symbol: null, // Native token — could be enriched but kept simple
+                counterparty: isReceive ? tx.from_address : tx.to_address,
+                timestamp: tx.block_timestamp ? Math.floor(new Date(tx.block_timestamp).getTime() / 1000) : 0,
+                explorerUrl: explorerBase + (tx.hash ?? ""),
+            } satisfies ActivityItem;
+        });
+    } catch (err) {
+        console.error("EVM activity fetch error:", err instanceof Error ? err.message : err);
+        return [];
+    }
+}

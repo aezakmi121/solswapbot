@@ -6465,6 +6465,104 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   animation: fadeIn 0.3s ease;
 }
 
+/* ── Tracker inline icon buttons (copy, explorer) ── */
+.tracker-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.tracker-icon-btn:hover {
+  color: var(--accent);
+}
+
+.tracker-chain-badge {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* ── Tracker tag pills ── */
+.tracker-tag-pill {
+  background: rgba(124, 92, 252, 0.15);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ── Tracker tag filter chips ── */
+.tracker-tag-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.tracker-tag-chip {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tracker-tag-chip:hover {
+  border-color: var(--accent);
+}
+
+.tracker-tag-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ── Tracker inline edit ── */
+.tracker-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.tracker-edit-input {
+  padding: 6px 10px !important;
+  font-size: 0.8rem !important;
+  height: auto !important;
+}
+
+.tracker-edit-save,
+.tracker-edit-cancel {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+}
+
+.tracker-edit-save {
+  background: var(--accent);
+  color: white;
+}
+
+.tracker-edit-cancel {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
 /* ── Tracker Portfolio Button & Accordion ── */
 .tracker-portfolio-btn {
   background: rgba(19, 19, 21, 0.6);
@@ -6622,6 +6720,99 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   text-align: right;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+/* ── Tracker Modal Tabs (Holdings / Activity) ── */
+.tracker-modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin: 0 16px;
+}
+
+.tracker-modal-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 10px 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tracker-modal-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Tracker Activity List ── */
+.tracker-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tracker-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tracker-activity-item:last-child {
+  border-bottom: none;
+}
+
+.tracker-activity-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tracker-activity-emoji {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.tracker-activity-amount {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tracker-activity-counterparty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.tracker-activity-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tracker-activity-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tracker-activity-link {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.tracker-activity-link:hover {
+  color: var(--accent);
 }
 
 /* Modern Icon Sizing & Overrides */

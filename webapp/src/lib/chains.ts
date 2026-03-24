@@ -72,6 +72,16 @@ export const EXPLORER_TX_URL: Record<ChainId, string> = {
     base:     "https://basescan.org/tx/",
 };
 
+/** Block explorer URL for each chain's wallet/account pages */
+export const EXPLORER_ADDRESS_URL: Record<ChainId, string> = {
+    solana:   "https://solscan.io/account/",
+    ethereum: "https://etherscan.io/address/",
+    bsc:      "https://bscscan.com/address/",
+    polygon:  "https://polygonscan.com/address/",
+    arbitrum: "https://arbiscan.io/address/",
+    base:     "https://basescan.org/address/",
+};
+
 /** Display metadata for tokens shown in the modal */
 export const TOKEN_META: Record<string, { name: string; emoji: string }> = {
     SOL:   { name: "Solana",        emoji: "🟣" },
