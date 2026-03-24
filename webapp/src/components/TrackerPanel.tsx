@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Activity, PieChart, X } from "lucide-react";
+import { Activity, PieChart, X, ExternalLink, Copy } from "lucide-react";
 import { UpgradeModal } from "./UpgradeModal";
+import { EXPLORER_ADDRESS_URL } from "../lib/chains";
+import { toast } from "../lib/toast";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const tg = (window as any).Telegram?.WebApp;
@@ -47,6 +49,32 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
 function shortAddr(addr: string) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+/** Auto-detect chain from address format */
+function detectChainFromAddress(addr: string): string | null {
+    const trimmed = addr.trim();
+    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) return "ethereum"; // EVM — default to Ethereum, user can switch
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) return "solana";
+    return null; // ambiguous or partial
+}
+
+function copyAddress(addr: string) {
+    navigator.clipboard.writeText(addr).then(() => {
+        toast("Address copied!", "success");
+        tg?.HapticFeedback?.selectionChanged();
+    });
+}
+
+function openExplorer(chain: string, addr: string) {
+    const baseUrl = EXPLORER_ADDRESS_URL[chain as keyof typeof EXPLORER_ADDRESS_URL];
+    if (!baseUrl) return;
+    const url = baseUrl + addr;
+    if (tg?.openLink) {
+        tg.openLink(url);
+    } else {
+        window.open(url, "_blank");
+    }
 }
 
 function formatUsd(val: number) {
@@ -340,24 +368,36 @@ export function TrackerPanel() {
                 <div className="tracker-tab-content">
                     <form className="tracker-add-form" onSubmit={handleAdd}>
                         <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                            <select
-                                className="tracker-input"
-                                style={{ width: "35%", cursor: "pointer" }}
-                                value={addChain}
-                                onChange={(e) => setAddChain(e.target.value)}
-                                disabled={adding || atLimit}
-                            >
-                                {Object.entries(CHAIN_LABELS).map(([key, label]) => (
-                                    <option key={key} value={key}>{label}</option>
-                                ))}
-                            </select>
+                            {addChain !== "solana" && (
+                                <select
+                                    className="tracker-input"
+                                    style={{ width: "35%", cursor: "pointer" }}
+                                    value={addChain}
+                                    onChange={(e) => setAddChain(e.target.value)}
+                                    disabled={adding || atLimit}
+                                >
+                                    {Object.entries(CHAIN_LABELS).filter(([key]) => key !== "solana").map(([key, label]) => (
+                                        <option key={key} value={key}>{label}</option>
+                                    ))}
+                                </select>
+                            )}
+                            {addChain === "solana" && (
+                                <div className="tracker-input tracker-chain-badge" style={{ width: "35%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    🟣 Solana
+                                </div>
+                            )}
                             <input
                                 className="tracker-input"
                                 style={{ width: "65%" }}
                                 type="text"
                                 placeholder="Wallet address"
                                 value={addAddress}
-                                onChange={(e) => setAddAddress(e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAddAddress(val);
+                                    const detected = detectChainFromAddress(val);
+                                    if (detected) setAddChain(detected);
+                                }}
                                 disabled={adding || atLimit}
                                 maxLength={44}
                                 autoComplete="off"
@@ -419,7 +459,23 @@ export function TrackerPanel() {
                                                         </span>
                                                         {shortAddr(w.walletAddress)}
                                                     </span>
-                                                    <button 
+                                                    <button
+                                                        className="tracker-icon-btn"
+                                                        onClick={() => copyAddress(w.walletAddress)}
+                                                        title="Copy address"
+                                                    >
+                                                        <Copy size={12} />
+                                                    </button>
+                                                    <button
+                                                        className="tracker-icon-btn"
+                                                        onClick={() => openExplorer(w.chain, w.walletAddress)}
+                                                        title="View on explorer"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                    </button>
+                                                </div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                                                    <button
                                                         className="tracker-portfolio-btn"
                                                         onClick={() => togglePortfolio(w.walletAddress)}
                                                         style={{ display: "flex", alignItems: "center", gap: "6px" }}

@@ -6465,6 +6465,30 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
   animation: fadeIn 0.3s ease;
 }
 
+/* ── Tracker inline icon buttons (copy, explorer) ── */
+.tracker-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.tracker-icon-btn:hover {
+  color: var(--accent);
+}
+
+.tracker-chain-badge {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
 /* ── Tracker Portfolio Button & Accordion ── */
 .tracker-portfolio-btn {
   background: rgba(19, 19, 21, 0.6);

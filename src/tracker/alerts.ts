@@ -5,6 +5,25 @@ import { config } from "../config";
  * Sends messages directly via Telegram Bot API.
  */
 
+/** Block explorer URLs by chain */
+const EXPLORER_TX_URL: Record<string, string> = {
+    solana:   "https://solscan.io/tx/",
+    ethereum: "https://etherscan.io/tx/",
+    bsc:      "https://bscscan.com/tx/",
+    polygon:  "https://polygonscan.com/tx/",
+    arbitrum: "https://arbiscan.io/tx/",
+    base:     "https://basescan.org/tx/",
+};
+
+const CHAIN_NAMES: Record<string, string> = {
+    solana: "Solana",
+    ethereum: "Ethereum",
+    bsc: "BNB Chain",
+    polygon: "Polygon",
+    arbitrum: "Arbitrum",
+    base: "Base",
+};
+
 export interface AlertData {
     walletAddress: string;
     label: string | null;
@@ -12,6 +31,7 @@ export interface AlertData {
     amount: number;          // Token or SOL amount
     symbol?: string;         // Token symbol (e.g. USDC, SOL)
     signature: string;       // Transaction signature
+    chain?: string;          // Chain ID (default: "solana")
 }
 
 /**
@@ -23,16 +43,20 @@ export function formatAlert(data: AlertData): string {
     const walletLabel = data.label ?? shortenAddress(data.walletAddress);
     const amountStr = data.amount.toLocaleString("en-US", { maximumFractionDigits: 4 });
     const symbol = data.symbol ?? "SOL";
+    const chain = data.chain ?? "solana";
 
-    const solscanUrl = `https://solscan.io/tx/${data.signature}`;
+    const explorerBase = EXPLORER_TX_URL[chain] ?? EXPLORER_TX_URL.solana;
+    const explorerUrl = explorerBase + data.signature;
+    const explorerName = chain === "solana" ? "Solscan" : CHAIN_NAMES[chain] ?? "Explorer";
+    const chainSuffix = chain !== "solana" ? ` on ${CHAIN_NAMES[chain] ?? chain}` : "";
 
     return [
-        `${emoji} *Whale Alert*`,
+        `${emoji} *Whale Alert${chainSuffix}*`,
         ``,
         `*${walletLabel}* ${verb.toLowerCase()} *${amountStr} ${symbol}*`,
         ``,
         `💼 Wallet: \`${shortenAddress(data.walletAddress)}\``,
-        `🔗 [View TX on Solscan](${solscanUrl})`,
+        `🔗 [View TX on ${explorerName}](${explorerUrl})`,
     ].join("\n");
 }
 
