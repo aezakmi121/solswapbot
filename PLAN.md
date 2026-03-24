@@ -1,156 +1,232 @@
-# Scanner V2: Multi-Chain Token Safety Scanner — Implementation Plan
+# Whale Tracker Enhancement Plan
+
+> **Status:** PLANNING
+> **Target version:** v1.5.0
+
+---
 
 ## Overview
 
-Upgrade the token scanner from 6 Solana-only checks (max 105 points) to a comprehensive
-multi-chain scanner covering **Solana (12 checks)** and **EVM tokens (8 checks)** — all
-in-house using existing RPC endpoints. No external APIs.
+Enhance the Whale Tracker tab with better UX, explorer integration, activity feeds, and wallet organization features. All changes maintain the non-custodial, read-only nature of the tracker.
 
 ---
 
-## Phase 1: New Solana Checks — COMPLETE ✅ (2026-03-20)
+## Feature 1: Auto-Detect Chain from Address Format
 
-All 6 new checks implemented, wired, scored, and documented.
+**Scope:** Frontend only (`TrackerPanel.tsx`)
+**Effort:** Small
 
-### Step 0: Fix Vercel Build Error — DONE
-- [x] Add missing `tier` property to AdminPanel test mock
+### What changes
+- When user types/pastes an address in the "Add New" form, auto-detect chain:
+  - `0x` prefix + 42 chars → EVM (default to Ethereum, dropdown stays editable for other EVM chains)
+  - Base58 32-44 chars → Solana (lock dropdown to Solana)
+  - Empty/partial → keep current dropdown selection
+- Add `onChange` handler on the address input that sets `addChain` automatically
+- EVM chain dropdown still visible and editable (user may know it's BSC not Ethereum)
+- Solana addresses hide/disable the chain dropdown since there's only one option
 
-### Step 1: New Solana Scanner Checks — DONE
-All 6 checks added to `src/scanner/checks.ts`:
+### Files
+- `webapp/src/components/TrackerPanel.tsx` — add auto-detect logic in address input onChange
 
-| # | Check | Weight | Status |
-|---|-------|--------|--------|
-| 1 | **Liquidity Pool** | 25 | ✅ Raydium V4 AMM Authority pool detection |
-| 2 | **Metadata Mutability** | 15 | ✅ Metaplex PDA borsh parsing, `isMutable` flag |
-| 3 | **Update Authority** | 10 | ✅ Checks if update authority revoked (system program) |
-| 4 | **Honeypot Detection** | 20 | ✅ Jupiter sell simulation (token → WSOL) |
-| 5 | **Creator Holdings** | 15 | ✅ Oldest signature → deployer → current balance vs supply |
-| 6 | **Transfer Fee** | 10 | ✅ Token-2022 TLV extension parsing |
+---
 
-### Step 2: Update `analyze.ts` — DONE
-- [x] Fetch Metaplex metadata PDA in initial `Promise.all()` (shared by mutability + update authority)
-- [x] 7 async checks in Phase 2 parallel batch
-- [x] 5 sync checks in Phase 3 inline
-- [x] Normalized scoring: `score = unsafeWeight / totalPossibleWeight * 100`
-- [x] Errored checks excluded from both numerator and denominator
+## Feature 2: Explorer Links on Watched Wallets
 
-### Step 3: Update Frontend — DONE
-- [x] All 6 new check info entries added to `CHECK_INFO` in `ScanPanel.tsx`
+**Scope:** Frontend only (`TrackerPanel.tsx`, `chains.ts`)
+**Effort:** Small
 
-### Step 4: Category Grouping — DEFERRED to Phase 3
-Category headers and `category` field on `CheckResult` moved to Phase 3 (UI Polish).
-Current implementation works without categories — checks display in weight-descending order.
+### What changes
+- Add `EXPLORER_ADDRESS_URL` map to `webapp/src/lib/chains.ts`:
+  ```typescript
+  export const EXPLORER_ADDRESS_URL: Record<string, string> = {
+    solana:   "https://solscan.io/account/",
+    ethereum: "https://etherscan.io/address/",
+    bsc:      "https://bscscan.com/address/",
+    polygon:  "https://polygonscan.com/address/",
+    arbitrum: "https://arbiscan.io/address/",
+    base:     "https://basescan.org/address/",
+  };
+  ```
+- Each wallet row in TrackerPanel gets a small `ExternalLink` icon (from lucide-react)
+- Tap opens `EXPLORER_ADDRESS_URL[chain] + walletAddress` via `tg.openLink()` or `window.open()`
 
-**Final weight table (12 checks, 200 total):**
+### Files
+- `webapp/src/lib/chains.ts` — add `EXPLORER_ADDRESS_URL` map
+- `webapp/src/components/TrackerPanel.tsx` — add explorer link icon to wallet rows
 
+---
+
+## Feature 3: Copy Address Button
+
+**Scope:** Frontend only (`TrackerPanel.tsx`)
+**Effort:** Small
+
+### What changes
+- Add a `Copy` icon (from lucide-react) next to the truncated address in each wallet row
+- On tap: `navigator.clipboard.writeText(fullAddress)` + `toast("Address copied!", "success")`
+- Haptic feedback: `tg.HapticFeedback.selectionChanged()`
+
+### Files
+- `webapp/src/components/TrackerPanel.tsx` — add copy button + handler
+
+---
+
+## Feature 4: Chain-Aware Alert Explorer Links
+
+**Scope:** Backend (`tracker/alerts.ts`)
+**Effort:** Small
+
+### What changes
+- Currently `alerts.ts` hardcodes `https://solscan.io/tx/${signature}` for all alerts
+- Add an explorer URL map to `alerts.ts` (backend — can't import from webapp):
+  ```typescript
+  const EXPLORER_TX: Record<string, string> = {
+    solana:   "https://solscan.io/tx/",
+    ethereum: "https://etherscan.io/tx/",
+    bsc:      "https://bscscan.com/tx/",
+    polygon:  "https://polygonscan.com/tx/",
+    arbitrum: "https://arbiscan.io/tx/",
+    base:     "https://basescan.org/tx/",
+  };
+  ```
+- `formatAlert()` and `sendTelegramAlert()` accept a `chain` parameter
+- `monitor.ts` passes `chain: "solana"` when calling alert functions
+- `webhookMoralis.ts` passes the appropriate EVM chain when firing alerts
+
+### Files
+- `src/tracker/alerts.ts` — add chain param, explorer map
+- `src/tracker/monitor.ts` — pass chain to alert calls
+- `src/api/routes/webhookMoralis.ts` — pass chain to alert calls
+
+---
+
+## Feature 5: Edit Wallet Label (Inline)
+
+**Scope:** Backend + Frontend
+**Effort:** Small
+
+### Backend: New endpoint `PATCH /api/tracker/update`
+
+- Body: `{ walletAddress, label?, tag? }` (label can be empty string to clear)
+- Auth: Telegram initData, verifies user owns the watched wallet
+- Updates `WatchedWallet.label` (and `tag` — see Feature 6) via Prisma
+- No schema changes needed for label (already a nullable string)
+
+### Frontend: Inline edit
+
+- Tap the label text on a wallet row → transforms into an input field
+- Press Enter or blur → saves via `PATCH /api/tracker/update`
+- If wallet has no label, show a subtle "Add label" placeholder that's tappable
+- Toast on success: "Label updated"
+- Cancel on Escape
+
+### Files
+- `src/api/routes/tracker.ts` — new `PATCH /tracker/update` endpoint
+- `webapp/src/components/TrackerPanel.tsx` — inline edit UI
+
+---
+
+## Feature 6: Wallet Tags/Groups
+
+**Scope:** Backend + Frontend + DB
+**Effort:** Medium
+
+### Database
+
+Add a `tag` field to `WatchedWallet`:
+```prisma
+model WatchedWallet {
+  // ... existing fields ...
+  tag  String?   // e.g. "DEX Whales", "VCs", "Dev Wallets"
+}
 ```
-Mint Authority        30     Liquidity Pool           25
-Freeze Authority      20     Honeypot Detection       20
-Top Holders           20     Metadata Mutability      15
-Token Metadata        15     Creator Holdings         15
-Jupiter Verified      10     Update Authority         10
-Token Age             10     Transfer Fee             10
-                    ────                             ────
-Subtotal:            105     Subtotal:               95
-                Combined: 200 → normalized to 0-100
-```
 
-**RPC optimizations implemented:**
-- `accountInfo` fetched once → shared by mintAuthority + freezeAuthority + transferFee
-- `supplyInfo` fetched once → shared by topHolders + creatorHoldings
-- `metaplexData` fetched once → shared by metadataMutability + updateAuthority
-- `tokenMeta` (Jupiter cache) → shared by jupiterVerified + hasMetadata
+No new table — tags are simple strings, not a many-to-many relation. Users type free-form tags; the frontend collects unique tags for filtering.
 
----
+### Backend
 
-## Phase 2: EVM Token Scanner — COMPLETE ✅ (2026-03-21)
+- `POST /api/tracker/watch` — accept optional `tag` in body, store on create
+- `PATCH /api/tracker/update` — accept both `label` and `tag`
+- `GET /api/tracker/list` — return `tag` field in each wallet object
 
-Full EVM token scanner supporting 5 chains: Ethereum, BSC, Polygon, Arbitrum, Base.
+### Frontend
 
-### Architecture — DONE
-- [x] Scan route auto-detects chain from address format (0x... → EVM, base58 → Solana)
-- [x] Optional `?chain=` query param for EVM (default: ethereum)
-- [x] Free public RPCs configured in `config.ts` with defaults (no API keys needed)
-- [x] `isValidEvmAddress()` added to `validation.ts`
+- Tag chip on each wallet row (small colored pill, e.g. "VCs")
+- In "Add New" form: optional tag input (with autocomplete from existing tags)
+- Filter row at top of watchlist: "All" + one chip per unique tag
+- Tap a tag chip → filters the list to wallets with that tag
+- In edit mode (Feature 5): tag is also editable
 
-### EVM Checks (8 checks, total weight 130, normalized to 0-100) — DONE
-
-| # | Check | Weight | Implementation |
-|---|-------|--------|---------------|
-| 1 | **Owner Renounced** | 25 | ✅ `owner()` selector → check if `address(0)`. No owner() = non-Ownable (safe). |
-| 2 | **Proxy Contract** | 20 | ✅ EIP-1967 implementation slot. Non-zero = upgradeable proxy. |
-| 3 | **Honeypot Simulation** | 20 | ✅ LI.FI sell quote (token → wrapped native). No route = honeypot. Known tokens skipped. |
-| 4 | **Contract Code** | 15 | ✅ `eth_getCode` — no code = EOA, <100 bytes = suspicious. |
-| 5 | **Top Holders** | 15 | ✅ `totalSupply()` + contract self-balance check + dead address burn check. |
-| 6 | **Mint Function** | 15 | ✅ Bytecode scan for `mint(address,uint256)` + `mint(uint256)` selectors. Cross-refs owner renounced. |
-| 7 | **Transfer Tax** | 10 | ✅ Bytecode scan for fee-on-transfer selectors (setTaxFeePercent, excludeFromFee, etc.). |
-| 8 | **Liquidity** | 10 | ✅ Checks DEX factory pairs (Uniswap/PancakeSwap/QuickSwap/Camelot/Aerodrome) + USDC pair fallback. |
-
-### EVM Token Info Fetcher — DONE
-- [x] `fetchEvmTokenInfo()`: parallel `name()`, `symbol()`, `decimals()`, `totalSupply()` calls
-- [x] ABI string decoding for dynamic return types
-
-### Frontend Changes — DONE
-- [x] Input accepts both Solana and EVM addresses
-- [x] Chain auto-detected from address format (0x → EVM chain chips appear)
-- [x] EVM chain selector chips: Ethereum, BSC, Polygon, Arbitrum, Base
-- [x] Chain badge on results (🟣 Solana / 🔷 Ethereum / 🟡 BNB / 🟪 Polygon / 🔵 Arbitrum/Base)
-- [x] 6 new CHECK_INFO entries for EVM checks
-- [x] "Swap This Token" hidden for EVM scans (Solana-only feature)
-- [x] `fetchTokenScan()` API function accepts optional `chain` param
-
-### Files Modified (Phase 2):
-| File | Changes |
-|------|---------|
-| `src/scanner/evmChecks.ts` | NEW — 8 EVM check functions + `fetchEvmTokenInfo()` + RPC helpers |
-| `src/scanner/evmAnalyze.ts` | NEW — EVM orchestrator (3-phase: fetch → 8 parallel checks → scoring) |
-| `src/scanner/analyze.ts` | Added `chain` field to `ScanResult` interface |
-| `src/api/routes/scan.ts` | Auto-detects EVM/Solana, routes to correct scanner, accepts `?chain=` param |
-| `src/config.ts` | Added 5 EVM RPC URL config vars with defaults |
-| `src/utils/validation.ts` | Added `isValidEvmAddress()` |
-| `webapp/src/lib/api.ts` | `ScanResult.chain` field + `fetchTokenScan(mint, chain?)` |
-| `webapp/src/components/ScanPanel.tsx` | EVM chain selector, chain badge, EVM check explanations |
-| `webapp/src/styles/index.css` | `.scan-chain-*` classes for chain selector UI |
-
-### RPC Optimizations:
-- `eth_getCode` fetched once → shared by contractCode + mintFunction + transferTax
-- `totalSupply` fetched once → shared by evmAnalyze + topHolders
-- All 8 checks run in parallel (single `Promise.all`)
+### Files
+- `prisma/schema.prisma` — add `tag String?` to WatchedWallet
+- `src/api/routes/tracker.ts` — update watch/update/list endpoints
+- `webapp/src/components/TrackerPanel.tsx` — tag UI, filter chips, autocomplete
 
 ---
 
-## Phase 3: Scanner UI Polish (future)
+## Feature 7: Recent Activity Feed (Live Fetch)
 
-- **Category headers** in check results: "Authorities", "Liquidity", "Distribution", "Identity"
-- **"What We Checked" explainer section** at the bottom of every scan — a collapsible card
-  summarizing all checks and what they mean, so users learn to evaluate tokens themselves
-- **Risk breakdown bar** — horizontal stacked bar showing which categories contributed most
-  to the risk score (visual: red segments for unsafe checks, green for safe)
-- **Share scan result** — generate a shareable summary card image or text for Telegram
-- **EVM price lookup** — integrate CoinGecko or Moralis for EVM token USD prices in scan results
+**Scope:** Backend + Frontend
+**Effort:** Medium
+
+### Backend: New endpoint `GET /api/tracker/activity/:walletAddress`
+
+Returns last 5-10 transactions for a watched wallet, fetched live (no DB storage).
+
+**Solana path:**
+- `getSignaturesForAddress(pubkey, { limit: 10 })` via Helius RPC
+- Parse each signature for transfer amounts (reuse logic patterns from `monitor.ts`)
+- Return: `{ transactions: [{ signature, type, amount, symbol, counterparty, timestamp, explorerUrl }] }`
+
+**EVM path:**
+- Moralis `getWalletTransactions({ address, chain, limit: 10 })` (requires MORALIS_API_KEY)
+- Parse native + ERC-20 transfers from response
+- Return same shape as Solana
+
+**Auth:** Telegram initData. Verifies user is watching the wallet.
+
+**Rate consideration:** On-demand fetch only — fires when user taps "Activity" on a specific wallet. Helius RPC handles this fine; Moralis CU cost is ~5 per call.
+
+### Frontend: Activity view in wallet detail
+
+- Add "Activity" button/tab alongside "Holdings" in the portfolio modal
+- Simple list: timestamp, direction arrow (in/out), amount + symbol, counterparty (shortened), explorer link
+- Loading spinner while fetching
+- "No recent activity" empty state
+
+### Files
+- `src/api/routes/tracker.ts` — new `GET /tracker/activity/:walletAddress` endpoint
+- `webapp/src/components/TrackerPanel.tsx` — activity view in portfolio modal
 
 ---
 
-## Subscription Tier Enforcement — COMPLETE (v1.4.0)
+## Implementation Order
 
-Scanner daily limit (10 free scans/day) is enforced in `scan.ts` with upgrade prompts.
-Self-serve Telegram Stars payment flow implemented:
-- `/subscribe` bot command with inline keyboard
-- `POST /api/subscribe/invoice` creates Stars invoice
-- `UpgradeModal` in Mini App (Settings + limit-hit prompts)
-- Background expiry poller sends 24h warnings + expired notices
+| Step | Feature | Effort | Scope | Depends on |
+|------|---------|--------|-------|------------|
+| 1 | Auto-detect chain | Small | Frontend | — |
+| 2 | Explorer links | Small | Frontend | — |
+| 3 | Copy address | Small | Frontend | — |
+| 4 | Alert explorer links | Small | Backend | — |
+| 5 | Edit wallet label | Small | Backend + Frontend | — |
+| 6 | Wallet tags/groups | Medium | DB + Backend + Frontend | Feature 5 (shared PATCH endpoint) |
+| 7 | Recent activity feed | Medium | Backend + Frontend | — |
 
-Tiers: Scanner Pro (250 Stars/mo, unlimited scans), Whale Tracker (250 Stars/mo, 20 wallets),
-All Access (400 Stars/mo, everything). Annual plans with 20% discount. See CLAUDE.md for full details.
+Features 1-3 are independent and can be done in a single commit (all frontend TrackerPanel changes).
+Feature 4 is an independent backend change.
+Features 5-6 share the `PATCH /tracker/update` endpoint — implement together.
+Feature 7 is independent but largest — do last.
+
+### Deploy notes
+- Features 1-3: Frontend only → Vercel auto-deploys
+- Feature 4: VPS redeploy (`npm run build` + `pm2 restart`)
+- Features 5-6: VPS redeploy + `npx prisma db push` (adds `tag` column)
+- Feature 7: VPS redeploy (no schema change)
 
 ---
 
-## Risk Assessment
+## What's NOT in scope
 
-- **No new API keys needed** — Solana checks use Helius RPC, EVM checks use free public RPCs
-- **No DB schema changes** — existing `TokenScan` model stores results as-is (chain agnostic)
-- **Scoring is backwards-compatible** — old scans in DB keep their original scores
-- **Honeypot check adds ~1-2s** to scan time (LI.FI/Jupiter quote call) — acceptable
-- **Liquidity check may fail** for tokens not on major DEXs — handled via `errored: true`
-- **EVM public RPCs** have generous rate limits (10-50 req/s) — sufficient for scanner use
-- **EVM bytecode analysis is heuristic** — checks for known function selectors, not source verification
+- **Historical P&L tracking** — requires snapshot storage + charting library. Defer to v2.0.
+- **Push notifications for activity** — alerts already cover this via the monitor. Activity feed is pull-based.
+- **Multi-wallet portfolio aggregation** — combining all watched wallets into one view. Nice-to-have, not requested.
