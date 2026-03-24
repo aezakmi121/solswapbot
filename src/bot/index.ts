@@ -90,11 +90,10 @@ export function createBot(): Bot {
       return;
     }
 
-    // Parse: sub_TIER_PERIOD
-    const parts = data.split("_");
-    if (parts.length !== 3) return;
-    const tier = parts[1];
-    const period = parts[2] as "monthly" | "annual";
+    // Parse: sub_TIER_NAME_PERIOD (tier names contain underscores, e.g. sub_SCANNER_PRO_monthly)
+    const period = data.endsWith("_monthly") ? "monthly" : data.endsWith("_annual") ? "annual" : null;
+    if (!period) return;
+    const tier = data.slice(4, -(period.length + 1)); // strip "sub_" prefix and "_monthly"/"_annual" suffix
     const tierInfo = TIER_PRICES[tier];
     if (!tierInfo) return;
 
