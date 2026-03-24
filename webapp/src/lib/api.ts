@@ -753,3 +753,39 @@ export async function setUserTier(telegramIds: string[], tier: SubTier): Promise
     }
     return res.json();
 }
+
+// ── Subscription ────────────────────────────────────────────────────────
+
+export interface SubscriptionInfo {
+    tier: SubTier;
+    expiresAt: string | null;
+    isActive: boolean;
+    rawTier?: SubTier;
+}
+
+export async function getSubscription(): Promise<SubscriptionInfo> {
+    const res = await fetch(`${API_BASE}/api/user/subscription`, {
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error("Failed to fetch subscription");
+    return res.json();
+}
+
+export type SubscriptionPeriod = "monthly" | "annual";
+export type PurchasableTier = "SCANNER_PRO" | "WHALE_TRACKER" | "ALL_ACCESS";
+
+export async function createSubscriptionInvoice(
+    tier: PurchasableTier,
+    period: SubscriptionPeriod,
+): Promise<{ invoiceLink: string }> {
+    const res = await fetch(`${API_BASE}/api/subscribe/invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ tier, period }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to create invoice");
+    }
+    return res.json();
+}

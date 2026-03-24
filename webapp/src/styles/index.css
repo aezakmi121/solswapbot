@@ -6628,3 +6628,283 @@ button:active:not(:disabled):not(.tab-item):not(.flip-btn):not(.wallet-action-bt
 svg.lucide {
   transition: opacity 0.2s, color 0.2s;
 }
+
+/* ── Upgrade Modal ────────────────────────────────────────────────── */
+
+.upgrade-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.upgrade-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-primary, #1a1a2e);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px 32px;
+  animation: slideUp 0.3s ease;
+}
+
+.upgrade-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.upgrade-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  margin: 0;
+}
+
+.upgrade-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.upgrade-current {
+  font-size: 13px;
+  color: var(--text-secondary, #999);
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: rgba(168, 85, 247, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.upgrade-current strong {
+  color: #a855f7;
+}
+
+.upgrade-expiry {
+  color: #888;
+}
+
+/* Period toggle */
+.upgrade-period-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.upgrade-period-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.upgrade-period-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #fff);
+}
+
+.upgrade-save-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: #22c55e;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Tier cards */
+.upgrade-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.upgrade-tier-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px;
+  transition: border-color 0.2s;
+}
+
+.upgrade-tier-card.highlighted {
+  border-color: var(--tier-color, #a855f7);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.15);
+}
+
+.upgrade-tier-card.current {
+  border-color: rgba(255, 255, 255, 0.15);
+  opacity: 0.7;
+}
+
+.upgrade-tier-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.upgrade-tier-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  flex: 1;
+}
+
+.upgrade-tier-price {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+}
+
+.upgrade-stars-icon {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.upgrade-period-label {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary, #888);
+}
+
+/* Features list */
+.upgrade-tier-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upgrade-tier-features li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #ccc);
+}
+
+/* Subscribe button */
+.upgrade-tier-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.upgrade-tier-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.upgrade-tier-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upgrade-tier-btn.current {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary, #888);
+}
+
+/* Free tier note */
+.upgrade-free-note {
+  font-size: 11px;
+  color: var(--text-secondary, #888);
+  text-align: center;
+  padding-top: 4px;
+}
+
+/* ── Scan upgrade button ── */
+.scan-upgrade-btn {
+  display: block;
+  margin: 10px auto 0;
+  padding: 8px 20px;
+  background: #22c55e;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scan-upgrade-btn:hover {
+  opacity: 0.85;
+}
+
+/* ── Tracker upgrade button ── */
+.tracker-upgrade-btn {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.tracker-upgrade-btn:hover {
+  opacity: 0.85;
+}
+
+/* ── Settings subscription section ── */
+.settings-sub-tier {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+  text-transform: capitalize;
+}
+
+.settings-sub-tier.active {
+  color: #a855f7;
+}
+
+.settings-sub-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-sub-btn:hover {
+  opacity: 0.85;
+}

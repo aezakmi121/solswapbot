@@ -33,6 +33,7 @@ import { webhookRouter } from "./routes/webhook";
 import { adminRouter } from "./routes/admin";
 import { trackerRouter } from "./routes/tracker";
 import { webhookMoralisRouter } from "./routes/webhookMoralis";
+import { subscribeRouter } from "./routes/subscribe";
 
 /**
  * Creates and configures the Express API server.
@@ -94,6 +95,7 @@ export function createApiServer(): express.Express {
     app.use("/api", telegramAuthMiddleware, transactionsRouter);
     app.use("/api", telegramAuthMiddleware, adminRouter);
     app.use("/api", telegramAuthMiddleware, trackerRouter);
+    app.use("/api", telegramAuthMiddleware, subscribeRouter);
 
     // Global error handler (improved: logs full error object)
     app.use(

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Activity, PieChart, X } from "lucide-react";
+import { UpgradeModal } from "./UpgradeModal";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const tg = (window as any).Telegram?.WebApp;
@@ -212,6 +213,7 @@ export function TrackerPanel() {
     const [limit, setLimit] = useState<number | null>(3);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showUpgrade, setShowUpgrade] = useState(false);
 
     // Tab state
     const [activeTab, setActiveTab] = useState<"watchlist" | "add">("watchlist");
@@ -307,9 +309,12 @@ export function TrackerPanel() {
                         {slotsUsed} / {slotsTotal} slots
                     </span>
                     {atLimit && limit === 3 && (
-                        <span className="tracker-upgrade-hint">
+                        <button
+                            className="tracker-upgrade-btn"
+                            onClick={() => setShowUpgrade(true)}
+                        >
                             Upgrade to Whale Tracker for 20 slots
-                        </span>
+                        </button>
                     )}
                 </div>
             </div>
@@ -448,11 +453,17 @@ export function TrackerPanel() {
 
             {/* Floating Portfolio Modal */}
             {openPortfolioId && (
-                <WalletPortfolio 
-                    address={openPortfolioId} 
-                    onClose={() => setOpenPortfolioId(null)} 
+                <WalletPortfolio
+                    address={openPortfolioId}
+                    onClose={() => setOpenPortfolioId(null)}
                 />
             )}
+
+            <UpgradeModal
+                open={showUpgrade}
+                onClose={() => setShowUpgrade(false)}
+                highlightTier="WHALE_TRACKER"
+            />
         </div>
     );
 }

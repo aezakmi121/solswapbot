@@ -6,6 +6,7 @@ import { config } from "../../config";
 /** Bot instance reference — set by createBot() so we can send referral notifications */
 let botInstance: Bot | null = null;
 export function setBotInstance(bot: Bot) { botInstance = bot; }
+export function getBotInstance(): Bot | null { return botInstance; }
 
 const miniAppUrl = () => config.MINIAPP_URL ?? "https://solswap.vercel.app";
 
