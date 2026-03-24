@@ -491,6 +491,7 @@ trackerRouter.get("/tracker/activity/:walletAddress", async (req: Request, res: 
         }
 
         const chain = watchedWallet.chain;
+        console.log(`Activity request: wallet=${walletAddress.slice(0, 10)}..., chain=${chain}`);
         let transactions: ActivityItem[] = [];
 
         // 30s overall timeout to prevent hanging requests
@@ -595,21 +596,29 @@ async function fetchSolanaActivity(walletAddress: string): Promise<ActivityItem[
  */
 async function fetchEvmActivity(walletAddress: string, chain: string): Promise<ActivityItem[]> {
     const apiKey = config.MORALIS_API_KEY;
-    if (!apiKey) return [];
+    if (!apiKey) {
+        console.warn("fetchEvmActivity: MORALIS_API_KEY not set");
+        return [];
+    }
 
     const moralisChain = MORALIS_CHAIN_MAP[chain] ?? "eth";
     const explorerBase = EXPLORER_TX[chain] ?? EXPLORER_TX.ethereum;
 
     try {
-        const resp = await fetch(
-            `https://deep-index.moralis.io/api/v2.2/${walletAddress}?chain=${moralisChain}&limit=10`,
-            { headers: { "X-API-Key": apiKey, Accept: "application/json" } }
-        );
+        const url = `https://deep-index.moralis.io/api/v2.2/${walletAddress}?chain=${moralisChain}&limit=10`;
+        console.log(`fetchEvmActivity: GET ${url.replace(walletAddress, walletAddress.slice(0, 10) + "...")}`);
 
-        if (!resp.ok) return [];
+        const resp = await fetch(url, { headers: { "X-API-Key": apiKey, Accept: "application/json" } });
+
+        if (!resp.ok) {
+            const body = await resp.text().catch(() => "");
+            console.error(`fetchEvmActivity: Moralis ${resp.status} — ${body.slice(0, 200)}`);
+            return [];
+        }
 
         const data = await resp.json() as { result?: any[] };
         const txs = data.result ?? [];
+        console.log(`fetchEvmActivity: got ${txs.length} transactions for ${chain}`);
 
         return txs.map((tx: any) => {
             const isReceive = tx.to_address?.toLowerCase() === walletAddress.toLowerCase();
@@ -620,14 +629,14 @@ async function fetchEvmActivity(walletAddress: string, chain: string): Promise<A
                 signature: tx.hash ?? "",
                 type: amount > 0 ? (isReceive ? "receive" : "send") : "unknown",
                 amount: amount > 0 ? amount : null,
-                symbol: null, // Native token — could be enriched but kept simple
+                symbol: null,
                 counterparty: isReceive ? tx.from_address : tx.to_address,
                 timestamp: tx.block_timestamp ? Math.floor(new Date(tx.block_timestamp).getTime() / 1000) : 0,
                 explorerUrl: explorerBase + (tx.hash ?? ""),
             } satisfies ActivityItem;
         });
     } catch (err) {
-        console.error("EVM activity fetch error:", err instanceof Error ? err.message : err);
+        console.error("fetchEvmActivity error:", err instanceof Error ? err.message : err);
         return [];
     }
 }
