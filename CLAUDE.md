@@ -1,7 +1,7 @@
 # CLAUDE.md — SolSwap Master Context & Development Guide
 
 > **Single source of truth for the SolSwap project.**
-> Updated: 2026-03-22 | Version: 1.3.0
+> Updated: 2026-03-24 | Version: 1.4.0
 > Read this file FIRST before making any changes. If you are an AI assistant picking
 > up this project cold, this document contains everything you need to understand the
 > full codebase, make changes safely, and avoid breaking production.
@@ -187,6 +187,7 @@ solswapbot/
 │   │       ├── send.ts           # POST /api/send  (build unsigned SOL/SPL transfer tx)
 │   │       ├── swap.ts           # POST /api/swap + POST /api/swap/confirm + GET /api/swap/status + POST /api/swap/recheck
 │   │       ├── tokens.ts         # GET /api/tokens + GET /api/tokens/search  (Jupiter list, public)
+│   │       ├── subscribe.ts      # GET /api/user/subscription + POST /api/subscribe/invoice  (Telegram Stars payment) [v1.4.0]
 │   │       ├── tracker.ts        # POST /api/tracker/watch|unwatch + GET /api/tracker/list + GET /api/tracker/portfolio/:addr  (multi-chain)
 │   │       ├── transactions.ts   # GET /api/transactions  (paginated, type+date filtered, swaps+sends+receives)
 │   │       ├── transfer.ts       # POST /api/transfer/confirm  (record completed send in DB)
@@ -195,9 +196,11 @@ solswapbot/
 │   │       └── user.ts           # GET /api/user (includes referralEarningsUsd) + POST /api/user/wallet + balances + portfolio
 │   │
 │   ├── bot/
-│   │   ├── index.ts              # Bot setup: /start + /help only, catch-all → Mini App redirect
+│   │   ├── index.ts              # Bot setup: /start, /help, /subscribe commands, payment callbacks, catch-all → Mini App redirect
 │   │   ├── commands/
 │   │   │   └── start.ts          # /start handler: upserts user in DB + sends Mini App button
+│   │   ├── handlers/
+│   │   │   └── payment.ts        # Telegram Stars payment: pre_checkout_query + successful_payment handlers, TIER_PRICES
 │   │   └── middleware/
 │   │       ├── logger.ts         # Audit trail for swap/connect/start events
 │   │       └── rateLimit.ts      # Per-user per-command rate limits
@@ -216,6 +219,9 @@ solswapbot/
 │   │
 │   ├── bridge/
 │   │   └── bridgePoller.ts       # Background poller: resolves SUBMITTED cross-chain swaps via LI.FI status [v0.8.0]
+│   │
+│   ├── subscription/
+│   │   └── expiry.ts             # Background poller: sends 24h expiry warnings + expired notices via bot [v1.4.0]
 │   │
 │   ├── scanner/
 │   │   ├── analyze.ts            # analyzeToken(): orchestrates 12 Solana checks in 3 phases, normalized risk score 0-100
@@ -299,7 +305,8 @@ solswapbot/
 │       │   ├── CcTokenModal.tsx      # Cross-chain token selector: chain picker + token picker (uses chains.ts)
 │       │   ├── Toast.tsx             # Floating toast notifications (CustomEvent "solswap:toast")
 │       │   ├── TermsModal.tsx        # First-launch ToS gate (scroll-to-bottom to accept), re-viewable in Settings
-│       │   └── ReferralModal.tsx     # Referral dashboard modal: stats, share, referred users list with pagination
+│       │   ├── ReferralModal.tsx     # Referral dashboard modal: stats, share, referred users list with pagination
+│       │   └── UpgradeModal.tsx      # Subscription upgrade: tier comparison, Stars payment, monthly/annual toggle [v1.4.0]
 │       │
 │       ├── components/__tests__/
 │       │   ├── AdminPanel.test.tsx   # Admin panel unit tests (Vitest)
@@ -541,6 +548,8 @@ On success, `res.locals.telegramId` is set for downstream handlers.
 | POST | `/api/send` | `{ tokenMint, recipientAddress, amount, senderAddress }` | `{ transaction: base64, lastValidBlockHeight }` |
 | POST | `/api/transfer/confirm` | `{ txSignature, tokenMint, tokenSymbol?, humanAmount, recipientAddress }` | `{ transferId, status }` |
 | DELETE | `/api/user` | — | `{ success: true, message }` — GDPR data deletion (cascade-deletes all user records) |
+| GET | `/api/user/subscription` | — | `{ tier, expiresAt, isActive, rawTier? }` — current subscription status |
+| POST | `/api/subscribe/invoice` | `{ tier, period }` | `{ invoiceLink }` — creates Telegram Stars invoice link. tier: SCANNER_PRO\|WHALE_TRACKER\|ALL_ACCESS, period: monthly\|annual |
 | GET | `/api/tracker/portfolio/:walletAddress` | — | `{ walletAddress, chain, totalValueUsd, tokens: [top 10 by USD] }` — watched wallet portfolio with 24h price changes |
 | GET | `/api/admin/stats` | Admin only | `{ totalUsers, totalSwaps, totalFeesUsd, feesToday, fees7d, fees30d }` |
 | GET | `/api/admin/users?limit=` | Admin only | `{ users: [AdminUser], topFeeGenerators, totalUsers }` |
@@ -936,7 +945,7 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 ## Production Readiness Assessment
 
-### Current Status: **v1.3.0 — PRODUCTION READY (Account security: recovery email + key export)**
+### Current Status: **v1.4.0 — PRODUCTION READY (Telegram Stars subscription payment)**
 
 #### Full Audit (2026-03-16) — Rating: 9.0/10
 
@@ -974,9 +983,10 @@ All 7 CRITICAL security issues have been fixed. Summary:
 
 #### What is NOT yet production-ready:
 
-1. **Subscription system is schema-only** — `SubTier` enum exists but is never checked.
-   All users get all features for free. Not a bug, but premium features can't be sold yet.
-   **Priority: LOW — intentional for soft launch. Implement when ready to gate features.**
+1. ~~**Subscription system is schema-only**~~ **DONE (v1.4.0)** — Tier enforcement active
+   in scanner (10/day free) and tracker (3 free / 20 paid). Self-serve Telegram Stars payment
+   flow implemented: `/subscribe` bot command, `POST /api/subscribe/invoice`, UpgradeModal in
+   Mini App. Expiry notifications via background poller (24h warning + on-expire message).
 
 2. ~~**EVM-origin bridges not yet live**~~ **DONE (v0.9.1)** — Full EVM-origin bridge signing
    implemented. Privy `useSendTransaction` for EVM, backend returns `evmTransaction` object,
@@ -1221,11 +1231,11 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 | ~~EVM embedded wallet + multi-chain portfolio~~ | ~~P1~~ **DONE** | Privy EVM wallet auto-created alongside Solana. Moralis fetches EVM token balances. Chain badges in Wallet tab. Bridge auto-fills EVM destination. `MORALIS_API_KEY` required for balance display. |
 | ~~LIFI_API_KEY + integrator fee registration~~ | ~~P1~~ **DONE** | Configured on VPS. `solswap` integrator tag recognized by LI.FI. Validated via `npm run validate-keys`. |
 | ~~EVM-origin bridge signing~~ | ~~P1.5~~ **DONE** | Privy `useSendTransaction` for EVM signing. Backend returns full `evmTransaction` object for EVM-origin. PrivyProvider configured with `@privy-io/chains`. "Coming soon" guard removed. Explorer links per chain. ERC-20 approval handled by LI.FI (v0.9.1). |
-| Whale tracker API routes | P2 | Uses WatchedWallet schema (already exists) |
-| TrackPanel component | P2 | Add wallet to watch list, view whale alerts |
-| Whale alert bot notifications | P2 | Bot pushes alerts to user |
-| Subscription payment flow (Telegram Stars) | P2 | Gate premium features |
-| Subscription enforcement in API routes | P2 | Check SubTier before serving premium data |
+| ~~Whale tracker API routes~~ | ~~P2~~ **DONE** | Fully live: POST /tracker/watch\|unwatch, GET /tracker/list, GET /tracker/portfolio/:addr. Multi-chain (Solana + 5 EVM). |
+| ~~TrackPanel component~~ | ~~P2~~ **DONE** | Tab 4 in bottom nav. Add/remove wallets, portfolio accordion, slot badge, tier limits. |
+| ~~Whale alert bot notifications~~ | ~~P2~~ **DONE** | Solana: 30s polling. EVM: Moralis Streams push. Alerts fire via Telegram bot message. |
+| ~~Subscription payment flow (Telegram Stars)~~ | ~~P2~~ **DONE** | `/subscribe` bot command + `POST /api/subscribe/invoice` + UpgradeModal. Stars payment, expiry notifications (v1.4.0). |
+| ~~Subscription enforcement in API routes~~ | ~~P2~~ **DONE** | Scanner: 10/day free, unlimited paid. Tracker: 3 free, 20 paid. Admin: unlimited. Expiry checked. |
 
 ### Phase 4 — AI & Growth (not started)
 
@@ -1241,6 +1251,23 @@ cross-chain UI, transaction history, toast system, haptic feedback, Terms of Use
 ---
 
 ## Changelog
+
+### 2026-03-24 — Telegram Stars Subscription Payment (v1.4.0)
+- **Self-serve subscription purchasing (NEW):** Users can now upgrade to paid tiers via Telegram Stars — no admin intervention needed.
+- **Pricing:** Scanner Pro (250 Stars/mo), Whale Tracker (250 Stars/mo), All Access (400 Stars/mo). Annual plans available with 20% discount.
+- **3 access points:** (1) `/subscribe` bot command with inline keyboard, (2) UpgradeModal in Settings, (3) "Upgrade" button when hitting scan/tracker limits.
+- **New `src/bot/handlers/payment.ts`:** Grammy `pre_checkout_query` validation + `successful_payment` handler. Validates payload, deduplicates, upserts Subscription with calculated `expiresAt`. Supports subscription stacking (extending existing active subs).
+- **New `src/api/routes/subscribe.ts`:** `GET /api/user/subscription` returns current tier + expiry + active status. `POST /api/subscribe/invoice` creates Telegram Stars invoice link via `bot.api.createInvoiceLink()`.
+- **New `src/subscription/expiry.ts`:** Background poller (1h interval) sends two bot notifications: "expires tomorrow" (24h warning) and "has expired" (downgrade notice). Time-window dedup — no extra DB columns needed.
+- **Bot `/subscribe` command:** Shows inline keyboard with 3 tier options (monthly). "View Annual Plans" button switches to annual pricing with 20% discount badge. Tapping a tier creates an invoice and opens Telegram's native Stars payment UI.
+- **New `webapp/src/components/UpgradeModal.tsx`:** Bottom sheet modal with tier comparison cards, monthly/annual toggle, feature lists, and "Subscribe" buttons. Opens `tg.openInvoice()` for native payment. Polls `GET /api/user/subscription` after payment to detect activation.
+- **ScanPanel upgrade prompt:** When 429 scan limit is hit, shows "Upgrade to Scanner Pro" button that opens UpgradeModal with SCANNER_PRO highlighted.
+- **TrackerPanel upgrade prompt:** When wallet limit reached, "Upgrade to Whale Tracker for 20 slots" is now a button that opens UpgradeModal with WHALE_TRACKER highlighted.
+- **SettingsPanel subscription section:** Shows current tier badge, expiry date, and "Upgrade Plan" / "Manage Subscription" button.
+- **CSS:** Added `.upgrade-*`, `.scan-upgrade-btn`, `.tracker-upgrade-btn`, `.settings-sub-*` style families.
+- **No DB schema changes.** Existing `Subscription` model already has `tier` + `expiresAt`. No `npx prisma db push` needed.
+- **VPS redeployment required:** `npm run build` + `pm2 restart`.
+- **Version bumped to v1.4.0.**
 
 ### 2026-03-21 — Account Security: Recovery Email, Key Export, Logout Fix (v1.3.0)
 - **Recovery Email Linking (NEW):** Settings → Account Security → "Link Recovery Email". Uses Privy `useLinkAccount` hook with `linkEmail()`. Opens Privy modal for OTP-verified email linking. Shows linked email with green badge when set. "Update Email" option when already linked. Enables wallet recovery if user loses Telegram access.

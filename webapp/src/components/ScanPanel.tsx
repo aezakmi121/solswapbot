@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, Copy, CheckCircle2, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { fetchTokenScan, ScanResult } from "../lib/api";
 import { RiskGauge } from "./RiskGauge";
+import { UpgradeModal } from "./UpgradeModal";
 import { toast } from "../lib/toast";
 
 interface SwapTokenInfo {
@@ -104,6 +105,8 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<ScanResult | null>(null);
     const [error, setError] = useState("");
+    const [limitReached, setLimitReached] = useState(false);
+    const [showUpgrade, setShowUpgrade] = useState(false);
     const [recentScans, setRecentScans] = useState<RecentScan[]>(loadRecent);
     const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
 
@@ -115,6 +118,7 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
         setMint(target);
         setLoading(true);
         setError("");
+        setLimitReached(false);
         setResult(null);
         setExpandedCheck(null);
         try {
@@ -131,6 +135,10 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
             setRecentScans(loadRecent());
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to scan token";
+            // Detect scan limit (429) to show upgrade prompt
+            if (msg.includes("limit") || msg.includes("Upgrade")) {
+                setLimitReached(true);
+            }
             setError(msg);
             toast(msg, "error");
         } finally {
@@ -198,7 +206,22 @@ export function ScanPanel({ onNavigateToSwap }: ScanPanelProps) {
                 </button>
             </div>
 
-            {error && <div className="scan-error">{error}</div>}
+            {error && (
+                <div className="scan-error">
+                    {error}
+                    {limitReached && (
+                        <button className="scan-upgrade-btn" onClick={() => setShowUpgrade(true)}>
+                            Upgrade to Scanner Pro
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <UpgradeModal
+                open={showUpgrade}
+                onClose={() => setShowUpgrade(false)}
+                highlightTier="SCANNER_PRO"
+            />
 
             {/* ── Results ── */}
             {result && (

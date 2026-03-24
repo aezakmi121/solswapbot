@@ -8,6 +8,7 @@ import { initMoralisStream, isMoralisStreamsEnabled } from "./moralis/stream";
 import { startBridgePoller } from "./bridge/bridgePoller";
 import { initTokenCache } from "./aggregator/lifiTokens";
 import { startWalletMonitor } from "./tracker/monitor";
+import { startExpiryPoller } from "./subscription/expiry";
 
 async function main(): Promise<void> {
   console.log(`Starting SolSwap Bot (${config.NODE_ENV})...`);
@@ -57,6 +58,9 @@ async function main(): Promise<void> {
 
   // Start whale tracker (polls watched wallets every 30s for large transactions)
   startWalletMonitor();
+
+  // Start subscription expiry notifier (checks every 1h, sends 24h warnings + expired notices)
+  startExpiryPoller();
 
   // Pre-warm the LI.FI token cache (non-blocking, refreshes every 30 min)
   initTokenCache();

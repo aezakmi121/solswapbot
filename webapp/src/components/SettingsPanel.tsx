@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useLinkAccount, useExportWallet } from "@privy-io/react-auth";
-import { Copy, Check, QrCode, LogOut, Mail, Key, Shield } from "lucide-react";
-import { fetchUser, UserData } from "../lib/api";
+import { Copy, Check, QrCode, LogOut, Mail, Key, Shield, Crown } from "lucide-react";
+import { fetchUser, UserData, getSubscription, SubscriptionInfo } from "../lib/api";
 import { ReceiveModal } from "./ReceiveModal";
 import { TermsModal } from "./TermsModal";
 import { ReferralModal } from "./ReferralModal";
+import { UpgradeModal } from "./UpgradeModal";
 import { toast } from "../lib/toast";
 
 const SLIPPAGE_KEY = "solswap_slippage_bps";
@@ -38,12 +39,15 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
     const [showQr, setShowQr] = useState(false);
     const [showTerms, setShowTerms] = useState(false);
     const [showReferralModal, setShowReferralModal] = useState(false);
+    const [showUpgrade, setShowUpgrade] = useState(false);
+    const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
     const tg = (window as any).Telegram?.WebApp;
     const linkedEmail = user?.email?.address || null;
 
     useEffect(() => {
         fetchUser().then(setUserData).catch(() => {});
+        getSubscription().then(setSubscription).catch(() => {});
     }, []);
 
     const handleCopyAddr = () => {
@@ -179,6 +183,33 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                         Use the 🔷 EVM address to receive bridged tokens (ETH, BNB, MATIC…)
                     </p>
                 )}
+            </div>
+
+            {/* ── Subscription ── */}
+            <div className="settings-section">
+                <div className="settings-section-title">Subscription</div>
+                <div className="settings-card">
+                    <div className="settings-row">
+                        <span className="settings-label">
+                            <Crown size={16} style={{ color: subscription?.tier !== "FREE" && subscription?.isActive ? "#a855f7" : "#888" }} />
+                            {" "}Current Plan
+                        </span>
+                        <span className={`settings-sub-tier ${subscription?.tier !== "FREE" && subscription?.isActive ? "active" : ""}`}>
+                            {subscription?.tier?.replace("_", " ") ?? "FREE"}
+                        </span>
+                    </div>
+                    {subscription?.expiresAt && subscription?.isActive && (
+                        <div className="settings-row">
+                            <span className="settings-label" style={{ fontSize: "12px", color: "#999" }}>Expires</span>
+                            <span style={{ fontSize: "12px", color: "#999" }}>
+                                {new Date(subscription.expiresAt).toLocaleDateString()}
+                            </span>
+                        </div>
+                    )}
+                    <button className="settings-sub-btn" onClick={() => setShowUpgrade(true)}>
+                        {subscription?.tier === "FREE" || !subscription?.isActive ? "Upgrade Plan" : "Manage Subscription"}
+                    </button>
+                </div>
             </div>
 
             {/* ── Trading ── */}
@@ -358,6 +389,15 @@ export function SettingsPanel({ walletAddress, evmWalletAddress, slippageBps, on
                     onClose={() => setShowReferralModal(false)}
                 />
             )}
+
+            <UpgradeModal
+                open={showUpgrade}
+                onClose={() => {
+                    setShowUpgrade(false);
+                    // Refresh subscription status after closing (may have upgraded)
+                    getSubscription().then(setSubscription).catch(() => {});
+                }}
+            />
         </div>
     );
 }
