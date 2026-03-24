@@ -136,7 +136,8 @@ export function createBot(): Bot {
     ctx.reply(
       `⚡ *SolSwap*\n\n` +
       `Everything you need is in the Mini App!\n\n` +
-      `Tap the button below to open it:`,
+      `Use /subscribe to upgrade your plan (Scanner Pro, Whale Tracker, or All Access).\n\n` +
+      `Tap the button below to open the app:`,
       {
         parse_mode: "Markdown",
         reply_markup: {
