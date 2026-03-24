@@ -493,10 +493,19 @@ trackerRouter.get("/tracker/activity/:walletAddress", async (req: Request, res: 
         const chain = watchedWallet.chain;
         let transactions: ActivityItem[] = [];
 
-        if (chain === "solana") {
-            transactions = await fetchSolanaActivity(walletAddress);
-        } else {
-            transactions = await fetchEvmActivity(walletAddress, chain);
+        // 30s overall timeout to prevent hanging requests
+        const activityPromise = chain === "solana"
+            ? fetchSolanaActivity(walletAddress)
+            : fetchEvmActivity(walletAddress, chain);
+
+        try {
+            transactions = await Promise.race([
+                activityPromise,
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Activity fetch timed out")), 30000)),
+            ]);
+        } catch (timeoutErr) {
+            console.warn(`Activity fetch timeout for ${walletAddress} (${chain})`);
+            transactions = [];
         }
 
         res.json({ walletAddress, chain, transactions });
@@ -516,9 +525,20 @@ async function fetchSolanaActivity(walletAddress: string): Promise<ActivityItem[
 
     if (signatures.length === 0) return [];
 
+    // Fetch all transactions in parallel with a 15s timeout per call
+    const txResults = await Promise.allSettled(
+        signatures.map(sig =>
+            Promise.race([
+                connection.getParsedTransaction(sig.signature, { maxSupportedTransactionVersion: 0 }),
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000)),
+            ])
+        )
+    );
+
     const activities: ActivityItem[] = [];
 
-    for (const sig of signatures) {
+    for (let i = 0; i < signatures.length; i++) {
+        const sig = signatures[i];
         const item: ActivityItem = {
             signature: sig.signature,
             type: "unknown",
@@ -529,46 +549,39 @@ async function fetchSolanaActivity(walletAddress: string): Promise<ActivityItem[
             explorerUrl: EXPLORER_TX.solana + sig.signature,
         };
 
-        try {
-            const tx = await connection.getParsedTransaction(sig.signature, {
-                maxSupportedTransactionVersion: 0,
-            });
+        const result = txResults[i];
+        if (result.status === "fulfilled" && result.value?.meta) {
+            const tx = result.value;
+            const accountKeys = tx.transaction.message.accountKeys;
+            const walletIndex = accountKeys.findIndex(k => k.pubkey.toBase58() === walletAddress);
 
-            if (tx?.meta) {
-                // Check native SOL balance change
-                const accountKeys = tx.transaction.message.accountKeys;
-                const walletIndex = accountKeys.findIndex(k => k.pubkey.toBase58() === walletAddress);
+            if (walletIndex >= 0) {
+                const pre = tx.meta!.preBalances[walletIndex];
+                const post = tx.meta!.postBalances[walletIndex];
+                const changeLamports = post - pre;
+                const changeSOL = Math.abs(changeLamports) / 1e9;
 
-                if (walletIndex >= 0) {
-                    const pre = tx.meta.preBalances[walletIndex];
-                    const post = tx.meta.postBalances[walletIndex];
-                    const changeLamports = post - pre;
-                    const changeSOL = Math.abs(changeLamports) / 1e9;
+                if (changeSOL > 0.001) {
+                    item.type = changeLamports > 0 ? "receive" : "send";
+                    item.amount = changeSOL;
+                    item.symbol = "SOL";
 
-                    if (changeSOL > 0.001) {
-                        item.type = changeLamports > 0 ? "receive" : "send";
-                        item.amount = changeSOL;
-                        item.symbol = "SOL";
-
-                        // Find counterparty (largest opposite change)
-                        let bestIdx = -1;
-                        let bestChange = 0;
-                        for (let i = 0; i < accountKeys.length; i++) {
-                            if (i === walletIndex) continue;
-                            const otherChange = tx.meta.postBalances[i] - tx.meta.preBalances[i];
-                            if (Math.sign(otherChange) !== Math.sign(changeLamports) && Math.abs(otherChange) > bestChange) {
-                                bestChange = Math.abs(otherChange);
-                                bestIdx = i;
-                            }
+                    // Find counterparty (largest opposite change)
+                    let bestIdx = -1;
+                    let bestChange = 0;
+                    for (let i = 0; i < accountKeys.length; i++) {
+                        if (i === walletIndex) continue;
+                        const otherChange = tx.meta!.postBalances[i] - tx.meta!.preBalances[i];
+                        if (Math.sign(otherChange) !== Math.sign(changeLamports) && Math.abs(otherChange) > bestChange) {
+                            bestChange = Math.abs(otherChange);
+                            bestIdx = i;
                         }
-                        if (bestIdx >= 0) {
-                            item.counterparty = accountKeys[bestIdx].pubkey.toBase58();
-                        }
+                    }
+                    if (bestIdx >= 0) {
+                        item.counterparty = accountKeys[bestIdx].pubkey.toBase58();
                     }
                 }
             }
-        } catch {
-            // Keep the basic signature info even if parsing fails
         }
 
         activities.push(item);

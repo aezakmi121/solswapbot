@@ -17,6 +17,19 @@ const MORALIS_BASE = "https://deep-index.moralis.io/api/v2.2";
 /** Stablecoin symbols whose price is effectively $1.00 */
 const STABLECOINS = new Set(["USDC", "USDT", "DAI", "BUSD", "FRAX", "USDBC", "USDE", "LUSD"]);
 
+/** Max believable price per token — anything above is likely a scam/manipulated price */
+const MAX_SANE_PRICE_USD = 1_000_000; // $1M per token (even BTC is below this)
+
+/** Max believable value per single token holding — catches inflated spam balances */
+const MAX_SANE_VALUE_USD = 50_000_000; // $50M per holding
+
+/** Hardcoded native token prices (updated frequently enough for portfolio display) */
+const NATIVE_PRICE_FALLBACKS: Record<string, number> = {
+    ETH: 3500,
+    BNB: 600,
+    MATIC: 0.50,
+};
+
 const SUPPORTED_CHAINS = [
     { id: "eth",      name: "ethereum",  nativeSymbol: "ETH",   nativeName: "Ethereum",  nativeDecimals: 18 },
     { id: "bsc",      name: "bsc",       nativeSymbol: "BNB",   nativeName: "BNB",       nativeDecimals: 18 },
@@ -55,7 +68,7 @@ async function fetchChainPortfolio(
 ): Promise<EvmToken[]> {
     // Fetch ERC20 tokens and native balance in parallel for this chain
     const [erc20Res, nativeRes] = await Promise.allSettled([
-        fetch(`${MORALIS_BASE}/${evmAddress}/erc20?chain=${chain.id}`, { headers }),
+        fetch(`${MORALIS_BASE}/${evmAddress}/erc20?chain=${chain.id}&exclude_spam=true`, { headers }),
         fetch(`${MORALIS_BASE}/${evmAddress}/balance?chain=${chain.id}`, { headers }),
     ]);
 
@@ -67,7 +80,7 @@ async function fetchChainPortfolio(
             const native = await nativeRes.value.json() as { balance: string };
             const amount = parseBalance(native.balance || "0", chain.nativeDecimals);
             if (amount > 0.000001) {
-                // Stablecoin price or null for native (price needs separate call)
+                const nativePrice = NATIVE_PRICE_FALLBACKS[chain.nativeSymbol] ?? null;
                 tokens.push({
                     chain: chain.name,
                     symbol: chain.nativeSymbol,
@@ -76,9 +89,9 @@ async function fetchChainPortfolio(
                     address: "native",
                     amount,
                     decimals: chain.nativeDecimals,
-                    priceUsd: null,
+                    priceUsd: nativePrice,
                     priceChange24h: null,
-                    valueUsd: null,
+                    valueUsd: nativePrice !== null ? amount * nativePrice : null,
                 });
             }
         } catch {
@@ -113,6 +126,17 @@ async function fetchChainPortfolio(
                     priceChange24h = 0;
                 }
 
+                // Sanity cap: skip tokens with absurd prices (scam/manipulated DEX prices)
+                if (priceUsd !== null && priceUsd > MAX_SANE_PRICE_USD) {
+                    priceUsd = null;
+                    priceChange24h = null;
+                }
+
+                const valueUsd = priceUsd !== null ? amount * priceUsd : null;
+
+                // Skip tokens with implausible total value (airdrop spam with fake prices)
+                if (valueUsd !== null && valueUsd > MAX_SANE_VALUE_USD) continue;
+
                 tokens.push({
                     chain: chain.name,
                     symbol: t.symbol ?? "?",
@@ -123,7 +147,7 @@ async function fetchChainPortfolio(
                     decimals,
                     priceUsd,
                     priceChange24h,
-                    valueUsd: priceUsd !== null ? amount * priceUsd : null,
+                    valueUsd,
                 });
             }
         } catch {
